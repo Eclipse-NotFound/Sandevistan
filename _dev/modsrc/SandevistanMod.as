@@ -59,6 +59,7 @@ package
       private var savedGgCtrl:Boolean = true;           // 回放前控制状态
       private var startWeapon:Object = null;               // 时停开始时的武器（回放开始切回它）
       private var endWeapon:Object = null;                 // 时停结束时的武器（回放结束切回它）
+      private var replayWpn:Object = null;                 // 回放期间钉住的武器（防游戏切换动画乱切）
       private var sandyEndSnap:Object = null;              // 时停结束快照（全武器弹夹+背包弹药，回放结束恢复）
       private var fxTicks:int = 0;
       private var diagTick:int = 0;
@@ -914,7 +915,16 @@ package
             savedGod = world.godMode;
             world.godMode = true;                 // 回放期间无敌（世界正常运行）
             savedGgCtrl = world.gg.ggControl;
+            // 取消残留的武器切换动画流程（游戏 changeWeapon 冷却 30+20 帧，
+            // 回放中武器切换必须立即生效、无冷却，否则动画流程会在回放中乱切武器）
+            try
+            {
+               world.gg.work = "";
+               world.gg.t_work = 0;
+            }
+            catch (e:*) { }
             // 回放开始切回时停开始时的武器（否则回放停留在时停结束时的最后武器）
+            replayWpn = startWeapon;
             switchToWeapon(startWeapon);
             if (history.length > 0)
             {
@@ -1031,6 +1041,14 @@ package
                if (cwR.holder > 0) { cwR.hold = cwR.holder; }
                cwR.t_reload = 0;
             }
+            // 消除回放中游戏武器切换冷却：取消残留切换动画流程，并钉住回放武器
+            // （否则 changeWeapon 的 changeWeaponNow 会在回放中触发，把武器切走/卸掉）
+            try
+            {
+               if (world.gg.work == "change") { world.gg.work = ""; world.gg.t_work = 0; }
+               if (replayWpn != null && world.gg.currentWeapon != replayWpn) { switchToWeapon(replayWpn); }
+            }
+            catch (e:*) { }
          }
          catch (e:*) { }
          // 回放段诊断：loc 中攻击体计数（生成/结算是否平衡）与弹夹状态（每 60 帧）
@@ -1158,8 +1176,11 @@ package
          // 回放结束：切回时停结束时手上的武器，恢复弹夹/背包（弹夹剩余=时停结束时）
          try
          {
+            // 取消残留切换动画（回放结束的切换同样立即生效）
+            try { world.gg.work = ""; world.gg.t_work = 0; } catch (e:*) { }
             switchToWeapon(endWeapon);
             restoreSandyEndSnap();
+            replayWpn = null;
          }
          catch (e:*) { log("[SandyMod] endReplay restore error: " + e); }
 
