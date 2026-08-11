@@ -1,0 +1,34 @@
+# ===== 大体积开发工具（可重新下载/重建，不入库）=====
+_dev/flexsdk/
+_dev/airsdk/
+_dev/ffdec/
+_dev/ffdec21/
+_dev/*.zip
+_dev/patch_out/
+
+# ===== 编译产物（可重建；分发 SWF 在 SandevistanMod/ 内）=====
+_dev/out/
+
+# ===== 日志与临时文件 =====
+_dev/*.log
+_dev/compile*.log
+_dev/test_run*.log
+_dev/diag*.log
+_dev/final*.log
+_dev/v1*.log
+_dev/fix*.log
+_dev/samedomain*.log
+_dev/hs_err*.log
+_dev/replay_pid*.log
+_dev/cj*.txt
+_dev/cfg*.json
+_dev/*.html
+_dev/*.java
+_dev/tree.json
+_dev/settings*.json
+
+# ===== 临时调试文件 =====
+_dev/pcode_u/
+_dev/src_frame/
+_dev/tiny.swf
+_dev/modlog*

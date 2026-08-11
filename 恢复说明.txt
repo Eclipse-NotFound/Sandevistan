@@ -1,0 +1,41 @@
+==========================================================
+  Remains 斯安维斯坦模组 - 集中备份与恢复说明
+==========================================================
+
+【本文件夹内容】
+  SandevistanMod\   模组本体（安装/卸载脚本、补丁文件、备份、配置）
+  _dev\             完整开发工具链（模组源码 + 编译器 + 打补丁工具）
+                    用于：游戏版本更新后重新生成补丁
+
+【当前状态】
+  模组 v1.6 已安装到游戏：
+  C:\Program Files (x86)\Steam\steamapps\common\Remains
+  （pfe.swf 及其 DLC 版本已打补丁，原版备份在 SandevistanMod\backup\）
+
+【重新下载游戏本体 - 操作步骤】
+  1. 本文件夹（RemainsMod）在游戏目录之外，Steam 重下不会影响它
+  2. 在 Steam 中卸载/删除《Fallout Equestria: REMAINS》
+  3. 重新下载安装游戏
+  4. 把本文件夹中的 SandevistanMod 复制到游戏根目录：
+     C:\Program Files (x86)\Steam\steamapps\common\Remains\SandevistanMod
+  5. 双击运行 SandevistanMod\安装.bat（自动备份新版原文件并打补丁）
+  6. 从 Steam 启动游戏，确认左上角显示 "SandevistanMod v1.6 已加载"
+
+【如果重下后游戏版本更新、模组失效】
+  游戏更新可能改变引擎代码，导致旧补丁不匹配。
+  此时请联系开发者（提供 _dev 工具链即可重新生成补丁）：
+  - _dev\patch_scripts\  补丁源码（MainFE 加载模组）
+  - _dev\flexsdk\        编译器（amxmlc）
+  - _dev\ffdec\          SWF 补丁工具
+  - _dev\modsrc\         模组源码
+
+【模组配置】
+  SandevistanMod\config.txt：
+    hotkey=220      触发热键（\）
+    duration=240    生效时长（8秒）
+    cooldown=1200   冷却（40秒）
+    ghostblend=1    残影混合（1=柔和 0=发光）
+    ghostalpha=25   残影不透明度（%）
+    diaglog=0       诊断日志（排查问题时设 1）
+
+==========================================================

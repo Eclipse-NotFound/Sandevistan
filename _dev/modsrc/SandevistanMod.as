@@ -1,0 +1,1442 @@
+/*
+ * 斯安维斯坦模组 (Sandevistan Mod) for Fallout Equestria: Remains
+ * 逻辑核心 —— 由补丁后的 MainFE 在游戏启动时加载进游戏域并调用 SandevistanMod.init()
+ *
+ * 时停实现：World.onPause = true（游戏自身冻结 land.step / 实体 / 粒子），
+ * 然后本模组每帧手动调用 loc.gg.step() 让玩家照常行动；
+ * 同时手动步进链表中的 Part 粒子（特效继续，实体冻结）。
+ * 残影：彩虹色调色板 + 加法混合，残影层挂在 world.visual 内（相机自动跟随）。
+ * 回放：生效期间记录玩家路径，结束后以 N 倍速回放残影。
+ */
+package
+{
+   import flash.display.Bitmap;
+   import flash.display.BitmapData;
+   import flash.display.IBitmapDrawable;
+   import flash.display.Sprite;
+   import flash.events.Event;
+   import flash.events.KeyboardEvent;
+   import flash.events.MouseEvent;
+   import flash.filesystem.File;
+   import flash.filesystem.FileMode;
+   import flash.filesystem.FileStream;
+   import flash.geom.ColorTransform;
+   import flash.geom.Matrix;
+   import flash.geom.Rectangle;
+   import flash.system.ApplicationDomain;
+   import flash.text.TextField;
+   import flash.text.TextFormat;
+   import flash.ui.Keyboard;
+   import flash.utils.getTimer;
+   import flash.utils.describeType;
+
+   public class SandevistanMod extends Sprite
+   {
+      // ---------- 配置（默认值，被 SandevistanMod/config.txt 覆盖） ----------
+      private var cfgHotkey:int = Keyboard.BACKSLASH;   // 默认 \
+      private var cfgDuration:int = 240;                // 生效帧数（30fps -> 8 秒）
+      private var cfgCooldown:int = 0;                  // 冷却帧数（默认 0 = 无冷却，便于调试）
+      private var cfgReplaySpeed:Number = 5;            // 回放速度倍率（回放时世界冻结，无渲染压力）
+      private var cfgGhostEvery:int = 3;                // 每 N 帧生成一个残影
+      private var cfgFxRun:Boolean = true;              // 时停期间粒子特效是否继续
+
+      // ---------- 运行时状态 ----------
+      private static var inst:SandevistanMod = null;
+      private var world:Object;                         // fe.World.World.w
+      private var hooked:Boolean = false;
+
+      private var sandyActive:Boolean = false;
+      private var sandyLeft:int = 0;                    // 剩余帧数
+      private var cooldownLeft:int = 0;                 // 冷却剩余帧数
+      private var savedOnPause:Boolean = false;
+      private var ghostLayer:Sprite;                    // 残影容器（世界坐标，挂在 world.visual 内）
+      private var ghosts:Array = [];                    // 存活残影
+      private var rainbowIdx:int = 0;
+      private var history:Array = [];                   // 记录玩家路径 {x,y,s,r,v}
+      private var replaying:Boolean = false;
+      private var replayIdx:int = 0;
+      private var savedGod:Boolean = false;             // 回放期间无敌
+      private var savedGgCtrl:Boolean = true;           // 回放前控制状态
+      private var sandyAmmoSnap:Object = null;            // 时停开始弹药快照（时停消耗在结束时返还）
+      private var fxTicks:int = 0;
+      private var diagTick:int = 0;
+      private var panelOpen:Boolean = false;
+      private var optPanelOn:Boolean = false;      // 选项页模组设置面板
+      private var optSel:int = 0;                  // 0=生效时间 1=冷却
+      private var optTf:TextField = null;
+      private var optBg:Sprite = null;
+      private var lastGgControl:Boolean = true;
+      private var savedInter:Object = null;
+      private var keyPressTime:Array = [];      // 按键按下时间戳（防 UP 丢失卡键）
+      private var keyMap:Object = {};            // 键码 -> 键布尔名（解析自游戏 keyXML）
+      private var keyMapBuilt:Boolean = false;
+      private var imeWarnT:int = 0;                 // 输入法警告剩余帧数
+      private var keyDownSeen:Array = new Array(256); // 最近按键按下记录（时间戳）
+      private var ime229Count:int = 0;                // 短时间内 229 事件计数
+      private var ime229Time:int = 0;
+      private var imeMissCount:int = 0;                // UP无DOWN 计数（2秒窗口）
+      private var imeMissTime:int = 0;
+
+      // 解析游戏默认键位表（keyXML 是 public），建立键码->布尔名映射
+      private function buildKeyMap():void
+      {
+         try
+         {
+            var kx:* = world.ctr.keyXML;
+            if (kx == null) return;
+            keyMap = {};
+            var keys:XMLList = kx.key;
+            for each (var k:XML in keys)
+            {
+               var id:String = String(k.@id);
+               var defs:Array = [String(k.@def), String(k.@alt)];
+               for each (var dv:String in defs)
+               {
+                  var code:int = parseInt(dv, 10);
+                  if (dv != "" && !isNaN(code) && code > 0 && code < 256)
+                  {
+                     keyMap[code] = id;
+                  }
+               }
+            }
+            keyMapBuilt = true;
+            log("[SandyMod] keyMap built: " + keyMap[65] + "/" + keyMap[68] + "/" + keyMap[32] + "/" + keyMap[220]);
+         }
+         catch (e:*) { log("[SandyMod] buildKeyMap error: " + e); }
+      }
+      private var panelSel:int = 0;
+      private var panelTf:TextField = null;
+      private var prevVisX:Number = 0;
+      private var prevVisY:Number = 0;
+
+      private var hud:TextField;                        // 顶部状态文字
+      private var hudBg:Sprite;
+      private var debugTest:Boolean = false;             // 自动测试模式（config debugtest=1）
+      private var cfgShowMark:Boolean = true;            // 启动时显示模组已加载标记
+      private var cfgPanelKey:int = Keyboard.F9;         // 参数面板热键
+      private var cfgGhostBlend:int = 1;                  // 残影混合: 1=normal柔和 0=add发光
+      private var cfgGhostAlpha:int = 25;                 // 残影不透明度（百分比）
+      private var cfgReplayGhost:int = 12;                 // 回放残影间隔（每 N 个历史帧生成 1 个）
+      private var testStage:int = 0;                     // 0=等待world 1=开始新游戏 2=等待进游戏 3=启动sandy 4=结束sandy
+      private var testTicks:int = 0;
+
+      // 彩虹色调色板（边缘行者风格，高饱和）—— alpha 由 config ghostalpha 控制
+      private function palette(idx:int):ColorTransform
+      {
+         var a:Number = Math.max(0.05, Math.min(1, cfgGhostAlpha / 100));
+         var cols:Array = [
+            [1.6, 0.4, 0.4, 40, 0, 0], [1.7, 0.8, 0.3, 50, 10, 0], [1.7, 1.4, 0.4, 40, 30, 0],
+            [0.5, 1.7, 0.5, 0, 50, 10], [0.4, 1.4, 1.6, 0, 40, 50], [0.4, 0.5, 1.8, 0, 10, 60],
+            [1.5, 0.4, 1.7, 40, 0, 50], [1.6, 0.3, 1.0, 50, 0, 40]
+         ];
+         var c:Array = cols[idx % cols.length];
+         return new ColorTransform(c[0], c[1], c[2], a, c[3], c[4], c[5], 0);
+      }
+
+      public function SandevistanMod()
+      {
+         super();
+         trace("[MOD] ctor stage=" + (stage != null));
+      }
+
+      // ==================== 入口（由补丁后的 MainFE 调用） ====================
+      public static function init(main:Object):void
+      {
+         if (inst != null)
+         {
+            return;
+         }
+         inst = new SandevistanMod();
+         inst.log("[SandyMod] init called");
+         inst.loadConfig();
+         if (main != null && main.stage != null)
+         {
+            main.stage.addEventListener(Event.ENTER_FRAME, inst.onFrame);
+            main.stage.addEventListener(KeyboardEvent.KEY_DOWN, inst.onKey);
+            main.stage.addEventListener(KeyboardEvent.KEY_UP, inst.onKeyUp);
+            main.stage.addEventListener(Event.DEACTIVATE, inst.onDeactivateClear);
+
+         }
+         inst.log("[SandyMod] hooks registered");
+         if (inst.cfgShowMark)
+         {
+            inst.showBootMark(main);
+         }
+      }
+
+      // 启动可见标记（验证模组已加载）
+      private function showBootMark(main:Object):void
+      {
+         try
+         {
+            var t:TextField = new TextField();
+            var tf:TextFormat = new TextFormat();
+            tf.font = "Microsoft YaHei";
+            tf.size = 14;
+            tf.bold = true;
+            tf.color = 0x00FF88;
+            t.defaultTextFormat = tf;
+            t.text = "SandevistanMod v1.0 已加载 (按 \ 触发斯安维斯坦)";
+            t.x = 10;
+            t.y = 10;
+            t.selectable = false;
+            t.mouseEnabled = false;
+            main.addChild(t);
+            trace("[SandyMod] boot mark added");
+         }
+         catch (e:*) { trace("[SandyMod] boot mark error: " + e); }
+      }
+
+      // ==================== 文件日志（模组内 trace 不输出，写文件） ====================
+      private var cfgDiagLog:Boolean = false;           // 独立诊断日志开关（config diaglog=1）
+      private function log(msg:String):void
+      {
+         if (!debugTest && !cfgDiagLog) return;   // 正式版不写日志（diaglog=1 时例外）
+         var err:String = "";
+         try
+         {
+            var f:File = File.applicationStorageDirectory.resolvePath("sandy_modlog.txt");
+            var stream:FileStream = new FileStream();
+            stream.open(f, FileMode.APPEND);
+            stream.writeUTFBytes(msg + String.fromCharCode(13, 10));
+            stream.close();
+         }
+         catch (e:*) { err = String(e); }
+         try
+         {
+            var f2:File = File.applicationDirectory.resolvePath("SandevistanMod/modlog.txt");
+            var s2:FileStream = new FileStream();
+            s2.open(f2, FileMode.APPEND);
+            s2.writeUTFBytes(msg + String.fromCharCode(13, 10) + (err != "" ? " [appDirErr: " + err + "]" : "") + String.fromCharCode(13, 10));
+            s2.close();
+         }
+         catch (e2:*) { }
+      }
+
+      // ==================== 配置 ====================
+      private function loadConfig():void
+      {
+         try
+         {
+            var cfg:File = File.applicationDirectory.resolvePath("SandevistanMod/config.txt");
+            if (cfg.exists)
+            {
+               var stream:FileStream = new FileStream();
+               stream.open(cfg, FileMode.READ);
+               var txt:String = stream.readUTFBytes(stream.bytesAvailable);
+               stream.close();
+               var lines:Array = txt.split(/\r?\n/);
+               for each (var line:String in lines)
+               {
+                  line = line.replace(/^\s+|\s+$/g, "");
+                  if (line.length == 0 || line.charAt(0) == "#") continue;
+                  var kv:Array = line.split("=");
+                  if (kv.length < 2) continue;
+                  var k:String = kv[0].replace(/^\s+|\s+$/g, "").toLowerCase();
+                  var v:String = kv[1].replace(/^\s+|\s+$/g, "");
+                  if (k == "hotkey") cfgHotkey = parseInt(v);
+                  else if (k == "duration") cfgDuration = parseInt(v);
+                  else if (k == "cooldown") cfgCooldown = parseInt(v);
+                  else if (k == "replayspeed") cfgReplaySpeed = parseFloat(v);
+                  else if (k == "ghostevery") cfgGhostEvery = parseInt(v);
+                  else if (k == "fxrun") cfgFxRun = v.toLowerCase() == "1" || v.toLowerCase() == "true";
+                  else if (k == "debugtest") debugTest = v.toLowerCase() == "1" || v.toLowerCase() == "true";
+                  else if (k == "showmark") cfgShowMark = v.toLowerCase() == "1" || v.toLowerCase() == "true";
+                  else if (k == "panelkey") cfgPanelKey = parseInt(v);
+                  else if (k == "diaglog") cfgDiagLog = v.toLowerCase() == "1" || v.toLowerCase() == "true";
+                  else if (k == "ghostblend") cfgGhostBlend = parseInt(v);
+                  else if (k == "ghostalpha") cfgGhostAlpha = parseInt(v);
+                  else if (k == "replayghost") cfgReplayGhost = parseInt(v);
+               }
+            }
+         }
+         catch (e:*) { trace("[SandyMod] config error: " + e); }
+         if (cfgDuration < 30) cfgDuration = 30;
+         if (cfgDuration > 3600) cfgDuration = 3600;
+         if (cfgCooldown < 0) cfgCooldown = 0;
+         if (cfgReplaySpeed < 1) cfgReplaySpeed = 1;
+         trace("[SandyMod] config hotkey=" + cfgHotkey + " dur=" + cfgDuration + " cd=" + cfgCooldown);
+      }
+
+      // ==================== 帧循环 ====================
+      private function onFrame(e:Event):void
+      {
+         try
+         {
+            onFrameInner();
+         }
+         catch (err:*) { log("[SandyMod] onFrame error: " + err); }
+      }
+
+      private function onFrameInner():void
+      {
+         if (world == null)
+         {
+            try
+            {
+               var wc:Class = ApplicationDomain.currentDomain.getDefinition("fe.World") as Class;
+               if (wc != null) world = wc["w"];
+            }
+            catch (err:*) { }
+            if (world == null) return;
+            log("[SandyMod] World found");
+         }
+
+         try
+         {
+            if (world != null && world.verror != null && world.verror.visible)
+            {
+               var errtxt:String = "?";
+               try { errtxt = String(world.verror.txt.text); } catch (e:*) { }
+               log("[ERRDIALOG] " + errtxt);
+            }
+         }
+         catch (e:*) { }
+
+         if (debugTest)
+         {
+            stepDebugTest();
+         }
+
+         try
+         {
+            if (world != null && world.gg != null)
+            {
+               var gc:Boolean = world.gg.ggControl;
+               if (gc != lastGgControl && debugTest)
+               {
+                  log("[DIAG] ggControl changed to " + gc + " hp=" + world.gg.hp + " sost=" + world.gg.sost
+                      + " X=" + world.gg.X + " Y=" + world.gg.Y + " sandy=" + sandyActive + " replay=" + replaying);
+               }
+               lastGgControl = gc;
+            }
+         }
+         catch (e:*) { }
+
+         if (!keyMapBuilt && world != null && world.ctr != null && world.ctr.keyXML != null)
+         {
+            buildKeyMap();
+         }
+
+         checkOptPanel();
+
+         if (panelOpen)
+         {
+            renderPanel();
+            return;
+         }
+
+         if (sandyActive)
+         {
+            stepSandy();
+         }
+         else if (replaying)
+         {
+            stepReplay();
+         }
+         else if (cooldownLeft > 0)
+         {
+            --cooldownLeft;
+         }
+
+         updateHud();
+         updateGhosts();
+         if (cfgDiagLog)
+         {
+            if (diagTick++ % 60 == 0)
+            {
+               try
+               {
+                  var kL:Boolean = world.ctr.keyLeft;
+                  var kR:Boolean = world.ctr.keyRight;
+                  var kU:Boolean = world.ctr.keyBeUp;
+                  var kD:Boolean = world.ctr.keySit;
+                  var kJ:Boolean = world.ctr.keyJump;
+                  var kA:Boolean = world.ctr.keyAttack;
+                  log("[STATE] L=" + kL + " R=" + kR + " U=" + kU + " D=" + kD + " J=" + kJ + " A=" + kA
+                      + " ggX=" + (world.gg != null ? world.gg.X : -1) + " ggY=" + (world.gg != null ? world.gg.Y : -1)
+                      + " focus=" + world.swfStage.focus);
+               }
+               catch (err:*) { }
+            }
+         }
+      }
+
+      private function inGameplay():Boolean
+      {
+         if (world == null) return false;
+         try
+         {
+            if (world.allStat < 1) return false;
+            if (world.gg == null || world.loc == null) return false;
+            if (world.onConsol) return false;
+            if (world.pip != null && world.pip.active) return false;
+            if (world.sats != null && world.sats.active) return false;
+            if (world.stand != null && world.stand.active) return false;
+            if (world.gui != null && world.gui.guiPause) return false;
+            return true;
+         }
+         catch (e:*) { return false; }
+         return false;
+      }
+
+      // ==================== 自动测试 ====================
+      private function stepDebugTest():void
+      {
+         try
+         {
+            if (testStage == 0)
+            {
+               // 等待 World 就绪后开始新游戏
+               if (world != null && world.mm != null && world.mm.loaded)
+               {
+                  log("[TEST] starting new game");
+                  world.mm.mainMenuOff();
+                  world.newGame(-1, "TEST", { "dif": 2, "propusk": true });
+                  testStage = 1;
+               }
+            }
+            else if (testStage == 1)
+            {
+               // 等待进入游戏
+               if (world.allStat >= 1 && world.gg != null && world.loc != null)
+               {
+                  log("[TEST] in game, allStat=" + world.allStat);
+                  testStage = 2;
+                  testTicks = 0;
+               }
+            }
+            else if (testStage == 2)
+            {
+               // 给游戏一点稳定时间后启动斯安维斯坦
+               testTicks++;
+               if (testTicks > 90)
+               {
+                  log("[TEST] starting sandevistan");
+                  startSandy();
+                  // 测试环境存在开场对话导致 ggControl=false；强制恢复以模拟正常游玩
+                  try { world.gg.controlOn(); } catch (e:*) { }
+                  testStage = 3;
+                  testTicks = 0;
+               }
+            }
+            else if (testStage == 3)
+            {
+               testTicks++;
+               if (testTicks > 180)  // 6秒后结束
+               {
+                  log("[TEST] ending sandevistan (was active=" + sandyActive + ")");
+                  endSandy();
+                  testStage = 4;
+                  testTicks = 0;
+               }
+            }
+            else if (testStage == 4)
+            {
+               testTicks++;
+               if (testTicks > 300)  // 回放10秒
+               {
+                  // 卡键自愈验证：模拟 UP 丢失残留后伪造按键事件
+                  try
+                  {
+                     var c2:Object = world.ctr;
+                     var dt:XML = describeType(c2);
+                     log("[TEST] ctr vars: " + dt.variable.@name.toString().split(",").join(" "));
+                     c2.keyRight = false;
+                     log("[TEST] pre-heal: keyRight=" + c2.keyRight + " keyMap[68]=" + keyMap[68]);
+                     world.swfStage.dispatchEvent(new KeyboardEvent(KeyboardEvent.KEY_DOWN, true, false, 0, 68));
+                     log("[TEST] post-heal: keyRight=" + c2.keyRight);
+                     c2.keyRight = false;
+                  }
+                  catch (e:*) { log("[TEST] heal test err: " + e); }
+                  log("[TEST] done. replaying=" + replaying + " ghosts=" + ghosts.length);
+                  testStage = 5;
+               }
+            }
+         }
+         catch (e:*) { log("[TEST] error: " + e); }
+      }
+
+      // ==================== 选项页模组设置 ====================
+      private function checkOptPanel():void
+      {
+         var on:Boolean = false;
+         try
+         {
+            if (world != null && world.pip != null && world.pip.active && world.pip.currentPage != null)
+            {
+               var qn:String = flash.utils.getQualifiedClassName(world.pip.currentPage);
+               if (qn == "fe.inter::PipPageOpt")
+               {
+                  on = true;
+               }
+            }
+         }
+         catch (e:*) { }
+         if (on != optPanelOn)
+         {
+            optPanelOn = on;
+            if (on)
+            {
+               showOptPanel();
+            }
+            else
+            {
+               hideOptPanel();
+            }
+         }
+         if (on)
+         {
+            renderOptPanel();
+         }
+      }
+
+      private function showOptPanel():void
+      {
+         try
+         {
+            if (world == null || world.main == null) return;
+            if (optTf == null)
+            {
+               optTf = new TextField();
+               var tf:TextFormat = new TextFormat();
+               tf.font = "Consolas";
+               tf.size = 15;
+               tf.color = 0x00FF99;
+               tf.letterSpacing = 1;
+               optTf.defaultTextFormat = tf;
+               optTf.selectable = false;
+               optTf.mouseEnabled = false;
+               optBg = new Sprite();
+               world.main.addChild(optBg);
+               world.main.addChild(optTf);
+            }
+            optTf.visible = true;
+            optBg.visible = true;
+            optSel = 0;
+         }
+         catch (e:*) { }
+      }
+
+      private function hideOptPanel():void
+      {
+         try
+         {
+            if (optTf != null) optTf.visible = false;
+            if (optBg != null) optBg.visible = false;
+         }
+         catch (e:*) { }
+      }
+
+      private function optAdj(dir:int):void
+      {
+         if (optSel == 0)
+         {
+            cfgDuration = Math.max(30, Math.min(3600, cfgDuration + dir * 30));
+         }
+         else
+         {
+            cfgCooldown = Math.max(0, Math.min(3600, cfgCooldown + dir * 30));
+         }
+      }
+
+      private function renderOptPanel():void
+      {
+         try
+         {
+            if (optTf == null) return;
+            var lines:Array = [];
+            lines.push("-- SandevistanMod --");
+            lines.push((optSel == 0 ? "> " : "  ") + "生效时间  " + (cfgDuration / 30).toFixed(1) + "s");
+            lines.push((optSel == 1 ? "> " : "  ") + "冷却      " + (cfgCooldown / 30).toFixed(1) + "s");
+            lines.push("");
+            lines.push("上下选择 左右调值 Enter保存");
+            optTf.text = lines.join(String.fromCharCode(10));
+            var sw:Number = 1280;
+            try { sw = world.swfStage.stageWidth; } catch (e:*) { }
+            optTf.x = sw - 300;
+            optTf.y = 120;
+            optTf.width = 260;
+            optTf.height = 140;
+            optBg.graphics.clear();
+            optBg.graphics.lineStyle(1, 0x00FF99, 0.8);
+            optBg.graphics.beginFill(0x002211, 0.75);
+            optBg.graphics.drawRect(optTf.x - 10, optTf.y - 10, optTf.width + 20, optTf.height + 20);
+            optBg.graphics.endFill();
+         }
+         catch (e:*) { }
+      }
+
+      // ===== 清除时停期间玩家发射的冻结子弹（回放重演避免双倍火力）=====
+      private function clearFrozenBullets():void
+      {
+         try
+         {
+            var loc:Object = world.loc;
+            if (loc == null) return;
+            var obj:Object = loc.firstObj;
+            var guard:int = 0;
+            while (obj != null)
+            {
+               var nxt:Object = obj.nobj;
+               try
+               {
+                  var qn:String = flash.utils.getQualifiedClassName(obj);
+                  if (qn.indexOf("fe.weapon::") == 0 && obj.owner == world.gg)
+                  {
+                     loc.remObj(obj);
+                  }
+               }
+               catch (e:*) { }
+               obj = nxt;
+               if (++guard > 20000) break;
+            }
+         }
+         catch (e:*) { }
+      }
+
+      // ===== 返还时停期间的弹药消耗（时停子弹已清除，弹药不白扣）=====
+      private function refundSandyAmmo():void
+      {
+         if (sandyAmmoSnap == null) return;
+         try
+         {
+            var wR:* = world.gg.currentWeapon;
+            if (wR != null && sandyAmmoSnap.hold != null)
+            {
+               if (wR.hold < sandyAmmoSnap.hold) { wR.hold = sandyAmmoSnap.hold; }
+            }
+            for (var aR:String in sandyAmmoSnap)
+            {
+               if (aR.indexOf("it_") == 0)
+               {
+                  var tR:String = aR.substr(3);
+                  var snapR:Number = sandyAmmoSnap[aR];
+                  try
+                  {
+                     var itR:* = world.invent.items[tR];
+                     if (itR != null && itR.kol < snapR) { itR.kol = snapR; }
+                  }
+                  catch (e:*) { }
+               }
+            }
+         }
+         catch (e:*) { }
+         sandyAmmoSnap = null;
+      }
+
+      // ==================== 参数面板 ====================
+      private function togglePanel(open:Boolean):void
+      {
+         panelOpen = open;
+         if (open)
+         {
+            if (sandyActive) endSandy();
+            if (panelTf == null)
+            {
+               panelTf = new TextField();
+               var tf:TextFormat = new TextFormat();
+               tf.font = "Consolas";
+               tf.size = 14;
+               tf.color = 0x00FF99;
+               tf.letterSpacing = 1;
+               panelTf.defaultTextFormat = tf;
+               panelTf.selectable = false;
+               panelTf.mouseEnabled = false;
+            }
+            if (world != null && world.main != null && panelTf.parent == null)
+            {
+               world.main.addChild(panelTf);
+            }
+            panelSel = 0;
+         }
+         else
+         {
+            if (panelTf != null && panelTf.parent != null) panelTf.parent.removeChild(panelTf);
+            saveConfigFile();
+         }
+      }
+
+      private function panelKey(kc:int):void
+      {
+         if (kc == Keyboard.ESCAPE || kc == cfgPanelKey) { togglePanel(false); return; }
+         if (kc == Keyboard.UP) { panelSel = (panelSel + 6 - 1) % 6; return; }
+         if (kc == Keyboard.DOWN) { panelSel = (panelSel + 1) % 6; return; }
+         if (kc == Keyboard.LEFT) { panelAdj(-1); return; }
+         if (kc == Keyboard.RIGHT) { panelAdj(1); return; }
+         if (kc == Keyboard.ENTER) { togglePanel(false); return; }
+      }
+
+      private function panelAdj(dir:int):void
+      {
+         switch (panelSel)
+         {
+            case 0: cfgDuration = Math.max(30, Math.min(3600, cfgDuration + dir * 30)); break;
+            case 1: cfgCooldown = Math.max(0, Math.min(3600, cfgCooldown + dir * 30)); break;
+            case 2: cfgReplaySpeed = Math.max(1, Math.min(20, cfgReplaySpeed + dir)); break;
+            case 3: cfgGhostEvery = Math.max(1, Math.min(30, cfgGhostEvery + dir)); break;
+            case 4: cfgFxRun = !cfgFxRun; break;
+            case 5: cfgHotkey = Math.max(1, Math.min(255, cfgHotkey + dir)); break;
+         }
+      }
+
+      private function renderPanel():void
+      {
+         if (panelTf == null) return;
+         var lines:Array = [];
+         lines.push("== SandevistanMod 参数 ==");
+         lines.push((panelSel == 0 ? "> " : "  ") + "生效时长   " + (cfgDuration / 30).toFixed(1) + "s");
+         lines.push((panelSel == 1 ? "> " : "  ") + "冷却       " + (cfgCooldown / 30).toFixed(1) + "s");
+         lines.push((panelSel == 2 ? "> " : "  ") + "回放速度   x" + cfgReplaySpeed);
+         lines.push((panelSel == 3 ? "> " : "  ") + "残影间隔   " + cfgGhostEvery + "帧");
+         lines.push((panelSel == 4 ? "> " : "  ") + "特效继续   " + (cfgFxRun ? "开" : "关"));
+         lines.push((panelSel == 5 ? "> " : "  ") + "热键码     " + cfgHotkey);
+         lines.push("");
+         lines.push("上下选择 左右调节 Enter保存 Esc关闭");
+         panelTf.text = lines.join(String.fromCharCode(10));
+         panelTf.x = 30;
+         panelTf.y = 30;
+         panelTf.width = 420;
+         panelTf.height = 220;
+         panelTf.visible = true;
+      }
+
+      private function saveConfigFile():void
+      {
+         try
+         {
+            var f:File = File.applicationDirectory.resolvePath("SandevistanMod/config.txt");
+            var stream:FileStream = new FileStream();
+            stream.open(f, FileMode.WRITE);
+            var NL:String = String.fromCharCode(13, 10);
+            var sb:Array = [];
+            sb.push("# SandevistanMod config (saved by panel)");
+            sb.push("# hotkey: 220=\  33=PageUp 34=PageDown 36=Home  F1-F12=112-123");
+            sb.push("hotkey=" + cfgHotkey);
+            sb.push("duration=" + cfgDuration);
+            sb.push("cooldown=" + cfgCooldown);
+            sb.push("replayspeed=" + cfgReplaySpeed);
+            sb.push("ghostevery=" + cfgGhostEvery);
+            sb.push("fxrun=" + (cfgFxRun ? 1 : 0));
+            sb.push("showmark=" + (cfgShowMark ? 1 : 0));
+            sb.push("panelkey=" + cfgPanelKey);
+            sb.push("debugtest=0");
+            stream.writeUTFBytes(sb.join(NL) + NL);
+            stream.close();
+            log("[SandyMod] config saved");
+         }
+         catch (e:*) { log("[SandyMod] config save error: " + e); }
+      }
+
+      // ==================== 斯安维斯坦 ====================
+      private function startSandy():void
+      {
+         if (sandyActive || replaying) return;
+         if (!inGameplay()) return;
+         try
+         {
+            savedOnPause = world.onPause;
+            world.onPause = true;
+            // 时停弹药快照（时停中射击的消耗在结束时返还——子弹被清除不白扣弹药）
+            sandyAmmoSnap = null;
+            try
+            {
+               sandyAmmoSnap = {};
+               var wA:* = world.gg.currentWeapon;
+               if (wA != null) { sandyAmmoSnap.hold = wA.hold; }
+               var ammS:* = world.invent.ammos;
+               for (var aS:String in ammS)
+               {
+                  try { sandyAmmoSnap["it_" + aS] = world.invent.items[aS].kol; } catch (e:*) { }
+               }
+            }
+            catch (e:*) { sandyAmmoSnap = null; }
+            // 键状态处理：先保存当前按住的键，关 SATS（其 clearAll 会清布尔），再恢复，
+            // 这样"按住空格/方向键进入时停"的玩家在时停中按键依然有效（Flash 不会为重按的键重发事件）
+            try
+            {
+               var cSave:Array = [];
+               var kNames:Array = ["keyLeft","keyRight","keyJump","keySit","keyBeUp","keyRun","keyAttack","keyPunch",
+                  "keyReload","keyGrenad","keyMagic","keyDef","keyPet","keyAction","keyCrack","keyTele","keySats"];
+               for (var ki:int = 0; ki < kNames.length; ki++)
+               {
+                  cSave[kNames[ki]] = world.ctr[kNames[ki]];
+               }
+               if (world.sats != null && world.sats.active)
+               {
+                  world.sats.onoff(-1);
+               }
+               for (ki = 0; ki < kNames.length; ki++)
+               {
+                  world.ctr[kNames[ki]] = cSave[kNames[ki]];
+               }
+            }
+            catch (e:*) { }
+            // 时停期间禁用玩家交互（防碰触 NPC/触发点 -> 对话 -> controlOff 锁死控制）
+            try
+            {
+               savedInter = world.gg["inter"];
+               world.gg["inter"] = null;
+            }
+            catch (e:*) { }
+            sandyActive = true;
+            sandyLeft = cfgDuration;
+            history = new Array();
+            rainbowIdx = 0;
+            fxTicks = 0;
+            if (ghostLayer == null)
+            {
+               ghostLayer = new Sprite();
+            }
+            else if (ghostLayer.parent != null)
+            {
+               ghostLayer.parent.removeChild(ghostLayer);
+            }
+            world.visual.addChild(ghostLayer);
+            log("[SandyMod] 斯安维斯坦 ON");
+         }
+         catch (err:*) { trace("[SandyMod] start error: " + err); }
+      }
+
+      private function endSandy():void
+      {
+         if (!sandyActive) return;
+         sandyActive = false;
+         // 清除时停期间玩家发射的冻结子弹（回放重演攻击，避免双倍火力）
+         clearFrozenBullets();
+         // 返还时停期间的弹药消耗（时停子弹已清除，弹药不白扣）
+         refundSandyAmmo();
+
+         try
+         {
+            world.onPause = savedOnPause;   // 时停结束恢复世界（回放期间世界正常运行）
+            if (savedInter != null)
+            {
+               try { world.gg["inter"] = savedInter; } catch (e:*) { }
+               savedInter = null;
+            }
+            // 结束时清理键状态（防残留）
+            try
+            {
+               world.ctr.clearAll();
+               var kd2:* = world.ctr["keyDowns"];
+               if (kd2 != null)
+               {
+                  for (var ki2:int = 0; ki2 < kd2.length; ki2++) { kd2[ki2] = false; }
+               }
+            }
+            catch (e:*) { }
+            // 恢复玩家控制（防时停期间触发的 controlOff 锁死输入）
+            try
+            {
+               if (world.gg.hp > 0 && world.gg.sost < 3)
+               {
+                  world.gg.controlOn();
+               }
+            }
+            catch (e:*) { }
+         }
+         catch (e:*) { }
+         replaying = true;
+         replayIdx = 0;
+         cooldownLeft = cfgCooldown;
+         // ==== 真回放模式：玩家从起点沿历史路径快速重演（残影跟随玩家本体）====
+         try
+         {
+            savedGod = world.godMode;
+            world.godMode = true;                 // 回放期间无敌（世界正常运行）
+            savedGgCtrl = world.gg.ggControl;
+            if (history.length > 0)
+            {
+               world.gg.setPos(history[0].x, history[0].y);   // 传送回起点
+               world.gg.setVisPos();
+            }
+
+         }
+         catch (e:*) { log("[SandyMod] replay init error: " + e); }
+         log("[SandyMod] 斯安维斯坦 OFF, replay " + history.length + " frames");
+      }
+
+      private function stepSandy():void
+      {
+         try
+         {
+            var loc:Object = world.loc;
+            loc.gg.step();
+
+            var gg:Object = loc.gg;
+            // 记录攻击键状态与瞄准方向（回放时攻击指向时停期间的发射方向）
+            history.push({ x: gg.X, y: gg.Y, s: gg.storona, r: gg.vis != null ? gg.vis.rotation : 0, v: gg.vis != null ? gg.vis.scaleX : 1,
+                           a: world.ctr.keyAttack, p: world.ctr.keyPunch, g: world.ctr.keyGrenad, m: world.ctr.keyMagic,
+                           ax: world.celX, ay: world.celY });
+
+
+            fxTicks++;
+            if (fxTicks >= cfgGhostEvery)
+            {
+               fxTicks = 0;
+               spawnGhost(gg, palette(rainbowIdx));
+               rainbowIdx++;
+            }
+            if (diagTick++ % 30 == 0)
+            {
+               var cam:Object = world.cam;
+               log("[DIAG] cam: vx=" + cam.vx + " vy=" + cam.vy + " scaleV=" + cam.scaleV
+                   + " visual.x=" + world.visual.x + " visual.y=" + world.visual.y
+                   + " visual.scaleX=" + world.visual.scaleX + " visual.scaleY=" + world.visual.scaleY
+                   + " gg.vis.parent=" + gg.vis.parent + " ghostLayer.numChildren=" + ghostLayer.numChildren);
+            }
+
+            if (cfgFxRun)
+            {
+               stepParticles(loc);
+            }
+
+            // [DIAG] jump simulation: every 60 frames press jump for 3 frames
+            diagTick++;
+            if (debugTest)
+            {
+               if (diagTick % 60 < 3)
+               {
+                  world.ctr.keyJump = true;
+               }
+               else if (diagTick % 60 == 3)
+               {
+                  log("[DIAG] jump pressed, Y=" + gg.Y + " dy=" + gg.dy + " stay=" + gg.stay);
+               }
+               else if (diagTick % 60 == 10)
+               {
+                  log("[DIAG] after jump 7f: Y=" + gg.Y + " dy=" + gg.dy + " stay=" + gg.stay + " jumpp=" + gg.jumpp
+                      + " maxjumpp=" + gg.maxjumpp + " dash_t=" + gg.dash_t + " dash_maxt=" + gg.dash_maxt
+                      + " isJump=" + gg.isJump + " isLaz=" + gg.isLaz + " jumpNumb=" + gg.jumpNumb);
+               }
+            }
+
+            --sandyLeft;
+            if (sandyLeft <= 0)
+            {
+               endSandy();
+            }
+         }
+         catch (err:*) { log("[SandyMod] stepSandy error: " + err); endSandy(); }
+      }
+
+      // 只步进链表中是粒子的对象（Part 类），并维护 Emitter 计数
+      private function stepParticles(loc:Object):void
+      {
+         var PartClass:Class = null;
+         try { PartClass = ApplicationDomain.currentDomain.getDefinition("fe.graph.Part") as Class; } catch (e:*) { return; }
+         var EmitterClass:Class = null;
+         try { EmitterClass = ApplicationDomain.currentDomain.getDefinition("fe.graph.Emitter") as Class; } catch (e:*) { }
+         if (EmitterClass != null)
+         {
+            EmitterClass["kol2"] = EmitterClass["kol1"];
+            EmitterClass["kol1"] = 0;
+         }
+         var obj:Object = loc.firstObj;
+         var guard:int = 0;
+         while (obj != null)
+         {
+            var nxt:Object = obj.nobj;
+            if (obj is PartClass)
+            {
+               obj.step();
+            }
+            obj = nxt;
+            if (++guard > 20000) break;
+         }
+      }
+
+      // ==================== 回放 ====================
+      private function stepReplay():void
+      {
+         try
+         {
+            // 锁定输入：回放期间玩家不可操控（清空键状态，control 读到全 false）
+            world.ctr.clearAll();
+            // 回放中弹匣无限 + 跳过换弹计时（攻击持续流畅，不被换弹打断）
+            var cwR:* = world.gg.currentWeapon;
+            if (cwR != null)
+            {
+               if (cwR.holder > 0) { cwR.hold = cwR.holder; }
+               cwR.t_reload = 0;
+            }
+         }
+         catch (e:*) { }
+         var n:int = Math.ceil(cfgReplaySpeed);
+         var ghostIdx:int = replayIdx;
+         var atkOn:Boolean = false;
+         var punchOn:Boolean = false;
+         var grenOn:Boolean = false;
+         var magOn:Boolean = false;
+         for (var i:int = 0; i < n; i++)
+         {
+            if (replayIdx >= history.length)
+            {
+               endReplay();
+               return;
+            }
+            var h:Object = history[replayIdx];
+            // 驱动玩家沿历史路径移动（真回放：玩家本体重演）
+            try
+            {
+               world.gg.X = h.x;
+               world.gg.Y = h.y;
+               world.gg.storona = h.s;
+               world.gg.setVisPos();
+               // 喂回记录的瞄准方向（攻击指向时停期间的发射方向）
+               if (h.ax != null)
+               {
+                  world.celX = h.ax;
+                  world.celY = h.ay;
+                  // 强制武器立即就位（跳过慢速渐进旋转/枪口移动）
+                  try
+                  {
+                     var wv:* = world.gg.currentWeapon;
+                     if (wv != null)
+                     {
+                        wv.X = world.gg.weaponX;          // 枪口位置就位
+                        wv.Y = world.gg.weaponY;
+                        wv.rot = Math.atan2(h.ay - world.gg.Y, h.ax - world.gg.X);  // 瞄准角
+                        wv.ready = true;                   // 视为已就位（可立即攻击）
+                     }
+                  }
+                  catch (e:*) { }
+               }
+            }
+            catch (e:*) { }
+            // 攻击键 OR 合并（窗口内任一历史帧按下则本帧触发，点按不丢）
+            if (h.a == true) atkOn = true;
+            if (h.p == true) punchOn = true;
+            if (h.g == true) grenOn = true;
+            if (h.m == true) magOn = true;
+            // 残影抽稀：每 cfgReplayGhost 个历史帧生成 1 个（每帧最多 1 个）
+            if (cfgReplayGhost < 1) cfgReplayGhost = 1;
+            if (ghostIdx % cfgReplayGhost == 0)
+            {
+               spawnGhostAt(h.x, h.y, h.s, h.r, h.v, palette(rainbowIdx));
+               rainbowIdx++;
+            }
+            replayIdx++;
+         }
+         // 回放时攻击加速重演：有攻击的帧强制武器冷却为 0（远快于正常攻速）
+         if (atkOn || punchOn || grenOn || magOn)
+         {
+            try
+            {
+               var cw3:* = world.gg.currentWeapon;
+               if (cw3 != null)
+               {
+                  cw3.t_attack = 0;
+                  cw3.t_reload = 0;
+               }
+            }
+            catch (e:*) { }
+         }
+         try
+         {
+            world.ctr.keyAttack = atkOn;
+            world.ctr.keyPunch = punchOn;
+            world.ctr.keyGrenad = grenOn;
+            world.ctr.keyMagic = magOn;
+         }
+         catch (e:*) { }
+         if (replayIdx >= history.length)
+         {
+            endReplay();
+         }
+      }
+
+      private function endReplay():void
+      {
+         replaying = false;
+         history = new Array();
+         try
+         {
+            world.godMode = savedGod;    // 恢复无敌状态
+            world.ctr.keyAttack = false;
+            world.ctr.keyPunch = false;
+            world.ctr.keyGrenad = false;
+            world.ctr.keyMagic = false;
+         }
+         catch (e:*) { }
+
+
+         if (debugTest)
+         {
+            try
+            {
+               var c:Object = world.ctr;
+               log("[DIAG] endReplay: keyLeft=" + c.keyLeft + " keyRight=" + c.keyRight + " keyJump=" + c.keyJump
+                   + " keyAttack=" + c.keyAttack + " keyTele=" + c.keyTele + " ggControl=" + world.gg.ggControl
+                   + " onPause=" + world.onPause + " allStat=" + world.allStat + " panelOpen=" + panelOpen
+                   + " focus=" + world.swfStage.focus);
+            }
+            catch (e:*) { log("[DIAG] endReplay state err: " + e); }
+         }
+      }
+
+      // ==================== 残影 ====================
+      private function spawnGhost(gg:Object, ct:ColorTransform):void
+      {
+         try
+         {
+            var vis:* = gg.vis;
+            if (vis == null || !vis.visible) { log("[DIAG] spawnGhost skip: vis null/not visible"); return; }
+            var w:Number = vis.width;
+            var h:Number = vis.height;
+            if (w < 1 || h < 1) { log("[DIAG] spawnGhost skip: w=" + w + " h=" + h); return; }
+            var bmp:BitmapData = new BitmapData(w, h, true, 0);
+            var m:Matrix = new Matrix();
+            var b:Rectangle = vis.getBounds(vis);
+            m.tx = -b.left;
+            m.ty = -b.top;
+            var savedHp:Boolean = false;
+            if (gg.hpbar != null && gg.hpbar.visible) { savedHp = true; gg.hpbar.visible = false; }
+            bmp.draw(vis as IBitmapDrawable, m, ct, "normal", null, true);
+            if (savedHp) gg.hpbar.visible = true;
+            if (debugTest)
+            {
+               var sC:uint = bmp.getPixel32(int(bmp.width / 2), int(bmp.height / 2));
+               var sTL:uint = bmp.getPixel32(20, 20);
+               var sTR:uint = bmp.getPixel32(bmp.width - 20, 20);
+               var sBL:uint = bmp.getPixel32(20, bmp.height - 20);
+               var sBR:uint = bmp.getPixel32(bmp.width - 20, bmp.height - 20);
+               var sM2:uint = bmp.getPixel32(int(bmp.width / 2), int(bmp.height * 0.25));
+               log("[DIAG] ts-ghostbmp C=" + sC.toString(16) + " TL=" + sTL.toString(16) + " TR=" + sTR.toString(16)
+                   + " BL=" + sBL.toString(16) + " BR=" + sBR.toString(16) + " M2=" + sM2.toString(16)
+                   + " vis.alpha=" + vis.alpha + " vis.visible=" + vis.visible);
+            }
+            var bit:Bitmap = new Bitmap(bmp, "auto", true);
+            var spr:Sprite = new Sprite();
+            spr.x = vis.x + b.left;
+            spr.y = vis.y + b.top;
+            log("[DIAG] spawnGhost: gg.X=" + gg.X + " gg.Y=" + gg.Y + " vis.x=" + vis.x + " vis.y=" + vis.y
+                + " b.left=" + b.left + " b.top=" + b.top + " b.w=" + b.width + " b.h=" + b.height
+                + " storona=" + gg.storona + " vis.scaleX=" + vis.scaleX + " spr.x=" + spr.x + " spr.y=" + spr.y
+                + " ghostParent=" + (ghostLayer.parent == world.visual));
+            spr.addChild(bit);
+            bit.blendMode = cfgGhostBlend == 0 ? "add" : "normal";
+            ghostLayer.addChild(spr);
+            ghosts.push({ s: spr, t: 30, b: bmp });
+         }
+         catch (e:*) { log("[DIAG] spawnGhost ERROR: " + e + " vis=" + (world != null && world.gg != null ? world.gg.vis : "n/a")); }
+      }
+
+      private function spawnGhostAt(x:Number, y:Number, s:Number, rot:Number, sc:Number, ct:ColorTransform):void
+      {
+         try
+         {
+            var gg:Object = world.gg;
+            if (gg == null || gg.vis == null) return;
+            var vis:* = gg.vis;
+            var w:Number = vis.width;
+            var h:Number = vis.height;
+            if (w < 1 || h < 1) return;
+            var bmp:BitmapData = new BitmapData(w, h, true, 0);
+            var m:Matrix = new Matrix();
+            var b:Rectangle = vis.getBounds(vis);
+            m.tx = -b.left;
+            m.ty = -b.top;
+            bmp.draw(vis as IBitmapDrawable, m, ct, "normal", null, true);
+            if (debugTest)
+            {
+               var aC:uint = bmp.getPixel32(int(bmp.width / 2), int(bmp.height / 2));
+               var aTL:uint = bmp.getPixel32(5, 5);
+               log("[DIAG] ghostbmp: w=" + bmp.width + " h=" + bmp.height + " center=" + aC.toString(16) + " tl=" + aTL.toString(16)
+                   + " vis.alpha=" + vis.alpha + " vis.visible=" + vis.visible + " sost=" + gg.sost);
+            }
+            var bit:Bitmap = new Bitmap(bmp, "auto", true);
+            var spr:Sprite = new Sprite();
+            spr.x = x + b.left;
+            spr.y = y + b.top;
+            log("[DIAG] spawnGhostAt: x=" + x + " y=" + y + " b.left=" + b.left + " b.top=" + b.top
+                + " spr.x=" + spr.x + " spr.y=" + spr.y + " vis.w=" + vis.width + " vis.h=" + vis.height
+                + " gg.vis.x=" + gg.vis.x + " gg.vis.y=" + gg.vis.y + " gg.X=" + gg.X + " gg.Y=" + gg.Y);
+            spr.rotation = rot;
+            spr.addChild(bit);
+            bit.blendMode = cfgGhostBlend == 0 ? "add" : "normal";
+            ghostLayer.addChild(spr);
+            ghosts.push({ s: spr, t: 15, b: bmp });
+         }
+         catch (e:*) { log("[DIAG] spawnGhostAt ERROR: " + e); }
+      }
+
+      private function updateGhosts():void
+      {
+         if (ghosts.length == 0) return;
+         var i:int = ghosts.length - 1;
+         while (i >= 0)
+         {
+            var g:Object = ghosts[i];
+            g.t--;
+            g.s.alpha = g.t / 30;
+            if (g.t <= 0)
+            {
+               if (g.s.parent != null) g.s.parent.removeChild(g.s);
+               g.b.dispose();
+               ghosts.splice(i, 1);
+            }
+            i--;
+         }
+      }
+
+      // 窗口失焦：Flash 会丢失按键 UP 事件导致卡键（游戏自身 bug），模组兜底清理
+      private function onDeactivateClear(e:Event):void
+      {
+         try
+         {
+            if (world != null && world.ctr != null)
+            {
+               world.ctr.clearAll();
+               var kd:* = world.ctr["keyDowns"];
+               if (kd != null)
+               {
+                  for (var i:int = 0; i < kd.length; i++) { kd[i] = false; }
+               }
+            }
+            keyPressTime = new Array();
+         }
+         catch (err:*) { }
+      }
+
+      private function onKeyUp(e:KeyboardEvent):void
+      {
+         // 输入法真卡键判定：UP 无对应 DOWN（2 秒内 >=2 次才算真卡键；
+         // 输入法切换瞬间会出现 1 次，属正常不警告）
+         if (e.keyCode > 0 && e.keyCode < 256)
+         {
+            var dt:* = keyDownSeen[e.keyCode];
+            if (dt == null)
+            {
+               var nowM:int = getTimer();
+               if (nowM - imeMissTime > 2000) { imeMissCount = 1; imeMissTime = nowM; }
+               else { imeMissCount++; }
+               if (imeMissCount >= 2)
+               {
+                  imeWarnT = 90;   // 3 秒警告
+                  if (cfgDiagLog) { try { log("[IME] miss x" + imeMissCount + " kc=" + e.keyCode); } catch (err:*) { } }
+               }
+               else if (cfgDiagLog)
+               {
+                  try { log("[IME] miss x1 kc=" + e.keyCode + " (switch transient, no warn)"); } catch (err:*) { }
+               }
+            }
+            keyDownSeen[e.keyCode] = null;
+         }
+         if (cfgDiagLog)
+         {
+            try { log("[KEY] U " + e.keyCode); } catch (err:*) { }
+         }
+         try
+         {
+            if (keyPressTime[e.keyCode] != null)
+            {
+               keyPressTime[e.keyCode] = null;
+            }
+         }
+         catch (err:*) { }
+      }
+
+      // ==================== 输入 ====================
+      private function onKey(e:KeyboardEvent):void
+      {
+         // ===== 中文输入法（IME）检测 =====
+         // 真卡键特征：字母键的 KEY_DOWN 被输入法在系统层截获（只发 229 或直接丢失），
+         // 随后只有 KEY_UP 到达。判定：
+         //   1) 收到 KEY_UP 但之前没有对应 KEY_DOWN → 该键 DOWN 被吃 → 真卡键 → 警告
+         //   2) 短时间内连续出现 229 事件（>=2 次/3秒）→ 输入法活跃 → 警告
+         // 单个 229 不警告（输入法切换瞬间/英文模式 Shift 等也会产生，属正常）
+         if (e.keyCode == 229)
+         {
+            var nowT:int = getTimer();
+            if (nowT - ime229Time > 3000) { ime229Count = 1; ime229Time = nowT; }
+            else { ime229Count++; }
+            if (ime229Count >= 2)
+            {
+               imeWarnT = 150;
+               if (cfgDiagLog) { try { log("[IME] 229 x" + ime229Count); } catch (err:*) { } }
+            }
+         }
+         else if (e.keyCode > 0 && e.keyCode < 256)
+         {
+            keyDownSeen[e.keyCode] = getTimer();
+         }
+
+         // ===== 按键诊断（diaglog=1 时记录按键事件与游戏状态，用于定位卡键）=====
+         if (cfgDiagLog)
+         {
+            try
+            {
+               log("[KEY] D " + e.keyCode + "->" + keyMap[e.keyCode]
+                   + " pip=" + (world != null && world.pip != null ? world.pip.active : -1)
+                   + " stand=" + (world != null && world.stand != null ? world.stand.active : -1)
+                   + " consol=" + (world != null ? world.onConsol : -1)
+                   + " setkey=" + (world != null && world.ctr != null ? world.ctr.setkeyOn : -1)
+                   + " guiPause=" + (world != null && world.gui != null ? world.gui.guiPause : -1)
+                   + " ctrActive=" + (world != null && world.ctr != null ? world.ctr.active : -1)
+                   + " focus=" + (world != null ? world.swfStage.focus : -1));
+            }
+            catch (err:*) { }
+         }
+
+         // ===== 卡键自愈（游戏本体 bug：clearAll 不清 keyDowns + 失焦丢 UP）=====
+         // keyDowns 是 internal 无法访问；改为：KEY_DOWN 时按 keyXML 键位表
+         // 强制设置键布尔（public），无论游戏是否因 keyDowns 残留而忽略本次按键，
+         // 按键都立即生效。UI 占用输入时（键位重绑/菜单/商店）跳过。
+         try
+         {
+            if (world != null && world.ctr != null)
+            {
+               var cc:Object = world.ctr;
+               if (!cc.setkeyOn && !(world.pip != null && world.pip.active) && !(world.stand != null && world.stand.active))
+               {
+                  var kb2:* = keyMap[e.keyCode];
+                  if (kb2 != null)
+                  {
+                     cc[kb2] = true;
+                  }
+               }
+            }
+         }
+         catch (err:*) { }
+
+         if (keyPressTime[e.keyCode] == null)
+         {
+            keyPressTime[e.keyCode] = getTimer();
+         }
+         if (panelOpen)
+         {
+            panelKey(e.keyCode);
+            e.stopPropagation();
+            return;
+         }
+         // ===== 选项页模组设置面板（主菜单/游戏内 Options 页）=====
+         if (optPanelOn)
+         {
+            if (e.keyCode == Keyboard.UP) { optSel = 0; return; }
+            if (e.keyCode == Keyboard.DOWN) { optSel = 1; return; }
+            if (e.keyCode == Keyboard.LEFT) { optAdj(-1); return; }
+            if (e.keyCode == Keyboard.RIGHT) { optAdj(1); return; }
+            if (e.keyCode == Keyboard.ENTER) { saveConfigFile(); return; }
+            // 其它键放行（PipBuck 正常处理，如 TAB 关闭）
+         }
+         if (e.keyCode == cfgPanelKey)
+         {
+            if (!sandyActive && !replaying && inGameplay())
+            {
+               togglePanel(true);
+            }
+            return;
+         }
+         if (e.keyCode == cfgHotkey)
+         {
+            if (sandyActive)
+            {
+               endSandy();
+               e.stopPropagation();
+            }
+            else if (replaying)
+            {
+               // 回放中忽略
+            }
+            else if (cooldownLeft <= 0)
+            {
+               startSandy();
+               e.stopPropagation();
+            }
+         }
+         else if (sandyActive)
+         {
+            // 时停期间屏蔽 SATS / PipBuck / 交互键（E），避免触发对话锁死控制
+            try
+            {
+               var ctr:Object = world.ctr;
+               if (ctr == null) return;
+               if (e.keyCode == ctr.keyIds["keySats"].a1 || (ctr.keyIds["keySats"].a2 != null && e.keyCode == ctr.keyIds["keySats"].a2))
+               {
+                  ctr.keySats = false;
+               }
+               if (e.keyCode == ctr.keyIds["keyPip"].a1)
+               {
+                  ctr.keyPip = false;
+               }
+               if (e.keyCode == ctr.keyIds["keyAction"].a1)
+               {
+                  ctr.keyAction = false;
+               }
+            }
+            catch (err:*) { }
+         }
+      }
+
+      // ==================== HUD ====================
+      private function updateHud():void
+      {
+         if (world == null || world.main == null) return;
+         if (hud == null)
+         {
+            hud = new TextField();
+            var tf:TextFormat = new TextFormat();
+            tf.font = "Consolas";           // PipBuck 终端等宽风
+            tf.size = 15;
+            tf.bold = false;
+            tf.color = 0x00FF99;            // 荧光绿
+            tf.letterSpacing = 1;
+            hud.defaultTextFormat = tf;
+            hud.selectable = false;
+            hud.mouseEnabled = false;
+            hudBg = new Sprite();
+            world.main.addChild(hudBg);
+            world.main.addChild(hud);
+         }
+         var txt:String = "";
+         if (imeWarnT > 0)
+         {
+            imeWarnT--;
+            txt = "⚠ 输入法已激活(可能按 Shift 误触)！请按 Ctrl+Space 切回英文";
+         }
+         else if (sandyActive)
+         {
+            txt = "⚡ 斯安维斯坦 " + (sandyLeft / 30).toFixed(1) + "s";
+         }
+         else if (replaying)
+         {
+            txt = "⟲ 回放中…";
+         }
+         else if (cooldownLeft > 0)
+         {
+            txt = "斯安维斯坦 充能中 " + (cooldownLeft / 30).toFixed(1) + "s";
+         }
+         if (txt != "")
+         {
+            hud.text = txt;
+            var st:Object = world.swfStage != null ? world.swfStage : world.main.stage;
+            var sw:Number = 1280;
+            try { sw = st.stageWidth; } catch (e:*) { }
+            hud.x = (sw - hud.textWidth) / 2 - 6;
+            hud.y = 12;
+            hud.width = hud.textWidth + 12;
+            hud.height = 28;
+            hud.visible = true;
+            var fg:uint = 0x00FF99;
+            if (imeWarnT > 0) fg = 0xFF3333;    // 输入法警告: 红色
+            else if (sandyActive) fg = 0x00FFFF;   // 激活: 青色
+            else if (replaying) fg = 0xFFFF00; // 回放: 黄色
+            hud.textColor = fg;
+            hud.text = (imeWarnT > 0) ? "⚠ 输入法已激活(可能按 Shift 误触)！请按 Ctrl+Space 切回英文" : hud.text;
+            hudBg.graphics.clear();
+            hudBg.graphics.lineStyle(1, fg, 0.9);              // 荧光边框
+            hudBg.graphics.beginFill(0x002211, 0.7);           // 深绿黑底
+            hudBg.graphics.drawRect(hud.x - 8, hud.y - 4, hud.width + 16, hud.height + 8);
+            hudBg.graphics.endFill();
+            hudBg.visible = true;
+         }
+         else
+         {
+            hud.visible = false;
+            hudBg.visible = false;
+         }
+      }
+   }
+}

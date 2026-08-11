@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
+<application xmlns="http://ns.adobe.com/air/application/30.0">
+  <id>pfe</id>
+  <versionNumber>1.0</versionNumber>
+  <filename>Remains</filename>
+  <description>Sandevistan Mod for Remains</description>
+  <name>Remains</name>
+  <copyright>Empalu</copyright>
+  <initialWindow>
+    <content>SandevistanMod/SandevistanMod.swf</content>
+    <systemChrome>standard</systemChrome>
+    <transparent>false</transparent>
+    <visible>true</visible>
+    <fullScreen>false</fullScreen>
+    <aspectRatio>portrait</aspectRatio>
+    <renderMode>direct</renderMode>
+    <maximizable>true</maximizable>
+    <minimizable>true</minimizable>
+    <resizable>true</resizable>
+    <autoOrients>false</autoOrients>
+    <depthAndStencil>true</depthAndStencil>
+  </initialWindow>
+  <customUpdateUI>false</customUpdateUI>
+  <allowBrowserInvocation>false</allowBrowserInvocation>
+  <versionLabel/>
+  <supportedProfiles>desktop extendedDesktop mobileDevice tv extendedTV</supportedProfiles>
+</application>
