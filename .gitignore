@@ -30,5 +30,6 @@ _dev/settings*.json
 # ===== 临时调试文件 =====
 _dev/pcode_u/
 _dev/src_frame/
+_dev/_probe/
 _dev/tiny.swf
 _dev/modlog*

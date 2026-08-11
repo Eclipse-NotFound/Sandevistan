@@ -57,9 +57,12 @@ package
       private var replayIdx:int = 0;
       private var savedGod:Boolean = false;             // 回放期间无敌
       private var savedGgCtrl:Boolean = true;           // 回放前控制状态
-      private var sandyAmmoSnap:Object = null;            // 时停开始弹药快照（时停消耗在结束时返还）
+      private var startWeapon:Object = null;               // 时停开始时的武器（回放开始切回它）
+      private var endWeapon:Object = null;                 // 时停结束时的武器（回放结束切回它）
+      private var sandyEndSnap:Object = null;              // 时停结束快照（全武器弹夹+背包弹药，回放结束恢复）
       private var fxTicks:int = 0;
       private var diagTick:int = 0;
+      private var replayDiagTick:int = 0;      // 回放段诊断计数
       private var panelOpen:Boolean = false;
       private var optPanelOn:Boolean = false;      // 选项页模组设置面板
       private var optSel:int = 0;                  // 0=生效时间 1=冷却
@@ -176,7 +179,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.0 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.33 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -576,53 +579,127 @@ package
             if (loc == null) return;
             var obj:Object = loc.firstObj;
             var guard:int = 0;
+            var nFe:int = 0;      // 攻击体对象总数（fe.weapon::*）
+            var nRem:int = 0;     // 实际清除数
+            var nSkip:int = 0;    // 未清除数（owner 不是玩家，或异常）
             while (obj != null)
             {
                var nxt:Object = obj.nobj;
                try
                {
                   var qn:String = flash.utils.getQualifiedClassName(obj);
-                  if (qn.indexOf("fe.weapon::") == 0 && obj.owner == world.gg)
+                  if (qn.indexOf("fe.weapon::") == 0)
                   {
-                     loc.remObj(obj);
+                     nFe++;
+                     if (obj.owner == world.gg)
+                     {
+                        loc.remObj(obj);
+                        nRem++;
+                     }
+                     else
+                     {
+                        nSkip++;
+                     }
                   }
                }
                catch (e:*) { }
                obj = nxt;
                if (++guard > 20000) break;
             }
+            log("[DIAG] clearFrozenBullets: feWeapon=" + nFe + " removed=" + nRem + " skip=" + nSkip);
          }
          catch (e:*) { }
       }
 
-      // ===== 返还时停期间的弹药消耗（时停子弹已清除，弹药不白扣）=====
-      private function refundSandyAmmo():void
+      // ===== 快照时停结束时的武器/弹药状态（回放结束后恢复，保证回放零净消耗）=====
+      private function buildSandyEndSnap():void
       {
-         if (sandyAmmoSnap == null) return;
+         sandyEndSnap = null;
          try
          {
-            var wR:* = world.gg.currentWeapon;
-            if (wR != null && sandyAmmoSnap.hold != null)
+            sandyEndSnap = {};
+            endWeapon = world.gg.currentWeapon;
+            var wns:* = world.invent.weapons;
+            for (var wid:String in wns)
             {
-               if (wR.hold < sandyAmmoSnap.hold) { wR.hold = sandyAmmoSnap.hold; }
-            }
-            for (var aR:String in sandyAmmoSnap)
-            {
-               if (aR.indexOf("it_") == 0)
+               try
                {
-                  var tR:String = aR.substr(3);
-                  var snapR:Number = sandyAmmoSnap[aR];
+                  var wobj:* = wns[wid];
+                  if (wobj != null) { sandyEndSnap["h_" + wid] = wobj.hold; }
+               }
+               catch (e:*) { }
+            }
+            var ammE:* = world.invent.ammos;
+            for (var aE:String in ammE)
+            {
+               try { sandyEndSnap["it_" + aE] = world.invent.items[aE].kol; } catch (e:*) { }
+            }
+         }
+         catch (e:*) { sandyEndSnap = null; }
+      }
+
+      // ===== 模拟游戏 changeWeaponNow：立即切换武器（无切换动画），配套视觉/GUI 更新 =====
+      private function switchToWeapon(w:Object):void
+      {
+         try
+         {
+            if (world.gg.currentWeapon == w) return;
+            if (world.gg.currentWeapon != null)
+            {
+               try { world.gg.currentWeapon.remVisual(); } catch (e:*) { }
+            }
+            world.gg.currentWeapon = w;
+            world.gg.childObjs[0] = w;
+            if (w != null)
+            {
+               try
+               {
+                  w.addVisual();
+                  w.setNull();
+                  w.setPers(world.gg, world.gg.pers);
+                  world.gui.setWeapon();
+               }
+               catch (e:*) { log("[SandyMod] switchToWeapon visual error: " + e); }
+            }
+            log("[SandyMod] switchToWeapon -> " + (w != null ? w.id : "none"));
+         }
+         catch (e:*) { log("[SandyMod] switchToWeapon error: " + e); }
+      }
+
+      // ===== 恢复时停结束状态：回放结束后弹夹剩余=时停结束时，背包弹药不被回放消耗 =====
+      private function restoreSandyEndSnap():void
+      {
+         if (sandyEndSnap == null) return;
+         try
+         {
+            var wns:* = world.invent.weapons;
+            for (var wid:String in sandyEndSnap)
+            {
+               if (wid.indexOf("h_") == 0)
+               {
+                  var tW:String = wid.substr(2);
                   try
                   {
-                     var itR:* = world.invent.items[tR];
-                     if (itR != null && itR.kol < snapR) { itR.kol = snapR; }
+                     var wobj:* = wns[tW];
+                     if (wobj != null) { wobj.hold = sandyEndSnap[wid]; }
+                  }
+                  catch (e:*) { }
+               }
+               else if (wid.indexOf("it_") == 0)
+               {
+                  var tI:String = wid.substr(3);
+                  try
+                  {
+                     var itR:* = world.invent.items[tI];
+                     // 只恢复"少了"的（回放中瞬时换弹扣背包），拾取增加的保留
+                     if (itR != null && itR.kol < sandyEndSnap[wid]) { itR.kol = sandyEndSnap[wid]; }
                   }
                   catch (e:*) { }
                }
             }
          }
          catch (e:*) { }
-         sandyAmmoSnap = null;
+         sandyEndSnap = null;
       }
 
       // ==================== 参数面板 ====================
@@ -737,20 +814,11 @@ package
          {
             savedOnPause = world.onPause;
             world.onPause = true;
-            // 时停弹药快照（时停中射击的消耗在结束时返还——子弹被清除不白扣弹药）
-            sandyAmmoSnap = null;
-            try
-            {
-               sandyAmmoSnap = {};
-               var wA:* = world.gg.currentWeapon;
-               if (wA != null) { sandyAmmoSnap.hold = wA.hold; }
-               var ammS:* = world.invent.ammos;
-               for (var aS:String in ammS)
-               {
-                  try { sandyAmmoSnap["it_" + aS] = world.invent.items[aS].kol; } catch (e:*) { }
-               }
-            }
-            catch (e:*) { sandyAmmoSnap = null; }
+            // 记录时停开始时的武器（回放开始切回它重演，回放结束切回时停结束时武器）
+            startWeapon = null;
+            try { startWeapon = world.gg.currentWeapon; } catch (e:*) { }
+            endWeapon = null;
+            sandyEndSnap = null;
             // 键状态处理：先保存当前按住的键，关 SATS（其 clearAll 会清布尔），再恢复，
             // 这样"按住空格/方向键进入时停"的玩家在时停中按键依然有效（Flash 不会为重按的键重发事件）
             try
@@ -804,8 +872,8 @@ package
          sandyActive = false;
          // 清除时停期间玩家发射的冻结子弹（回放重演攻击，避免双倍火力）
          clearFrozenBullets();
-         // 返还时停期间的弹药消耗（时停子弹已清除，弹药不白扣）
-         refundSandyAmmo();
+         // 快照时停结束状态（回放结束后恢复：弹夹剩余=时停结束时，背包弹药不被回放消耗）
+         buildSandyEndSnap();
 
          try
          {
@@ -846,6 +914,8 @@ package
             savedGod = world.godMode;
             world.godMode = true;                 // 回放期间无敌（世界正常运行）
             savedGgCtrl = world.gg.ggControl;
+            // 回放开始切回时停开始时的武器（否则回放停留在时停结束时的最后武器）
+            switchToWeapon(startWeapon);
             if (history.length > 0)
             {
                world.gg.setPos(history[0].x, history[0].y);   // 传送回起点
@@ -963,6 +1033,31 @@ package
             }
          }
          catch (e:*) { }
+         // 回放段诊断：loc 中攻击体计数（生成/结算是否平衡）与弹夹状态（每 60 帧）
+         if (++replayDiagTick % 60 == 1)
+         {
+            try
+            {
+               var locR:Object = world.loc;
+               var oR:Object = locR.firstObj;
+               var nR:int = 0;
+               var guardR:int = 0;
+               while (oR != null)
+               {
+                  try
+                  {
+                     if (flash.utils.getQualifiedClassName(oR).indexOf("fe.weapon::") == 0) { nR++; }
+                  }
+                  catch (e:*) { }
+                  oR = oR.nobj;
+                  if (++guardR > 20000) break;
+               }
+               var cwD:* = world.gg.currentWeapon;
+               log("[DIAG] replay: locWeapons=" + nR + " hold=" + (cwD != null ? cwD.hold : -1)
+                   + " holder=" + (cwD != null ? cwD.holder : -1) + " t_atk=" + (cwD != null ? cwD.t_attack : -1));
+            }
+            catch (e:*) { }
+         }
          var n:int = Math.ceil(cfgReplaySpeed);
          var ghostIdx:int = replayIdx;
          var atkOn:Boolean = false;
@@ -1060,6 +1155,13 @@ package
             world.ctr.keyMagic = false;
          }
          catch (e:*) { }
+         // 回放结束：切回时停结束时手上的武器，恢复弹夹/背包（弹夹剩余=时停结束时）
+         try
+         {
+            switchToWeapon(endWeapon);
+            restoreSandyEndSnap();
+         }
+         catch (e:*) { log("[SandyMod] endReplay restore error: " + e); }
 
 
          if (debugTest)
@@ -1143,8 +1245,18 @@ package
             {
                var aC:uint = bmp.getPixel32(int(bmp.width / 2), int(bmp.height / 2));
                var aTL:uint = bmp.getPixel32(5, 5);
-               log("[DIAG] ghostbmp: w=" + bmp.width + " h=" + bmp.height + " center=" + aC.toString(16) + " tl=" + aTL.toString(16)
-                   + " vis.alpha=" + vis.alpha + " vis.visible=" + vis.visible + " sost=" + gg.sost);
+               // 左右半像素 alpha 采样（判断残影镜像是否生效：朝左时左半应更"实"）
+               var lPx:Number = 0;
+               var rPx:Number = 0;
+               var yc:int = int(bmp.height / 2);
+               for (var xi:int = 0; xi < 10; xi++)
+               {
+                  lPx += bmp.getPixel32(int(bmp.width * 0.12) + xi, yc) >>> 24;
+                  rPx += bmp.getPixel32(int(bmp.width * 0.88) - xi, yc) >>> 24;
+               }
+               log("[DIAG] ghostAt-f: s=" + s + " storona=" + gg.storona + " visScaleX=" + vis.scaleX
+                   + " rot=" + rot + " sc=" + sc + " bmp=" + bmp.width + "x" + bmp.height
+                   + " visW=" + vis.width + " visH=" + vis.height + " lPx=" + lPx + " rPx=" + rPx);
             }
             var bit:Bitmap = new Bitmap(bmp, "auto", true);
             var spr:Sprite = new Sprite();
