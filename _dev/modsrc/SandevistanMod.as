@@ -190,7 +190,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.41 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.42 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -1258,8 +1258,11 @@ package
                      // 允许攻速：rapid 11 → 2（匹配快速连点频率，不吞攻击）
                      if (savedRapids[cw3.id] == null) { savedRapids[cw3.id] = cw3.rapid; }
                      cw3.rapid = 2;
-                     cw3.t_attack -= 1;
-                     if (cw3.t_attack < 0) { cw3.t_attack = 0; }
+                     // 关键：WClub.shoot 会设 t_auto=3（近战特有的 3 帧攻击冷却），
+                     // attack() 在 t_auto>0 时直接 return——不清掉则 rapid=2 被拖成
+                     // 实际每 4 帧一刀（吞攻击的元凶）
+                     cw3.t_auto = 0;
+                     // t_attack 自然走（rapid=2 → 每 2 帧一刀，动画正常）
                      // 攻击体结算兜底：rapid=2 后 bindMove 窗口（tA∈[5,8]）被跳过，
                      // 模组每攻击帧手动推进攻击体结算（bindMove 已命中的 off=true 跳过，不重复）
                      if (cw3.b != null && cw3.b.off == false)
