@@ -57,7 +57,6 @@ package
       private var replaying:Boolean = false;
       private var replayIdx:int = 0;
       private var savedGod:Boolean = false;             // 回放期间无敌
-      private var savedInvul:Boolean = false;           // 时停期间玩家免疫（攻击体打不中）
       private var savedGgCtrl:Boolean = true;           // 回放前控制状态
       private var startWeapon:Object = null;               // 时停开始时的武器（回放开始切回它）
       private var endWeapon:Object = null;                 // 时停结束时的武器（回放结束切回它）
@@ -70,8 +69,6 @@ package
       private var replayBodyTick:int = 0;      // 回放段攻击体状态诊断计数
       private var sandyAtkTick:int = 0;        // 时停段攻击状态诊断计数
       private var sandyEnemyTick:int = 0;      // 时停段敌人移动诊断计数
-      private var postSandyTick:int = 0;       // 回放结束后世界恢复诊断计数
-      private var replayEnemyTick:int = 0;     // 回放段敌人重演诊断计数
       private var mouseAtkDown:Boolean = false;   // 鼠标攻击键按住状态
       private var mouseAtkPulse:Boolean = false;  // 鼠标攻击键按下脉冲（同帧 DOWN+UP 不丢）
       private var savedOtbros:Number = -1;        // 回放近战击退原始值（缩放到 1/5 抵消加速）
@@ -202,7 +199,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.53 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.49 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -366,33 +363,6 @@ package
          else if (cooldownLeft > 0)
          {
             --cooldownLeft;
-         }
-         else if (cfgDiagLog && ++postSandyTick % 60 == 0)
-         {
-            // 回放结束后世界恢复诊断：敌人位置应持续变化（确认世界正常运行）
-            try
-            {
-               var oP:Object = world.loc != null ? world.loc.firstObj : null;
-               var gP:int = 0;
-               var nP:int = 0;
-               while (oP != null)
-               {
-                  var nxP:Object = oP.nobj;
-                  try
-                  {
-                     if (oP != world.gg && oP["setPos"] != null)
-                     {
-                        log("[DIAG] postSandy: onPause=" + world.onPause + " X=" + oP.X + " Y=" + oP.Y
-                            + " cls=" + flash.utils.getQualifiedClassName(oP));
-                        if (++nP >= 2) break;
-                     }
-                  }
-                  catch (e:*) { }
-                  oP = nxP;
-                  if (++gP > 20000) break;
-               }
-            }
-            catch (e:*) { }
          }
 
          updateHud();
@@ -684,14 +654,13 @@ package
                   else if (slowPartClass != null && oR is slowPartClass) { /* 粒子跳过 */ }
                   else
                   {
+                  var qnR:String = flash.utils.getQualifiedClassName(oR);
+                  var isAtk:Boolean = qnR.indexOf("fe.weapon::") == 0;
+                  // 单位判断：fe.unit:: / fe.serv::（NPC 在 serv 包）/ 有 setPos 方法（Unit 子类）
+                  var isUnit:Boolean = qnR.indexOf("fe.unit::") == 0 || qnR.indexOf("fe.serv::") == 0 || oR["setPos"] != null;
                      var arrR:Array = replayObjs[oR];
                      if (arrR == null)
                      {
-                        // 未记录：类名判断（类型/移动检测）——已记录对象后续直接 push（省性能）
-                        var qnR:String = flash.utils.getQualifiedClassName(oR);
-                        var isAtk:Boolean = qnR.indexOf("fe.weapon::") == 0;
-                        // 单位判断：fe.unit:: / fe.serv::（NPC 在 serv 包）/ 有 setPos 方法（Unit 子类）
-                        var isUnit:Boolean = qnR.indexOf("fe.unit::") == 0 || qnR.indexOf("fe.serv::") == 0 || oR["setPos"] != null;
                         if (isAtk || isUnit)
                         {
                            // 单位/攻击体：必记录（补前期帧为当前位置，数组对齐 replayIdx）
@@ -708,8 +677,8 @@ package
                               }
                               catch (e:*) { }
                            }
-                           for (var f0:int = 0; f0 < frameN; f0++) { arrR.push({ x: oR.X, y: oR.Y, f: -1, s: "", r: 0 }); }
-                           arrR.push({ x: oR.X, y: oR.Y, f: animFrameOf(oR), s: sndR, r: oR.rot != null ? oR.rot : 0 });
+                           for (var f0:int = 0; f0 < frameN; f0++) { arrR.push({ x: oR.X, y: oR.Y, f: -1, s: "" }); }
+                           arrR.push({ x: oR.X, y: oR.Y, f: animFrameOf(oR), s: sndR });
                         }
                         else
                         {
@@ -721,14 +690,14 @@ package
                               arrR = [];
                               replayObjs[oR] = arrR;
                               replayObjArr.push(oR);
-                              for (var f1:int = 0; f1 < frameN; f1++) { arrR.push({ x: sp.x, y: sp.y, f: -1, s: "", r: 0 }); }
-                              arrR.push({ x: oR.X, y: oR.Y, f: -1, s: "", r: 0 });
+                              for (var f1:int = 0; f1 < frameN; f1++) { arrR.push({ x: sp.x, y: sp.y, f: -1, s: "" }); }
+                              arrR.push({ x: oR.X, y: oR.Y, f: -1, s: "" });
                            }
                         }
                      }
                      else
                      {
-                        arrR.push({ x: oR.X, y: oR.Y, f: animFrameOf(oR), s: "", r: oR.rot != null ? oR.rot : 0 });
+                        arrR.push({ x: oR.X, y: oR.Y, f: animFrameOf(oR), s: "" });
                      }
                   }
                }
@@ -768,19 +737,6 @@ package
                      else if (oR.vis != null) { oR.vis.x = stR.x; oR.vis.y = stR.y; }
                   }
                   catch (e:*) { }
-                  // 攻击体方向恢复（仅攻击体——敌人的 rot 是朝向角（0/π），
-                  // vis.rotation 设 180° 会把朝左敌人视觉倒转；敌人视觉由镜像/动画控制）
-                  if (stR.r != 0 && oR.vis != null)
-                  {
-                     try
-                     {
-                        if (flash.utils.getQualifiedClassName(oR).indexOf("fe.weapon::") == 0)
-                        {
-                           oR.vis.rotation = stR.r * 180 / Math.PI;
-                        }
-                     }
-                     catch (e:*) { }
-                  }
                   // 动画帧（共用视觉体系，容错）
                   if (stR.f > 0)
                   {
@@ -1121,14 +1077,11 @@ package
             // （1/N 速）。注：位移回退方案因帧序（模组先于游戏 step，渲染在游戏后）
             // 回退被全速移动覆盖而无效——节流是"真慢速"（动作/判定同步 1/N）
             world.onPause = true;
-            // 时停中玩家无敌（godMode 挡伤害；invulner 让攻击体完全打不中——
-            // 否则敌人攻击体命中玩家仍有击退/命中反馈的"当场结算"观感）
+            // 时停中玩家无敌（敌人攻击体虽已慢速判定，本体碰撞判定仍全速——兜底）
             try
             {
                savedGod = world.godMode;
                world.godMode = true;
-               savedInvul = world.gg.invulner;
-               world.gg.invulner = true;
             }
             catch (e:*) { }
             // 记录时停开始时的武器（回放开始切回它重演，回放结束切回时停结束时武器）
@@ -1315,7 +1268,6 @@ package
                {
                   var oE2:Object = world.loc.firstObj;
                   var gE2:int = 0;
-                  var nE2:int = 0;
                   while (oE2 != null)
                   {
                      var nxE2:Object = oE2.nobj;
@@ -1323,8 +1275,8 @@ package
                      {
                         if (oE2 != world.gg && oE2["setPos"] != null)
                         {
-                           log("[DIAG] sEnemy" + nE2 + ": X=" + oE2.X + " Y=" + oE2.Y + " cls=" + flash.utils.getQualifiedClassName(oE2));
-                           if (++nE2 >= 3) break;
+                           log("[DIAG] sEnemy: X=" + oE2.X + " Y=" + oE2.Y + " cls=" + flash.utils.getQualifiedClassName(oE2));
+                           break;
                         }
                      }
                      catch (e:*) { }
@@ -1636,33 +1588,6 @@ package
          stepPlayerBullets();
          replayObjects();
          if (cfgFxRun) { try { stepParticles(world.loc); } catch (e:*) { } }
-         // 回放中敌人位置诊断（每 30 帧）：验证 replayObjects 重演是否生效（采样前 5 个）
-         if (++replayEnemyTick % 30 == 0)
-         {
-            try
-            {
-               var oR2:Object = world.loc.firstObj;
-               var gR2:int = 0;
-               var nR2:int = 0;
-               while (oR2 != null)
-               {
-                  var nxR2:Object = oR2.nobj;
-                  try
-                  {
-                     if (oR2 != world.gg && oR2["setPos"] != null && replayObjs[oR2] != null)
-                     {
-                        log("[DIAG] rEnemy: X=" + oR2.X + " Y=" + oR2.Y + " idx=" + replayIdx
-                            + " cls=" + flash.utils.getQualifiedClassName(oR2));
-                        if (++nR2 >= 5) break;
-                     }
-                  }
-                  catch (e:*) { }
-                  oR2 = nxR2;
-                  if (++gR2 > 20000) break;
-               }
-            }
-            catch (e:*) { }
-         }
          // 回放攻击体状态诊断（每 3 帧）：攻击体位置/伤害/off 状态（定位近战结算问题）
          if (++replayBodyTick % 3 == 0)
          {
@@ -1707,7 +1632,6 @@ package
             // 回放结束：恢复世界运行（敌人/场景恢复自由行动）
             world.onPause = savedOnPause;
             world.godMode = savedGod;    // 恢复无敌状态
-            try { world.gg.invulner = savedInvul; } catch (e:*) { }   // 恢复免疫
             world.ctr.keyAttack = false;
             world.ctr.keyPunch = false;
             world.ctr.keyGrenad = false;
@@ -1718,9 +1642,6 @@ package
          replayObjs = new Dictionary();
          replayObjArr = [];
          seenPos = new Dictionary();
-         // 回放结束诊断：确认世界恢复（onPause/godMode/玩家控制/敌人位置）
-         log("[DIAG] endReplay: onPause=" + world.onPause + " godMode=" + world.godMode
-             + " ggControl=" + world.gg.ggControl + " allStat=" + world.allStat);
          // 回放结束：切回时停结束时手上的武器，恢复弹夹/背包（弹夹剩余=时停结束时）
          try
          {
