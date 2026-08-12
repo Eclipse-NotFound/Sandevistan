@@ -69,7 +69,8 @@ package
       private var sandyAtkTick:int = 0;        // 时停段攻击状态诊断计数
       private var mouseAtkDown:Boolean = false;   // 鼠标攻击键按住状态
       private var mouseAtkPulse:Boolean = false;  // 鼠标攻击键按下脉冲（同帧 DOWN+UP 不丢）
-      private var savedOtbros:Number = -1;        // 回放近战击退原始值（缩放到 1/3 抵消加速）
+      private var savedOtbros:Number = -1;        // 回放近战击退原始值（缩放到 1/5 抵消加速）
+      private var savedRapids:Object = {};        // 回放中改过的武器 rapid 原始值（结束恢复）
       private var panelOpen:Boolean = false;
       private var optPanelOn:Boolean = false;      // 选项页模组设置面板
       private var optSel:int = 0;                  // 0=生效时间 1=冷却
@@ -189,7 +190,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.40 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.41 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -1016,7 +1017,9 @@ package
             history.push({ x: gg.X, y: gg.Y, s: gg.storona, r: gg.vis != null ? gg.vis.rotation : 0, v: gg.vis != null ? gg.vis.scaleX : 1,
                            a: wantA, p: wantP, g: world.ctr.keyGrenad, m: world.ctr.keyMagic,
                            ax: world.celX, ay: world.celY,
-                           w: world.gg.currentWeapon != null ? world.gg.currentWeapon.id : "" });
+                           w: world.gg.currentWeapon != null ? world.gg.currentWeapon.id : "",
+                           wx: world.gg.currentWeapon != null ? world.gg.currentWeapon.X : 0,
+                           wy: world.gg.currentWeapon != null ? world.gg.currentWeapon.Y : 0 });
             // 时停攻击状态诊断（每 30 帧）：观察时停中攻击意图与武器状态
             if (++sandyAtkTick % 30 == 0)
             {
@@ -1192,9 +1195,10 @@ package
                {
                   world.celX = h.ax;
                   world.celY = h.ay;
-                  // 强制武器立即就位（跳过慢速渐进旋转/枪口移动）——
-                  // 仅枪械：近战武器位置由 WClub.actions 自己控制（跟随瞄准点），
-                  // 强制钉在角色身边会破坏近战武器在时停期间的独立位置
+                  // 武器位置：枪械强制就位（枪口钉在角色手上，跳过渐进旋转）；
+                  // 近战重现时停期间的独立位置（历史 wx/wy + 清插值 del，
+                  // 否则 WClub.actions 的追赶插值追不上回放中瞬移的瞄准点，
+                  // 武器会滞留在时停结束时的位置）
                   try
                   {
                      var wv:* = world.gg.currentWeapon;
@@ -1202,7 +1206,13 @@ package
                      {
                         var qnW:String = flash.utils.getQualifiedClassName(wv);
                         var meleeW:Boolean = qnW == "fe.weapon::WClub" || qnW == "fe.weapon::WPunch" || qnW == "fe.weapon::WKick";
-                        if (!meleeW)
+                        if (meleeW)
+                        {
+                           wv.X = h.wx;
+                           wv.Y = h.wy;
+                           try { wv.del.x = 0; wv.del.y = 0; } catch (e:*) { }
+                        }
+                        else
                         {
                            wv.X = world.gg.weaponX;          // 枪口位置就位
                            wv.Y = world.gg.weaponY;
@@ -1245,16 +1255,28 @@ package
                   var melee3:Boolean = qn3 == "fe.weapon::WClub" || qn3 == "fe.weapon::WPunch" || qn3 == "fe.weapon::WKick";
                   if (melee3)
                   {
-                     cw3.t_attack -= 3;
+                     // 允许攻速：rapid 11 → 2（匹配快速连点频率，不吞攻击）
+                     if (savedRapids[cw3.id] == null) { savedRapids[cw3.id] = cw3.rapid; }
+                     cw3.rapid = 2;
+                     cw3.t_attack -= 1;
                      if (cw3.t_attack < 0) { cw3.t_attack = 0; }
-                     // 击退缩放：回放攻击频率约 3 倍 → 每次命中击退缩到 1/3，
+                     // 攻击体结算兜底：rapid=2 后 bindMove 窗口（tA∈[5,8]）被跳过，
+                     // 模组每攻击帧手动推进攻击体结算（bindMove 已命中的 off=true 跳过，不重复）
+                     if (cw3.b != null && cw3.b.off == false)
+                     {
+                        cw3.b.dx = cw3.storona * 120;
+                        cw3.b.dy = 0;
+                        cw3.b.vel = 120;
+                        cw3.b.run();
+                     }
+                     // 击退缩放：回放攻击频率约 5 倍 → 每次命中击退缩到 1/5，
                      // 总击退位移 ≈ 正常游戏（避免敌人被连续击退甩飞）
                      try
                      {
                         if (cw3.b != null)
                         {
                            if (savedOtbros < 0) { savedOtbros = cw3.b.otbros; }
-                           cw3.b.otbros = savedOtbros / 3;
+                           cw3.b.otbros = savedOtbros / 5;
                         }
                      }
                      catch (e:*) { }
@@ -1330,6 +1352,17 @@ package
          {
             // 取消残留切换动画（回放结束的切换同样立即生效）
             try { world.gg.work = ""; world.gg.t_work = 0; } catch (e:*) { }
+            // 恢复回放中改过的武器攻速（rapid）
+            for (var rid:String in savedRapids)
+            {
+               try
+               {
+                  var wR:* = world.invent.weapons[rid];
+                  if (wR != null) { wR.rapid = savedRapids[rid]; }
+               }
+               catch (e:*) { }
+            }
+            savedRapids = {};
             switchToWeapon(endWeapon);
             restoreSandyEndSnap();
             replayWpn = null;
