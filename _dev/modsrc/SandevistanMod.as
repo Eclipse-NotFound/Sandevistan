@@ -73,8 +73,8 @@ package
       private var savedOtbros:Number = -1;        // 回放近战击退原始值（缩放到 1/5 抵消加速）
       private var savedRapids:Object = {};        // 回放中改过的武器 rapid 原始值（结束恢复）
       private var cfgSlowFactor:Number = 5;       // 时停慢速倍率（1/N 速，config slowfactor）
-      private var slowBullets:Dictionary = new Dictionary();  // 攻击体速度快照（时停慢速）
-      private var prevPos:Dictionary = new Dictionary();      // 对象位置快照（位移回退）
+      private var slowTick:int = 0;               // 节流计数器（每 slowfactor 帧 step 1 次）
+      private var slowPartClass:Class = null;     // 粒子类（节流 step 跳过，特效单独处理）
       private var panelOpen:Boolean = false;
       private var optPanelOn:Boolean = false;      // 选项页模组设置面板
       private var optSel:int = 0;                  // 0=生效时间 1=冷却
@@ -194,7 +194,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.45 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.46 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -629,132 +629,44 @@ package
          catch (e:*) { }
       }
 
-      // ===== 时停慢速世界：帧首处理（攻击体慢速 + 玩家攻击体伤害清零）=====
-      // 攻击体（Bullet）的 dx 不被 control 重设（与敌人不同）——每帧设
-      // dx/dy = 方向×vel/5（基准 vel 首帧快照，不衰减）→ 攻击体在游戏 step 内
-      // 以 1/N 速度移动 + 碰撞判定基于 1/N 位置（判定与视觉一致）
-      private function slowBulletsAndFreeze():void
+      // ===== 时停慢速世界：节流 step（每 slowfactor 帧对世界对象 step 1 次 = 1/N 速）=====
+      // 玩家每帧手动 step（全速）；敌人/物品/攻击体按节流 step——动作与碰撞判定
+      // 同步 1/N 速（真慢速，判定=视觉）。粒子（Part）由 stepParticles 单独处理。
+      private function slowStepWorld():void
       {
+         if (++slowTick % cfgSlowFactor != 0) return;
          try
          {
-            var locB:Object = world.loc;
-            if (locB == null) return;
-            var oB:Object = locB.firstObj;
-            var gB:int = 0;
-            while (oB != null)
+            if (slowPartClass == null)
             {
-               var nxB:Object = oB.nobj;
+               try { slowPartClass = ApplicationDomain.currentDomain.getDefinition("fe.graph.Part") as Class; } catch (e:*) { }
+            }
+            var locS:Object = world.loc;
+            if (locS == null) return;
+            var oS:Object = locS.firstObj;
+            var gS:int = 0;
+            while (oS != null)
+            {
+               var nxS:Object = oS.nobj;
                try
                {
-                  var qnB:String = flash.utils.getQualifiedClassName(oB);
-                  if (qnB.indexOf("fe.weapon::") == 0)
+                  if (oS == world.gg) { /* 玩家跳过（手动 step 全速） */ }
+                  else if (slowPartClass != null && oS is slowPartClass) { /* 粒子跳过（stepParticles） */ }
+                  else
                   {
-                     if (slowBullets[oB] == null)
-                     {
-                        slowBullets[oB] = { vel: oB.vel, dx: oB.dx, dy: oB.dy };
-                     }
-                     var spdB:Number = slowBullets[oB].vel / cfgSlowFactor;
-                     oB.dx = Math.cos(oB.rot) * spdB;
-                     oB.dy = Math.sin(oB.rot) * spdB;
-                     oB.vel = spdB;
+                     oS.step();
                      // 玩家攻击体伤害清零（时停中命中 0 伤害，回放重演结算）
-                     if (oB.owner == world.gg)
+                     if (oS["owner"] == world.gg)
                      {
-                        oB.damage = 0;
-                        oB.damageExpl = 0;
+                        oS.damage = 0;
+                        oS.damageExpl = 0;
                      }
                   }
                }
                catch (e:*) { }
-               oB = nxB;
-               if (++gB > 20000) break;
+               oS = nxS;
+               if (++gS > 20000) break;
             }
-            // 近战复用攻击体（currentWeapon.b，不在 loc 链表）
-            freezeMeleeDamage();
-         }
-         catch (e:*) { }
-      }
-
-      // ===== 时停慢速世界：帧末处理（非攻击体对象位移回退 1/N，视觉平滑慢速）=====
-      private function slowWorldObjects():void
-      {
-         try
-         {
-            var locO:Object = world.loc;
-            if (locO == null) return;
-            var oO:Object = locO.firstObj;
-            var gO:int = 0;
-            while (oO != null)
-            {
-               var nxO:Object = oO.nobj;
-               try
-               {
-                  if (oO != world.gg)
-                  {
-                     var qnO:String = flash.utils.getQualifiedClassName(oO);
-                     if (qnO.indexOf("fe.weapon::") != 0)
-                     {
-                        // 位移回退：X = prev + (X - prev)/N（只处理位置变化的对象）
-                        var pO:Object = prevPos[oO];
-                        if (pO == null)
-                        {
-                           prevPos[oO] = { x: oO.X, y: oO.Y };
-                        }
-                        else if (oO.X != pO.x || oO.Y != pO.y)
-                        {
-                           oO.X = pO.x + (oO.X - pO.x) / cfgSlowFactor;
-                           oO.Y = pO.y + (oO.Y - pO.y) / cfgSlowFactor;
-                           pO.x = oO.X;
-                           pO.y = oO.Y;
-                           // 视觉同步（Unit 走 setVisPos；其他对象尝试直接同步 vis）
-                           try
-                           {
-                              if (oO["setVisPos"] != null) { oO.setVisPos(); }
-                              else if (oO.vis != null) { oO.vis.x = oO.X; oO.vis.y = oO.Y; }
-                           }
-                           catch (e:*) { }
-                        }
-                     }
-                  }
-               }
-               catch (e:*) { }
-               oO = nxO;
-               if (++gO > 20000) break;
-            }
-         }
-         catch (e:*) { }
-      }
-
-      // ===== 时停慢速世界结束：恢复攻击体速度 + 清空快照 =====
-      private function endSlowWorld():void
-      {
-         try
-         {
-            var locE:Object = world.loc;
-            if (locE != null)
-            {
-               var oE:Object = locE.firstObj;
-               var gE:int = 0;
-               while (oE != null)
-               {
-                  var nxE:Object = oE.nobj;
-                  try
-                  {
-                     var snapE:Object = slowBullets[oE];
-                     if (snapE != null)
-                     {
-                        oE.dx = snapE.dx;
-                        oE.dy = snapE.dy;
-                        oE.vel = snapE.vel;
-                     }
-                  }
-                  catch (e:*) { }
-                  oE = nxE;
-                  if (++gE > 20000) break;
-               }
-            }
-            slowBullets = new Dictionary();
-            prevPos = new Dictionary();
          }
          catch (e:*) { }
       }
@@ -976,9 +888,11 @@ package
          try
          {
             savedOnPause = world.onPause;
-            // 时停慢速世界（v1.45）：世界保持运行（onPause=false）——敌人/物品
-            // 由模组位移回退做 1/N 慢速；玩家由世界正常驱动（全速）
-            world.onPause = false;
+            // 时停慢速世界（v1.46）：onPause=true 冻结世界，模组节流 step——
+            // 玩家每帧手动 step（全速），敌人/物品/攻击体每 slowfactor 帧 step 1 次
+            // （1/N 速）。注：位移回退方案因帧序（模组先于游戏 step，渲染在游戏后）
+            // 回退被全速移动覆盖而无效——节流是"真慢速"（动作/判定同步 1/N）
+            world.onPause = true;
             // 时停中玩家无敌（敌人攻击体虽已慢速判定，本体碰撞判定仍全速——兜底）
             try
             {
@@ -1049,8 +963,6 @@ package
 
          try
          {
-            // 时停慢速世界结束：清空回退/攻击体慢速快照并恢复攻击体速度
-            endSlowWorld();
             world.onPause = savedOnPause;   // 时停结束恢复世界（回放期间世界正常运行）
             if (savedInter != null)
             {
@@ -1115,13 +1027,12 @@ package
       {
          try
          {
-            // 时停慢速世界（v1.45）帧序：
-            // 1. 帧首：攻击体慢速（dx/dy = 方向×vel/5，移动+判定 1/5 速）
-            //    + 玩家攻击体伤害清零（时停中命中 0 伤害，回放重演结算）
-            // 2. 世界自动驱动玩家（onPause=false，全速）——不手动 step
-            // 3. 记录历史（玩家全速位置）
-            // 4. 帧末：非攻击体对象（敌人/物品）位移回退 1/5（视觉平滑慢速）
-            slowBulletsAndFreeze();
+            // 时停慢速世界（v1.46）帧序：
+            // 1. 帧首：近战复用攻击体伤害清零（时停中命中 0 伤害，回放重演结算）
+            // 2. 玩家手动 step（全速）
+            // 3. 记录历史（玩家位置）
+            // 4. 节流 step：每 slowfactor 帧对敌人/物品/攻击体 step 1 次（1/N 速）
+            freezeMeleeDamage();
             var wantA:Boolean = false;
             var wantP:Boolean = false;
             try
@@ -1132,8 +1043,10 @@ package
             }
             catch (e:*) { }
             mouseAtkPulse = false;   // 脉冲每帧消费一次
+            var loc:Object = world.loc;
+            loc.gg.step();   // 玩家全速手动 step
 
-            var gg:Object = world.gg;
+            var gg:Object = loc.gg;
             // 记录攻击键状态与瞄准方向（回放时攻击指向时停期间的发射方向）
             history.push({ x: gg.X, y: gg.Y, s: gg.storona, r: gg.vis != null ? gg.vis.rotation : 0, v: gg.vis != null ? gg.vis.scaleX : 1,
                            a: wantA, p: wantP, g: world.ctr.keyGrenad, m: world.ctr.keyMagic,
@@ -1141,8 +1054,8 @@ package
                            w: world.gg.currentWeapon != null ? world.gg.currentWeapon.id : "",
                            wx: world.gg.currentWeapon != null ? world.gg.currentWeapon.X : 0,
                            wy: world.gg.currentWeapon != null ? world.gg.currentWeapon.Y : 0 });
-            // 帧末：非攻击体对象位置回退（敌人/物品视觉 1/N 慢速平滑）
-            slowWorldObjects();
+            // 节流 step：敌人/物品/攻击体 1/N 速（含攻击体慢速判定）
+            slowStepWorld();
             // 时停攻击状态诊断（每 30 帧）：观察时停中攻击意图与武器状态
             if (++sandyAtkTick % 30 == 0)
             {
