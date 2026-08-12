@@ -70,6 +70,7 @@ package
       private var replayBodyTick:int = 0;      // 回放段攻击体状态诊断计数
       private var sandyAtkTick:int = 0;        // 时停段攻击状态诊断计数
       private var sandyEnemyTick:int = 0;      // 时停段敌人移动诊断计数
+      private var postSandyTick:int = 0;       // 回放结束后世界恢复诊断计数
       private var mouseAtkDown:Boolean = false;   // 鼠标攻击键按住状态
       private var mouseAtkPulse:Boolean = false;  // 鼠标攻击键按下脉冲（同帧 DOWN+UP 不丢）
       private var savedOtbros:Number = -1;        // 回放近战击退原始值（缩放到 1/5 抵消加速）
@@ -200,7 +201,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.50 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.51 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -364,6 +365,33 @@ package
          else if (cooldownLeft > 0)
          {
             --cooldownLeft;
+         }
+         else if (cfgDiagLog && ++postSandyTick % 60 == 0)
+         {
+            // 回放结束后世界恢复诊断：敌人位置应持续变化（确认世界正常运行）
+            try
+            {
+               var oP:Object = world.loc != null ? world.loc.firstObj : null;
+               var gP:int = 0;
+               var nP:int = 0;
+               while (oP != null)
+               {
+                  var nxP:Object = oP.nobj;
+                  try
+                  {
+                     if (oP != world.gg && oP["setPos"] != null)
+                     {
+                        log("[DIAG] postSandy: onPause=" + world.onPause + " X=" + oP.X + " Y=" + oP.Y
+                            + " cls=" + flash.utils.getQualifiedClassName(oP));
+                        if (++nP >= 2) break;
+                     }
+                  }
+                  catch (e:*) { }
+                  oP = nxP;
+                  if (++gP > 20000) break;
+               }
+            }
+            catch (e:*) { }
          }
 
          updateHud();
@@ -1278,6 +1306,7 @@ package
                {
                   var oE2:Object = world.loc.firstObj;
                   var gE2:int = 0;
+                  var nE2:int = 0;
                   while (oE2 != null)
                   {
                      var nxE2:Object = oE2.nobj;
@@ -1285,8 +1314,8 @@ package
                      {
                         if (oE2 != world.gg && oE2["setPos"] != null)
                         {
-                           log("[DIAG] sEnemy: X=" + oE2.X + " Y=" + oE2.Y + " cls=" + flash.utils.getQualifiedClassName(oE2));
-                           break;
+                           log("[DIAG] sEnemy" + nE2 + ": X=" + oE2.X + " Y=" + oE2.Y + " cls=" + flash.utils.getQualifiedClassName(oE2));
+                           if (++nE2 >= 3) break;
                         }
                      }
                      catch (e:*) { }
@@ -1653,6 +1682,9 @@ package
          replayObjs = new Dictionary();
          replayObjArr = [];
          seenPos = new Dictionary();
+         // 回放结束诊断：确认世界恢复（onPause/godMode/玩家控制/敌人位置）
+         log("[DIAG] endReplay: onPause=" + world.onPause + " godMode=" + world.godMode
+             + " ggControl=" + world.gg.ggControl + " allStat=" + world.allStat);
          // 回放结束：切回时停结束时手上的武器，恢复弹夹/背包（弹夹剩余=时停结束时）
          try
          {
