@@ -75,6 +75,10 @@ package
       private var cfgSlowFactor:Number = 5;       // 时停慢速倍率（1/N 速，config slowfactor）
       private var slowTick:int = 0;               // 节流计数器（每 slowfactor 帧 step 1 次）
       private var slowPartClass:Class = null;     // 粒子类（节流 step 跳过，特效单独处理）
+      private var replayObjs:Dictionary = new Dictionary();  // 重演对象 → 每帧状态数组 {x,y,f,s}
+      private var replayObjArr:Array = [];        // 重演对象引用列表
+      private var seenPos:Dictionary = new Dictionary();    // 场景对象移动检测快照
+      private var sndClass:Class = null;          // fe.Snd（重演音效播放）
       private var panelOpen:Boolean = false;
       private var optPanelOn:Boolean = false;      // 选项页模组设置面板
       private var optSel:int = 0;                  // 0=生效时间 1=冷却
@@ -194,7 +198,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.46 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.47 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -629,6 +633,167 @@ package
          catch (e:*) { }
       }
 
+      // ===== 时停中记录重演状态（场景级录像：每帧位置+动画帧+生成音效）=====
+      // 单位/攻击体必记录；场景对象移动检测（静态对象不记录，省存储）
+      private function recordReplayObjects():void
+      {
+         try
+         {
+            var frameN:int = cfgDuration - sandyLeft;   // 时停内帧号（0 起）
+            var locR:Object = world.loc;
+            if (locR == null) return;
+            var oR:Object = locR.firstObj;
+            var gR:int = 0;
+            while (oR != null)
+            {
+               var nxR:Object = oR.nobj;
+               try
+               {
+                  if (oR == world.gg) { /* 玩家跳过（历史记录） */ }
+                  else if (slowPartClass != null && oR is slowPartClass) { /* 粒子跳过 */ }
+                  else
+                  {
+                     var qnR:String = flash.utils.getQualifiedClassName(oR);
+                     var isAtk:Boolean = qnR.indexOf("fe.weapon::") == 0;
+                     var isUnit:Boolean = qnR.indexOf("fe.unit::") == 0;
+                     var arrR:Array = replayObjs[oR];
+                     if (arrR == null)
+                     {
+                        if (isAtk || isUnit)
+                        {
+                           // 单位/攻击体：必记录（补前期帧为当前位置，数组对齐 replayIdx）
+                           arrR = [];
+                           replayObjs[oR] = arrR;
+                           replayObjArr.push(oR);
+                           var sndR:String = "";
+                           if (frameN > 0)
+                           {
+                              // 时停中生成的攻击体：记录生成音效（重演时重播）
+                              try
+                              {
+                                 if (oR.weap != null && oR.weap.sndShoot != null) { sndR = oR.weap.sndShoot; }
+                              }
+                              catch (e:*) { }
+                           }
+                           for (var f0:int = 0; f0 < frameN; f0++) { arrR.push({ x: oR.X, y: oR.Y, f: -1, s: "" }); }
+                           arrR.push({ x: oR.X, y: oR.Y, f: animFrameOf(oR), s: sndR });
+                        }
+                        else
+                        {
+                           // 场景对象：移动检测（动了才记录）
+                           var sp:Object = seenPos[oR];
+                           if (sp == null) { seenPos[oR] = { x: oR.X, y: oR.Y }; }
+                           else if (sp.x != oR.X || sp.y != oR.Y)
+                           {
+                              arrR = [];
+                              replayObjs[oR] = arrR;
+                              replayObjArr.push(oR);
+                              for (var f1:int = 0; f1 < frameN; f1++) { arrR.push({ x: sp.x, y: sp.y, f: -1, s: "" }); }
+                              arrR.push({ x: oR.X, y: oR.Y, f: -1, s: "" });
+                           }
+                        }
+                     }
+                     else
+                     {
+                        arrR.push({ x: oR.X, y: oR.Y, f: animFrameOf(oR), s: "" });
+                     }
+                  }
+               }
+               catch (e:*) { }
+               oR = nxR;
+               if (++gR > 20000) break;
+            }
+         }
+         catch (e:*) { }
+      }
+
+      // ===== 回放中重演：敌人/物品/场景/攻击体按历史状态设置（位置+动画帧+生成音效）=====
+      private function replayObjects():void
+      {
+         try
+         {
+            if (sndClass == null)
+            {
+               try { sndClass = ApplicationDomain.currentDomain.getDefinition("fe.Snd") as Class; } catch (e:*) { }
+            }
+            var idxR:int = replayIdx;
+            for each (var oR:Object in replayObjArr)
+            {
+               try
+               {
+                  var arrR:Array = replayObjs[oR];
+                  if (arrR == null || arrR.length == 0) continue;
+                  var stR:Object = arrR[Math.min(idxR, arrR.length - 1)];
+                  if (stR == null) continue;
+                  // 位置（setPos 更新碰撞边界——玩家子弹命中重演位置敌人正常结算）
+                  if (oR["setPos"] != null) { oR.setPos(stR.x, stR.y); }
+                  else { oR.X = stR.x; oR.Y = stR.y; }
+                  // 动画帧（共用视觉体系，容错）
+                  if (stR.f > 0)
+                  {
+                     try
+                     {
+                        if (oR.vis != null && oR.vis.osn != null && oR.vis.osn.body != null)
+                        {
+                           oR.vis.osn.body.gotoAndStop(stR.f);
+                        }
+                     }
+                     catch (e:*) { }
+                  }
+                  // 生成音效（精确帧：攻击体生成事件在对应历史帧重播）
+                  if (idxR < arrR.length)
+                  {
+                     var stS:Object = arrR[idxR];
+                     if (stS != null && stS.s != null && stS.s != "" && sndClass != null)
+                     {
+                        try { sndClass["ps"](stS.s, stS.x, stS.y); } catch (e:*) { }
+                     }
+                  }
+               }
+               catch (e:*) { }
+            }
+         }
+         catch (e:*) { }
+      }
+
+      // ===== 回放中玩家攻击体手动 step（世界冻结 onPause=true 时攻击体不自动 step）=====
+      private function stepPlayerBullets():void
+      {
+         try
+         {
+            var locB:Object = world.loc;
+            if (locB == null) return;
+            var oB:Object = locB.firstObj;
+            var gB:int = 0;
+            while (oB != null)
+            {
+               var nxB:Object = oB.nobj;
+               try
+               {
+                  if (oB["owner"] == world.gg && flash.utils.getQualifiedClassName(oB).indexOf("fe.weapon::") == 0)
+                  {
+                     oB.step();
+                  }
+               }
+               catch (e:*) { }
+               oB = nxB;
+               if (++gB > 20000) break;
+            }
+         }
+         catch (e:*) { }
+      }
+
+      // ===== 读取对象动画帧（共用视觉体系 vis.osn.body，容错）=====
+      private function animFrameOf(o:Object):int
+      {
+         try
+         {
+            if (o.vis != null && o.vis.osn != null && o.vis.osn.body != null) { return o.vis.osn.body.currentFrame; }
+         }
+         catch (e:*) { }
+         return -1;
+      }
+
       // ===== 时停慢速世界：节流 step（每 slowfactor 帧对世界对象 step 1 次 = 1/N 速）=====
       // 玩家每帧手动 step（全速）；敌人/物品/攻击体按节流 step——动作与碰撞判定
       // 同步 1/N 速（真慢速，判定=视觉）。粒子（Part）由 stepParticles 单独处理。
@@ -936,6 +1101,10 @@ package
             sandyActive = true;
             sandyLeft = cfgDuration;
             history = new Array();
+            // 清空上一轮重演记录（场景级录像：敌人/物品/攻击体每帧状态）
+            replayObjs = new Dictionary();
+            replayObjArr = [];
+            seenPos = new Dictionary();
             rainbowIdx = 0;
             fxTicks = 0;
             if (ghostLayer == null)
@@ -963,7 +1132,9 @@ package
 
          try
          {
-            world.onPause = savedOnPause;   // 时停结束恢复世界（回放期间世界正常运行）
+            // 回放期间世界冻结（场景级重演：敌人/物品不 step，由 replayObjects 重演；
+            // 玩家手动 step 驱动攻击）——回放结束 endReplay 恢复 savedOnPause
+            world.onPause = true;
             if (savedInter != null)
             {
                try { world.gg["inter"] = savedInter; } catch (e:*) { }
@@ -1056,6 +1227,8 @@ package
                            wy: world.gg.currentWeapon != null ? world.gg.currentWeapon.Y : 0 });
             // 节流 step：敌人/物品/攻击体 1/N 速（含攻击体慢速判定）
             slowStepWorld();
+            // 记录重演状态（场景级录像：敌人/物品/攻击体每帧位置+动画帧+生成音效）
+            recordReplayObjects();
             // 时停攻击状态诊断（每 30 帧）：观察时停中攻击意图与武器状态
             if (++sandyAtkTick % 30 == 0)
             {
@@ -1362,6 +1535,15 @@ package
             world.ctr.keyMagic = magOn;
          }
          catch (e:*) { }
+         // 世界冻结（onPause=true）下的手动驱动：
+         // 1. 玩家手动 step（消费喂回的键 → 攻击/动画）
+         // 2. 玩家攻击体手动 step（全速飞行+碰撞结算）
+         // 3. 敌人/物品/场景/攻击体重演（位置+动画帧+生成音效）
+         // 4. 粒子特效照常（枪口火焰等）
+         try { world.loc.gg.step(); } catch (e:*) { }
+         stepPlayerBullets();
+         replayObjects();
+         if (cfgFxRun) { try { stepParticles(world.loc); } catch (e:*) { } }
          // 回放攻击体状态诊断（每 3 帧）：攻击体位置/伤害/off 状态（定位近战结算问题）
          if (++replayBodyTick % 3 == 0)
          {
@@ -1403,6 +1585,8 @@ package
          history = new Array();
          try
          {
+            // 回放结束：恢复世界运行（敌人/场景恢复自由行动）
+            world.onPause = savedOnPause;
             world.godMode = savedGod;    // 恢复无敌状态
             world.ctr.keyAttack = false;
             world.ctr.keyPunch = false;
@@ -1410,6 +1594,10 @@ package
             world.ctr.keyMagic = false;
          }
          catch (e:*) { }
+         // 清空场景重演记录
+         replayObjs = new Dictionary();
+         replayObjArr = [];
+         seenPos = new Dictionary();
          // 回放结束：切回时停结束时手上的武器，恢复弹夹/背包（弹夹剩余=时停结束时）
          try
          {
