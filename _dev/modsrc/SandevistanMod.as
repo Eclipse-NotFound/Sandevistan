@@ -64,6 +64,8 @@ package
       private var fxTicks:int = 0;
       private var diagTick:int = 0;
       private var replayDiagTick:int = 0;      // 回放段诊断计数
+      private var replayAtkTick:int = 0;       // 回放段攻击链路诊断计数
+      private var sandyAtkTick:int = 0;        // 时停段攻击状态诊断计数
       private var panelOpen:Boolean = false;
       private var optPanelOn:Boolean = false;      // 选项页模组设置面板
       private var optSel:int = 0;                  // 0=生效时间 1=冷却
@@ -180,7 +182,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.35 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.36 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -612,6 +614,39 @@ package
          catch (e:*) { }
       }
 
+      // ===== 时停中近战攻击体伤害清零（近战 bindMove 即时结算，时停中不伤敌）=====
+      private function freezeMeleeDamage():void
+      {
+         try
+         {
+            var cwM:* = world.gg.currentWeapon;
+            if (cwM == null) return;
+            var qnM:String = flash.utils.getQualifiedClassName(cwM);
+            // 仅近战类武器（WClub/WPunch/WKick 等 fe.weapon::W 开头）需要处理
+            if (qnM.indexOf("fe.weapon::W") != 0) return;
+            var locM:Object = world.loc;
+            if (locM == null) return;
+            var oM:Object = locM.firstObj;
+            var gM:int = 0;
+            while (oM != null)
+            {
+               var nxM:Object = oM.nobj;
+               try
+               {
+                  if (flash.utils.getQualifiedClassName(oM).indexOf("fe.weapon::") == 0 && oM.owner == world.gg)
+                  {
+                     oM.damage = 0;
+                     oM.damageExpl = 0;
+                  }
+               }
+               catch (e:*) { }
+               oM = nxM;
+               if (++gM > 20000) break;
+            }
+         }
+         catch (e:*) { }
+      }
+
       // ===== 快照时停结束时的武器/弹药状态（回放结束后恢复，保证回放零净消耗）=====
       private function buildSandyEndSnap():void
       {
@@ -950,6 +985,21 @@ package
                            a: world.ctr.keyAttack, p: world.ctr.keyPunch, g: world.ctr.keyGrenad, m: world.ctr.keyMagic,
                            ax: world.celX, ay: world.celY,
                            w: world.gg.currentWeapon != null ? world.gg.currentWeapon.id : "" });
+            // 时停中近战攻击体伤害清零（近战 bindMove 即时结算：不清零则时停中直接掉血；
+            // 清零后时停中只挥击不伤敌，回放重演时新攻击体正常结算）
+            freezeMeleeDamage();
+            // 时停攻击状态诊断（每 30 帧）：观察时停中攻击键与武器状态
+            if (++sandyAtkTick % 30 == 0)
+            {
+               try
+               {
+                  var cwS:* = world.gg.currentWeapon;
+                  log("[DIAG] sAtk: A=" + world.ctr.keyAttack + " P=" + world.ctr.keyPunch
+                      + " tA=" + (cwS != null ? cwS.t_attack : -1)
+                      + " cw=" + (cwS != null ? flash.utils.getQualifiedClassName(cwS) : "none"));
+               }
+               catch (e:*) { }
+            }
 
 
             fxTicks++;
@@ -1142,7 +1192,9 @@ package
             }
             replayIdx++;
          }
-         // 回放时攻击加速重演：有攻击的帧强制武器冷却为 0（远快于正常攻速）
+         // 回放时攻击加速重演：有攻击的帧加速推进武器冷却（远快于正常攻速）
+         // 注意不能清 0：近战（WClub/WPunch）的攻击体在 t_attack 递减到
+         // rapid-5 的窗口触发 shoot，清 0 会破坏窗口导致近战回放无攻击
          if (atkOn || punchOn || grenOn || magOn)
          {
             try
@@ -1150,7 +1202,8 @@ package
                var cw3:* = world.gg.currentWeapon;
                if (cw3 != null)
                {
-                  cw3.t_attack = 0;
+                  cw3.t_attack -= 5;
+                  if (cw3.t_attack < 0) { cw3.t_attack = 0; }
                   cw3.t_reload = 0;
                }
             }
@@ -1164,6 +1217,19 @@ package
             world.ctr.keyMagic = magOn;
          }
          catch (e:*) { }
+         // 回放攻击链路诊断（每 10 帧）：确认喂回与游戏攻击条件
+         if (++replayAtkTick % 10 == 0)
+         {
+            try
+            {
+               var cwA:* = world.gg.currentWeapon;
+               log("[DIAG] rAtk: atkOn=" + atkOn + " kA=" + world.ctr.keyAttack
+                   + " tA=" + (cwA != null ? cwA.t_attack : -1)
+                   + " atkPos=" + (cwA != null ? cwA.attackPos() : false)
+                   + " cw=" + (cwA != null ? flash.utils.getQualifiedClassName(cwA) : "none"));
+            }
+            catch (e:*) { }
+         }
          if (replayIdx >= history.length)
          {
             endReplay();
@@ -1259,7 +1325,11 @@ package
                try { savedIdx = savedParent.getChildIndex(vis); } catch (e:*) { }
                try { savedParent.removeChild(vis); } catch (e:*) { }
             }
-            bmp.draw(vis as IBitmapDrawable, m, ct, "normal", null, true);
+            // 朝向镜像（根因修复）：draw 的 matrix 参数替换源显示变换（忽略 vis.scaleX），
+            // 动画帧是朝右绘制的——朝左（storona<0）时用水平翻转矩阵画出镜像内容
+            var dm:Matrix = m;
+            if (gg.storona < 0) { dm = new Matrix(-1, 0, 0, 1, b.right, m.ty); }
+            bmp.draw(vis as IBitmapDrawable, dm, ct, "normal", null, true);
             if (savedParent != null)
             {
                try { savedParent.addChildAt(vis, savedIdx); } catch (e:*) { }
@@ -1267,15 +1337,9 @@ package
             if (savedHp) gg.hpbar.visible = true;
             if (debugTest || cfgDiagLog)
             {
-               // 翻转对照（决定性）：draw 当前位图 + 其水平翻转版，对比质心 x。
-               // cxA<cxB → 当前内容偏左（镜像正常，残影朝左）；cxA>cxB → 未镜像（残影朝右）
+               // 质心诊断：cxA<mid=内容偏左（朝左），cxA>mid=内容偏右（朝右）
                var cxA:Number = ghostCenterX(bmp);
-               var mB:Matrix = new Matrix(-1, 0, 0, 1, -m.tx, m.ty);
-               var bmpB:BitmapData = new BitmapData(w, h, true, 0);
-               try { bmpB.draw(vis as IBitmapDrawable, mB, ct, "normal", null, true); } catch (e:*) { }
-               var cxB:Number = ghostCenterX(bmpB);
-               bmpB.dispose();
-               log("[DIAG] mirror: cxA=" + cxA + " cxB=" + cxB + " mid=" + (w / 2)
+               log("[DIAG] mirror: cxA=" + cxA + " mid=" + (w / 2)
                    + " storona=" + gg.storona + " visScaleX=" + vis.scaleX);
             }
             var bit:Bitmap = new Bitmap(bmp, "auto", true);
@@ -1309,9 +1373,10 @@ package
             var b:Rectangle = vis.getBounds(vis);
             m.tx = -b.left;
             m.ty = -b.top;
-            // 强制镜像为历史朝向（兜底：不依赖 storona 时序，保证残影朝向=时停时刻朝向）
-            var savedSX:Number = vis.scaleX;
-            try { vis.scaleX = s; } catch (e:*) { }
+            // 朝向镜像（根因修复）：draw 的 matrix 替换源显示变换（忽略 vis.scaleX），
+            // 动画帧是朝右绘制的——历史朝向 s<0 时用水平翻转矩阵画出镜像内容
+            var dm:Matrix = m;
+            if (s < 0) { dm = new Matrix(-1, 0, 0, 1, b.right, m.ty); }
             // 消除双重缩放（同 spawnGhost：临时脱离父容器绘制）
             var savedParent:Object = vis.parent;
             var savedIdx:int = -1;
@@ -1320,23 +1385,17 @@ package
                try { savedIdx = savedParent.getChildIndex(vis); } catch (e:*) { }
                try { savedParent.removeChild(vis); } catch (e:*) { }
             }
-            bmp.draw(vis as IBitmapDrawable, m, ct, "normal", null, true);
+            bmp.draw(vis as IBitmapDrawable, dm, ct, "normal", null, true);
             if (savedParent != null)
             {
                try { savedParent.addChildAt(vis, savedIdx); } catch (e:*) { }
             }
-            try { vis.scaleX = savedSX; } catch (e:*) { }
             if (debugTest || cfgDiagLog)
             {
-               // 翻转对照（决定性）：cxA<cxB → 已镜像（残影朝左）；cxA>cxB → 未镜像（残影朝右）
+               // 质心诊断：cxA<mid=内容偏左（朝左），cxA>mid=内容偏右（朝右）
                var cxA:Number = ghostCenterX(bmp);
-               var mB:Matrix = new Matrix(-1, 0, 0, 1, -m.tx, m.ty);
-               var bmpB:BitmapData = new BitmapData(w, h, true, 0);
-               try { bmpB.draw(vis as IBitmapDrawable, mB, ct, "normal", null, true); } catch (e:*) { }
-               var cxB:Number = ghostCenterX(bmpB);
-               bmpB.dispose();
                log("[DIAG] ghostAt-f: s=" + s + " storona=" + gg.storona + " visScaleX=" + vis.scaleX
-                   + " cxA=" + cxA + " cxB=" + cxB + " mid=" + (w / 2));
+                   + " cxA=" + cxA + " mid=" + (w / 2));
             }
             var bit:Bitmap = new Bitmap(bmp, "auto", true);
             var spr:Sprite = new Sprite();
