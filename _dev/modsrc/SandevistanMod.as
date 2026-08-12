@@ -190,7 +190,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.43 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.44 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -1264,21 +1264,37 @@ package
                      cw3.t_auto = 0;
                      // t_attack 自然走（rapid=2 → 每 2 帧一刀，动画正常）
                      // 攻击体结算兜底：rapid=2 后 bindMove 窗口（tA∈[5,8]）被跳过，
-                     // 模组每攻击帧手动推进攻击体结算（bindMove 已命中的 off=true 跳过，不重复）
-                     // 注意：必须沿瞄准方向 + 分段推进——一次大步（120px）只在终点检测
-                     // 碰撞会跳过路径中途的敌人（实测 off 恒 false、bX 在 shoot 位置与
-                     // 终点间来回跳）；dy=0 水平扫也会垂直 miss
+                     // 攻击体的 run 碰撞在模组手动推进下不可靠（大步只测终点、
+                     // 贴脸敌人被跳过等实测均 miss）——改为**直接结算**：
+                     // 攻击体位置放玩家前方挥击点，对范围内敌人直接调 udarBullet
+                     // （完整伤害/击退结算）+ popadalo（命中反馈），完全绕开碰撞
                      if (cw3.b != null && cw3.b.off == false)
                      {
                         var angB:Number = Math.atan2(world.celY - world.gg.Y, world.celX - world.gg.X);
-                        cw3.b.dx = Math.cos(angB) * 120;
-                        cw3.b.dy = Math.sin(angB) * 120;
-                        cw3.b.vel = 120;
-                        for (var siB:int = 0; siB < 6; siB++)
+                        cw3.b.X = world.gg.X + Math.cos(angB) * 60;
+                        cw3.b.Y = world.gg.Y + Math.sin(angB) * 60 - 10;
+                        try
                         {
-                           if (cw3.b.off) break;   // 命中即停
-                           cw3.b.run(6);
+                           var unitsArr:Object = world.loc.units;
+                           for each (var uu:Object in unitsArr)
+                           {
+                              if (cw3.b.off) break;
+                              if (uu == world.gg) continue;
+                              if (uu.sost == 4 || uu.disabled || uu.trigDis) continue;
+                              if (uu.loc != world.loc) continue;
+                              try { if (uu.fraction == world.gg.fraction) continue; } catch (e:*) { }
+                              var ddxB:Number = uu.X - cw3.b.X;
+                              var ddyB:Number = uu.Y - cw3.b.Y;
+                              if (ddxB * ddxB + ddyB * ddyB < 80 * 80)
+                              {
+                                 var hitResB:int = uu.udarBullet(cw3.b);
+                                 if (hitResB >= 0) { cw3.b.popadalo(hitResB); }
+                                 cw3.b.off = true;
+                                 break;
+                              }
+                           }
                         }
+                        catch (e:*) { }
                      }
                      // 击退缩放：回放攻击频率约 5 倍 → 每次命中击退缩到 1/5，
                      // 总击退位移 ≈ 正常游戏（避免敌人被连续击退甩飞）
