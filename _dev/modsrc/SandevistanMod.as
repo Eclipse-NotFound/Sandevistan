@@ -202,7 +202,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.52 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.53 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -768,10 +768,18 @@ package
                      else if (oR.vis != null) { oR.vis.x = stR.x; oR.vis.y = stR.y; }
                   }
                   catch (e:*) { }
-                  // 攻击体方向恢复（飞行视觉朝记录时的方向——否则横着/反着飞）
+                  // 攻击体方向恢复（仅攻击体——敌人的 rot 是朝向角（0/π），
+                  // vis.rotation 设 180° 会把朝左敌人视觉倒转；敌人视觉由镜像/动画控制）
                   if (stR.r != 0 && oR.vis != null)
                   {
-                     try { oR.vis.rotation = stR.r * 180 / Math.PI; } catch (e:*) { }
+                     try
+                     {
+                        if (flash.utils.getQualifiedClassName(oR).indexOf("fe.weapon::") == 0)
+                        {
+                           oR.vis.rotation = stR.r * 180 / Math.PI;
+                        }
+                     }
+                     catch (e:*) { }
                   }
                   // 动画帧（共用视觉体系，容错）
                   if (stR.f > 0)
@@ -1628,7 +1636,7 @@ package
          stepPlayerBullets();
          replayObjects();
          if (cfgFxRun) { try { stepParticles(world.loc); } catch (e:*) { } }
-         // 回放中敌人位置诊断（每 30 帧）：验证 replayObjects 重演是否生效
+         // 回放中敌人位置诊断（每 30 帧）：验证 replayObjects 重演是否生效（采样前 5 个）
          if (++replayEnemyTick % 30 == 0)
          {
             try
@@ -1645,7 +1653,7 @@ package
                      {
                         log("[DIAG] rEnemy: X=" + oR2.X + " Y=" + oR2.Y + " idx=" + replayIdx
                             + " cls=" + flash.utils.getQualifiedClassName(oR2));
-                        if (++nR2 >= 2) break;
+                        if (++nR2 >= 5) break;
                      }
                   }
                   catch (e:*) { }
