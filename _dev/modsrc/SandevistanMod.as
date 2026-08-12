@@ -199,7 +199,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.49 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.54 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -658,6 +658,16 @@ package
                   var isAtk:Boolean = qnR.indexOf("fe.weapon::") == 0;
                   // 单位判断：fe.unit:: / fe.serv::（NPC 在 serv 包）/ 有 setPos 方法（Unit 子类）
                   var isUnit:Boolean = qnR.indexOf("fe.unit::") == 0 || qnR.indexOf("fe.serv::") == 0 || oR["setPos"] != null;
+                     // 敌人武器位置（回放中武器不 step，记录位置供回放恢复——否则武器
+                     // 滞留在时停结束位置，与重演的身体脱节）
+                     var wxR:Number = 0;
+                     var wyR:Number = 0;
+                     try
+                     {
+                        var cwR:* = oR["currentWeapon"];
+                        if (cwR != null) { wxR = cwR.X; wyR = cwR.Y; }
+                     }
+                     catch (e:*) { }
                      var arrR:Array = replayObjs[oR];
                      if (arrR == null)
                      {
@@ -677,8 +687,8 @@ package
                               }
                               catch (e:*) { }
                            }
-                           for (var f0:int = 0; f0 < frameN; f0++) { arrR.push({ x: oR.X, y: oR.Y, f: -1, s: "" }); }
-                           arrR.push({ x: oR.X, y: oR.Y, f: animFrameOf(oR), s: sndR });
+                           for (var f0:int = 0; f0 < frameN; f0++) { arrR.push({ x: oR.X, y: oR.Y, f: -1, s: "", wx: wxR, wy: wyR }); }
+                           arrR.push({ x: oR.X, y: oR.Y, f: animFrameOf(oR), s: sndR, wx: wxR, wy: wyR });
                         }
                         else
                         {
@@ -690,14 +700,14 @@ package
                               arrR = [];
                               replayObjs[oR] = arrR;
                               replayObjArr.push(oR);
-                              for (var f1:int = 0; f1 < frameN; f1++) { arrR.push({ x: sp.x, y: sp.y, f: -1, s: "" }); }
-                              arrR.push({ x: oR.X, y: oR.Y, f: -1, s: "" });
+                              for (var f1:int = 0; f1 < frameN; f1++) { arrR.push({ x: sp.x, y: sp.y, f: -1, s: "", wx: 0, wy: 0 }); }
+                              arrR.push({ x: oR.X, y: oR.Y, f: -1, s: "", wx: 0, wy: 0 });
                            }
                         }
                      }
                      else
                      {
-                        arrR.push({ x: oR.X, y: oR.Y, f: animFrameOf(oR), s: "" });
+                        arrR.push({ x: oR.X, y: oR.Y, f: animFrameOf(oR), s: "", wx: wxR, wy: wyR });
                      }
                   }
                }
@@ -737,18 +747,36 @@ package
                      else if (oR.vis != null) { oR.vis.x = stR.x; oR.vis.y = stR.y; }
                   }
                   catch (e:*) { }
-                  // 动画帧（共用视觉体系，容错）
-                  if (stR.f > 0)
+                  // 敌人武器位置恢复（回放中武器不 step——按历史位置放回，与重演身体贴合）
+                  try
                   {
-                     try
+                     var cwE:* = oR["currentWeapon"];
+                     if (cwE != null && stR.wx != null)
                      {
-                        if (oR.vis != null && oR.vis.osn != null && oR.vis.osn.body != null)
-                        {
-                           oR.vis.osn.body.gotoAndStop(stR.f);
-                        }
+                        cwE.X = stR.wx;
+                        cwE.Y = stR.wy;
+                        if (cwE.vis != null) { cwE.vis.x = stR.wx; cwE.vis.y = stR.wy; }
                      }
-                     catch (e:*) { }
                   }
+                  catch (e:*) { }
+                  // 动画驱动（核心修复）：根据历史位移设置 dx/dy/stay 并调 animate()——
+                  // 游戏自身动画管线计算 animState（walk/run/jump/stay）并渲染。
+                  // 怪物的 anims（BlitAnim）是 internal 读不到，驱动公开的 animate()
+                  // 是唯一路径（读 vis.osn.body 帧对怪物永远 -1，故不依赖帧记录）
+                  try
+                  {
+                     if (oR["setPos"] != null && oR["animate"] != null)
+                     {
+                        var nxtR2:Object = arrR[Math.min(idxR + 1, arrR.length - 1)];
+                        var mvx:Number = (nxtR2.x - stR.x) * cfgReplaySpeed;
+                        var mvy:Number = (nxtR2.y - stR.y) * cfgReplaySpeed;
+                        oR.dx = mvx;
+                        oR.dy = mvy;
+                        oR.stay = mvx * mvx + mvy * mvy < 36;
+                        oR.animate();
+                     }
+                  }
+                  catch (e:*) { }
                   // 生成音效（精确帧：攻击体生成事件在对应历史帧重播）
                   if (idxR < arrR.length)
                   {
