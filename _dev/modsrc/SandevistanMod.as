@@ -71,6 +71,7 @@ package
       private var sandyAtkTick:int = 0;        // 时停段攻击状态诊断计数
       private var sandyEnemyTick:int = 0;      // 时停段敌人移动诊断计数
       private var postSandyTick:int = 0;       // 回放结束后世界恢复诊断计数
+      private var replayEnemyTick:int = 0;     // 回放段敌人重演诊断计数
       private var mouseAtkDown:Boolean = false;   // 鼠标攻击键按住状态
       private var mouseAtkPulse:Boolean = false;  // 鼠标攻击键按下脉冲（同帧 DOWN+UP 不丢）
       private var savedOtbros:Number = -1;        // 回放近战击退原始值（缩放到 1/5 抵消加速）
@@ -201,7 +202,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.51 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.52 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -1627,6 +1628,33 @@ package
          stepPlayerBullets();
          replayObjects();
          if (cfgFxRun) { try { stepParticles(world.loc); } catch (e:*) { } }
+         // 回放中敌人位置诊断（每 30 帧）：验证 replayObjects 重演是否生效
+         if (++replayEnemyTick % 30 == 0)
+         {
+            try
+            {
+               var oR2:Object = world.loc.firstObj;
+               var gR2:int = 0;
+               var nR2:int = 0;
+               while (oR2 != null)
+               {
+                  var nxR2:Object = oR2.nobj;
+                  try
+                  {
+                     if (oR2 != world.gg && oR2["setPos"] != null && replayObjs[oR2] != null)
+                     {
+                        log("[DIAG] rEnemy: X=" + oR2.X + " Y=" + oR2.Y + " idx=" + replayIdx
+                            + " cls=" + flash.utils.getQualifiedClassName(oR2));
+                        if (++nR2 >= 2) break;
+                     }
+                  }
+                  catch (e:*) { }
+                  oR2 = nxR2;
+                  if (++gR2 > 20000) break;
+               }
+            }
+            catch (e:*) { }
+         }
          // 回放攻击体状态诊断（每 3 帧）：攻击体位置/伤害/off 状态（定位近战结算问题）
          if (++replayBodyTick % 3 == 0)
          {
