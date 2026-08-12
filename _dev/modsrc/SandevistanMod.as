@@ -68,6 +68,7 @@ package
       private var replayAtkTick:int = 0;       // 回放段攻击链路诊断计数
       private var replayBodyTick:int = 0;      // 回放段攻击体状态诊断计数
       private var sandyAtkTick:int = 0;        // 时停段攻击状态诊断计数
+      private var sandyEnemyTick:int = 0;      // 时停段敌人移动诊断计数
       private var mouseAtkDown:Boolean = false;   // 鼠标攻击键按住状态
       private var mouseAtkPulse:Boolean = false;  // 鼠标攻击键按下脉冲（同帧 DOWN+UP 不丢）
       private var savedOtbros:Number = -1;        // 回放近战击退原始值（缩放到 1/5 抵消加速）
@@ -198,7 +199,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.48 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.49 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -827,12 +828,21 @@ package
                   else if (slowPartClass != null && oS is slowPartClass) { /* 粒子跳过（stepParticles） */ }
                   else
                   {
-                     // 玩家攻击体伤害清零必须在 step **之前**（step 内 run 碰撞会结算——
-                     // 之前清零在 step 后导致时停中攻击当场结算）
-                     if (oS["owner"] == world.gg)
+                     // 玩家攻击体伤害清零必须在 step **之前**（step 内 run 碰撞会结算）。
+                     // 只对攻击体（fe.weapon::）访问 owner——动态属性访问对其他对象
+                     // 可能抛异常（会被 catch 吞掉导致对象被跳过 step → 敌人固定不动）
+                     var qnS:String = flash.utils.getQualifiedClassName(oS);
+                     if (qnS.indexOf("fe.weapon::") == 0)
                      {
-                        oS.damage = 0;
-                        oS.damageExpl = 0;
+                        try
+                        {
+                           if (oS["owner"] == world.gg)
+                           {
+                              oS.damage = 0;
+                              oS.damageExpl = 0;
+                           }
+                        }
+                        catch (e:*) { }
                      }
                      oS.step();
                   }
@@ -1248,6 +1258,31 @@ package
                       + " A=" + world.ctr.keyAttack + " mouse=" + mouseAtkDown + " pulse=" + mouseAtkPulse
                       + " tA=" + (cwS != null ? cwS.t_attack : -1)
                       + " cw=" + (cwS != null ? flash.utils.getQualifiedClassName(cwS) : "none"));
+               }
+               catch (e:*) { }
+            }
+            // 时停敌人移动诊断（每 60 帧）：验证节流 step 是否生效（敌人位置应变化）
+            if (++sandyEnemyTick % 60 == 0)
+            {
+               try
+               {
+                  var oE2:Object = world.loc.firstObj;
+                  var gE2:int = 0;
+                  while (oE2 != null)
+                  {
+                     var nxE2:Object = oE2.nobj;
+                     try
+                     {
+                        if (oE2 != world.gg && oE2["setPos"] != null)
+                        {
+                           log("[DIAG] sEnemy: X=" + oE2.X + " Y=" + oE2.Y + " cls=" + flash.utils.getQualifiedClassName(oE2));
+                           break;
+                        }
+                     }
+                     catch (e:*) { }
+                     oE2 = nxE2;
+                     if (++gE2 > 20000) break;
+                  }
                }
                catch (e:*) { }
             }
