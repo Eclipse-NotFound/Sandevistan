@@ -67,7 +67,8 @@ package
       private var replayAtkTick:int = 0;       // 回放段攻击链路诊断计数
       private var replayBodyTick:int = 0;      // 回放段攻击体状态诊断计数
       private var sandyAtkTick:int = 0;        // 时停段攻击状态诊断计数
-      private var mouseAtkDown:Boolean = false;   // 鼠标攻击键按住状态（近战拦截后记录真实意图）
+      private var mouseAtkDown:Boolean = false;   // 鼠标攻击键按住状态
+      private var mouseAtkPulse:Boolean = false;  // 鼠标攻击键按下脉冲（同帧 DOWN+UP 不丢）
       private var panelOpen:Boolean = false;
       private var optPanelOn:Boolean = false;      // 选项页模组设置面板
       private var optSel:int = 0;                  // 0=生效时间 1=冷却
@@ -187,7 +188,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.38 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.39 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -619,7 +620,8 @@ package
          catch (e:*) { }
       }
 
-      // ===== 时停中近战攻击体伤害清零（近战 bindMove 即时结算，时停中不伤敌）=====
+      // ===== 时停中攻击体伤害清零（近战 bindMove 即时结算：帧首清零 → 本帧结算 0 伤害；
+      // 时停中挥击动画/音效照常，回放重演时新攻击体正常结算）=====
       private function freezeMeleeDamage():void
       {
          try
@@ -981,30 +983,25 @@ package
       {
          try
          {
-            // 时停中近战处理：近战攻击体经 bindMove 同帧即时结算（无法冻结伤害）——
-            // 近战在时停中不出手（清攻击键），真实意图（含鼠标按住）记入历史，回放中重演
-            var meleeOn:Boolean = false;
+            // 时停中近战处理（v1.39 定稿）：近战在时停中**正常出手**（挥击动画+音效
+            // 照常播放，像枪械一样），伤害冻结靠"帧首清零攻击体 damage"实现——
+            // 攻击体是复用的常驻对象：帧首清零 → 本帧 bindMove 结算 0 伤害（无伤无
+            // 击退无火花）；shoot 重设 damage 后下帧再清。真实攻击意图
+            // （键盘键 + 鼠标按住 + 鼠标按下脉冲）记入历史，回放中重演并正常结算。
+            // 先清零（gg.step() 之前），让本帧 bindMove 结算 0 伤害
+            freezeMeleeDamage();
             var wantA:Boolean = false;
             var wantP:Boolean = false;
             try
             {
-               var cwN:* = world.gg.currentWeapon;
-               if (cwN != null)
-               {
-                  var qnN:String = flash.utils.getQualifiedClassName(cwN);
-                  meleeOn = qnN == "fe.weapon::WClub" || qnN == "fe.weapon::WPunch" || qnN == "fe.weapon::WKick";
-               }
-               wantA = world.ctr.keyAttack || mouseAtkDown;
+               // 鼠标脉冲：同帧 DOWN+UP 的快速连点也能记录（按住由 mouseAtkDown 持续）
+               wantA = world.ctr.keyAttack || mouseAtkDown || mouseAtkPulse;
                wantP = world.ctr.keyPunch;
-               if (meleeOn)
-               {
-                  world.ctr.keyAttack = false;
-                  world.ctr.keyPunch = false;
-               }
             }
             catch (e:*) { }
+            mouseAtkPulse = false;   // 脉冲每帧消费一次
             var loc:Object = world.loc;
-            loc.gg.step();
+            loc.gg.step();   // 游戏正常攻击（近战挥击动画+音效，伤害已被清零冻结）
 
             var gg:Object = loc.gg;
             // 记录攻击键状态与瞄准方向（回放时攻击指向时停期间的发射方向）
@@ -1012,17 +1009,14 @@ package
                            a: wantA, p: wantP, g: world.ctr.keyGrenad, m: world.ctr.keyMagic,
                            ax: world.celX, ay: world.celY,
                            w: world.gg.currentWeapon != null ? world.gg.currentWeapon.id : "" });
-            // 防御性清理：残留近战攻击体伤害清零（主拦截已在上方帧首完成——
-            // 时停中近战不出手，回放中重演时新攻击体正常结算）
-            freezeMeleeDamage();
             // 时停攻击状态诊断（每 30 帧）：观察时停中攻击意图与武器状态
             if (++sandyAtkTick % 30 == 0)
             {
                try
                {
                   var cwS:* = world.gg.currentWeapon;
-                  log("[DIAG] sAtk: wantA=" + wantA + " wantP=" + wantP + " melee=" + meleeOn
-                      + " A=" + world.ctr.keyAttack + " mouse=" + mouseAtkDown
+                  log("[DIAG] sAtk: wantA=" + wantA + " wantP=" + wantP
+                      + " A=" + world.ctr.keyAttack + " mouse=" + mouseAtkDown + " pulse=" + mouseAtkPulse
                       + " tA=" + (cwS != null ? cwS.t_attack : -1)
                       + " cw=" + (cwS != null ? flash.utils.getQualifiedClassName(cwS) : "none"));
                }
@@ -1507,10 +1501,11 @@ package
          catch (err:*) { }
       }
 
-      // 鼠标按住状态（近战拦截后，历史记录真实攻击意图用；不拦截事件，游戏照常收到）
+      // 鼠标按住/按下脉冲状态（快速连点同帧 DOWN+UP 时按住状态会被立即清除，
+      // 用脉冲记录"本帧发生过按下"，供历史记录真实攻击意图）
       private function onMouseDown(e:MouseEvent):void
       {
-         try { mouseAtkDown = true; } catch (err:*) { }
+         try { mouseAtkDown = true; mouseAtkPulse = true; } catch (err:*) { }
       }
 
       private function onMouseUp(e:MouseEvent):void
