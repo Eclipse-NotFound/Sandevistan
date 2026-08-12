@@ -180,7 +180,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.34 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.35 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -1210,6 +1210,30 @@ package
       }
 
       // ==================== 残影 ====================
+      // 位图不透明像素质心 x（网格采样，用于翻转对照诊断判定镜像是否生效）
+      private function ghostCenterX(bd:BitmapData):Number
+      {
+         var s:Number = 0;
+         var wSum:Number = 0;
+         try
+         {
+            for (var yy:int = 40; yy < bd.height - 40; yy += 8)
+            {
+               for (var xx:int = 20; xx < bd.width - 20; xx += 8)
+               {
+                  var al:int = bd.getPixel32(xx, yy) >>> 24;
+                  if (al > 0)
+                  {
+                     s += xx * al;
+                     wSum += al;
+                  }
+               }
+            }
+         }
+         catch (e:*) { }
+         return wSum > 0 ? s / wSum : -1;
+      }
+
       private function spawnGhost(gg:Object, ct:ColorTransform):void
       {
          try
@@ -1226,29 +1250,33 @@ package
             m.ty = -b.top;
             var savedHp:Boolean = false;
             if (gg.hpbar != null && gg.hpbar.visible) { savedHp = true; gg.hpbar.visible = false; }
+            // 消除双重缩放：draw 会应用父级链变换（world.visual 相机缩放 0.667），
+            // 临时脱离父容器绘制（同帧加回，无渲染间隙），残影尺寸与玩家本体一致
+            var savedParent:Object = vis.parent;
+            var savedIdx:int = -1;
+            if (savedParent != null)
+            {
+               try { savedIdx = savedParent.getChildIndex(vis); } catch (e:*) { }
+               try { savedParent.removeChild(vis); } catch (e:*) { }
+            }
             bmp.draw(vis as IBitmapDrawable, m, ct, "normal", null, true);
+            if (savedParent != null)
+            {
+               try { savedParent.addChildAt(vis, savedIdx); } catch (e:*) { }
+            }
             if (savedHp) gg.hpbar.visible = true;
             if (debugTest || cfgDiagLog)
             {
-               var sC:uint = bmp.getPixel32(int(bmp.width / 2), int(bmp.height / 2));
-               var sTL:uint = bmp.getPixel32(20, 20);
-               var sTR:uint = bmp.getPixel32(bmp.width - 20, 20);
-               var sBL:uint = bmp.getPixel32(20, bmp.height - 20);
-               var sBR:uint = bmp.getPixel32(bmp.width - 20, bmp.height - 20);
-               var sM2:uint = bmp.getPixel32(int(bmp.width / 2), int(bmp.height * 0.25));
-               // 左右半像素 alpha 采样（判断位图内容是否镜像：朝左时左半应更"实"）
-               var lPx:Number = 0;
-               var rPx:Number = 0;
-               var yc:int = int(bmp.height / 2);
-               for (var xi:int = 0; xi < 10; xi++)
-               {
-                  lPx += bmp.getPixel32(int(bmp.width * 0.12) + xi, yc) >>> 24;
-                  rPx += bmp.getPixel32(int(bmp.width * 0.88) - xi, yc) >>> 24;
-               }
-               log("[DIAG] ts-ghostbmp C=" + sC.toString(16) + " TL=" + sTL.toString(16) + " TR=" + sTR.toString(16)
-                   + " BL=" + sBL.toString(16) + " BR=" + sBR.toString(16) + " M2=" + sM2.toString(16)
-                   + " lPx=" + lPx + " rPx=" + rPx + " storona=" + gg.storona + " visScaleX=" + vis.scaleX
-                   + " vis.alpha=" + vis.alpha + " vis.visible=" + vis.visible);
+               // 翻转对照（决定性）：draw 当前位图 + 其水平翻转版，对比质心 x。
+               // cxA<cxB → 当前内容偏左（镜像正常，残影朝左）；cxA>cxB → 未镜像（残影朝右）
+               var cxA:Number = ghostCenterX(bmp);
+               var mB:Matrix = new Matrix(-1, 0, 0, 1, -m.tx, m.ty);
+               var bmpB:BitmapData = new BitmapData(w, h, true, 0);
+               try { bmpB.draw(vis as IBitmapDrawable, mB, ct, "normal", null, true); } catch (e:*) { }
+               var cxB:Number = ghostCenterX(bmpB);
+               bmpB.dispose();
+               log("[DIAG] mirror: cxA=" + cxA + " cxB=" + cxB + " mid=" + (w / 2)
+                   + " storona=" + gg.storona + " visScaleX=" + vis.scaleX);
             }
             var bit:Bitmap = new Bitmap(bmp, "auto", true);
             var spr:Sprite = new Sprite();
@@ -1284,24 +1312,31 @@ package
             // 强制镜像为历史朝向（兜底：不依赖 storona 时序，保证残影朝向=时停时刻朝向）
             var savedSX:Number = vis.scaleX;
             try { vis.scaleX = s; } catch (e:*) { }
+            // 消除双重缩放（同 spawnGhost：临时脱离父容器绘制）
+            var savedParent:Object = vis.parent;
+            var savedIdx:int = -1;
+            if (savedParent != null)
+            {
+               try { savedIdx = savedParent.getChildIndex(vis); } catch (e:*) { }
+               try { savedParent.removeChild(vis); } catch (e:*) { }
+            }
             bmp.draw(vis as IBitmapDrawable, m, ct, "normal", null, true);
+            if (savedParent != null)
+            {
+               try { savedParent.addChildAt(vis, savedIdx); } catch (e:*) { }
+            }
             try { vis.scaleX = savedSX; } catch (e:*) { }
             if (debugTest || cfgDiagLog)
             {
-               var aC:uint = bmp.getPixel32(int(bmp.width / 2), int(bmp.height / 2));
-               var aTL:uint = bmp.getPixel32(5, 5);
-               // 左右半像素 alpha 采样（判断残影镜像是否生效：朝左时左半应更"实"）
-               var lPx:Number = 0;
-               var rPx:Number = 0;
-               var yc:int = int(bmp.height / 2);
-               for (var xi:int = 0; xi < 10; xi++)
-               {
-                  lPx += bmp.getPixel32(int(bmp.width * 0.12) + xi, yc) >>> 24;
-                  rPx += bmp.getPixel32(int(bmp.width * 0.88) - xi, yc) >>> 24;
-               }
+               // 翻转对照（决定性）：cxA<cxB → 已镜像（残影朝左）；cxA>cxB → 未镜像（残影朝右）
+               var cxA:Number = ghostCenterX(bmp);
+               var mB:Matrix = new Matrix(-1, 0, 0, 1, -m.tx, m.ty);
+               var bmpB:BitmapData = new BitmapData(w, h, true, 0);
+               try { bmpB.draw(vis as IBitmapDrawable, mB, ct, "normal", null, true); } catch (e:*) { }
+               var cxB:Number = ghostCenterX(bmpB);
+               bmpB.dispose();
                log("[DIAG] ghostAt-f: s=" + s + " storona=" + gg.storona + " visScaleX=" + vis.scaleX
-                   + " rot=" + rot + " sc=" + sc + " bmp=" + bmp.width + "x" + bmp.height
-                   + " visW=" + vis.width + " visH=" + vis.height + " lPx=" + lPx + " rPx=" + rPx);
+                   + " cxA=" + cxA + " cxB=" + cxB + " mid=" + (w / 2));
             }
             var bit:Bitmap = new Bitmap(bmp, "auto", true);
             var spr:Sprite = new Sprite();
