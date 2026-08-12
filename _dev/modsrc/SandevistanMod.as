@@ -198,7 +198,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.47 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.48 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -653,9 +653,10 @@ package
                   else if (slowPartClass != null && oR is slowPartClass) { /* 粒子跳过 */ }
                   else
                   {
-                     var qnR:String = flash.utils.getQualifiedClassName(oR);
-                     var isAtk:Boolean = qnR.indexOf("fe.weapon::") == 0;
-                     var isUnit:Boolean = qnR.indexOf("fe.unit::") == 0;
+                  var qnR:String = flash.utils.getQualifiedClassName(oR);
+                  var isAtk:Boolean = qnR.indexOf("fe.weapon::") == 0;
+                  // 单位判断：fe.unit:: / fe.serv::（NPC 在 serv 包）/ 有 setPos 方法（Unit 子类）
+                  var isUnit:Boolean = qnR.indexOf("fe.unit::") == 0 || qnR.indexOf("fe.serv::") == 0 || oR["setPos"] != null;
                      var arrR:Array = replayObjs[oR];
                      if (arrR == null)
                      {
@@ -728,6 +729,13 @@ package
                   // 位置（setPos 更新碰撞边界——玩家子弹命中重演位置敌人正常结算）
                   if (oR["setPos"] != null) { oR.setPos(stR.x, stR.y); }
                   else { oR.X = stR.x; oR.Y = stR.y; }
+                  // 视觉同步（setPos 不更新 vis——否则敌人视觉固定在时停结束位置）
+                  try
+                  {
+                     if (oR["setVisPos"] != null) { oR.setVisPos(); }
+                     else if (oR.vis != null) { oR.vis.x = stR.x; oR.vis.y = stR.y; }
+                  }
+                  catch (e:*) { }
                   // 动画帧（共用视觉体系，容错）
                   if (stR.f > 0)
                   {
@@ -819,13 +827,14 @@ package
                   else if (slowPartClass != null && oS is slowPartClass) { /* 粒子跳过（stepParticles） */ }
                   else
                   {
-                     oS.step();
-                     // 玩家攻击体伤害清零（时停中命中 0 伤害，回放重演结算）
+                     // 玩家攻击体伤害清零必须在 step **之前**（step 内 run 碰撞会结算——
+                     // 之前清零在 step 后导致时停中攻击当场结算）
                      if (oS["owner"] == world.gg)
                      {
                         oS.damage = 0;
                         oS.damageExpl = 0;
                      }
+                     oS.step();
                   }
                }
                catch (e:*) { }
