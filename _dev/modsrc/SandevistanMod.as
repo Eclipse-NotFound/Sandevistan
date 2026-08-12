@@ -66,6 +66,7 @@ package
       private var replayDiagTick:int = 0;      // 回放段诊断计数
       private var replayAtkTick:int = 0;       // 回放段攻击链路诊断计数
       private var sandyAtkTick:int = 0;        // 时停段攻击状态诊断计数
+      private var mouseAtkDown:Boolean = false;   // 鼠标攻击键按住状态（近战拦截后记录真实意图）
       private var panelOpen:Boolean = false;
       private var optPanelOn:Boolean = false;      // 选项页模组设置面板
       private var optSel:int = 0;                  // 0=生效时间 1=冷却
@@ -161,6 +162,9 @@ package
             main.stage.addEventListener(KeyboardEvent.KEY_DOWN, inst.onKey);
             main.stage.addEventListener(KeyboardEvent.KEY_UP, inst.onKeyUp);
             main.stage.addEventListener(Event.DEACTIVATE, inst.onDeactivateClear);
+            // 鼠标左键按住状态（时停中近战拦截后，历史记录真实攻击意图用）
+            main.stage.addEventListener(MouseEvent.MOUSE_DOWN, inst.onMouseDown);
+            main.stage.addEventListener(MouseEvent.MOUSE_UP, inst.onMouseUp);
 
          }
          inst.log("[SandyMod] hooks registered");
@@ -182,7 +186,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.36 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.37 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -976,25 +980,48 @@ package
       {
          try
          {
+            // 时停中近战处理：近战攻击体经 bindMove 同帧即时结算（无法冻结伤害）——
+            // 近战在时停中不出手（清攻击键），真实意图（含鼠标按住）记入历史，回放中重演
+            var meleeOn:Boolean = false;
+            var wantA:Boolean = false;
+            var wantP:Boolean = false;
+            try
+            {
+               var cwN:* = world.gg.currentWeapon;
+               if (cwN != null)
+               {
+                  var qnN:String = flash.utils.getQualifiedClassName(cwN);
+                  meleeOn = qnN == "fe.weapon::WClub" || qnN == "fe.weapon::WPunch" || qnN == "fe.weapon::WKick";
+               }
+               wantA = world.ctr.keyAttack || mouseAtkDown;
+               wantP = world.ctr.keyPunch;
+               if (meleeOn)
+               {
+                  world.ctr.keyAttack = false;
+                  world.ctr.keyPunch = false;
+               }
+            }
+            catch (e:*) { }
             var loc:Object = world.loc;
             loc.gg.step();
 
             var gg:Object = loc.gg;
             // 记录攻击键状态与瞄准方向（回放时攻击指向时停期间的发射方向）
             history.push({ x: gg.X, y: gg.Y, s: gg.storona, r: gg.vis != null ? gg.vis.rotation : 0, v: gg.vis != null ? gg.vis.scaleX : 1,
-                           a: world.ctr.keyAttack, p: world.ctr.keyPunch, g: world.ctr.keyGrenad, m: world.ctr.keyMagic,
+                           a: wantA, p: wantP, g: world.ctr.keyGrenad, m: world.ctr.keyMagic,
                            ax: world.celX, ay: world.celY,
                            w: world.gg.currentWeapon != null ? world.gg.currentWeapon.id : "" });
-            // 时停中近战攻击体伤害清零（近战 bindMove 即时结算：不清零则时停中直接掉血；
-            // 清零后时停中只挥击不伤敌，回放重演时新攻击体正常结算）
+            // 防御性清理：残留近战攻击体伤害清零（主拦截已在上方帧首完成——
+            // 时停中近战不出手，回放中重演时新攻击体正常结算）
             freezeMeleeDamage();
-            // 时停攻击状态诊断（每 30 帧）：观察时停中攻击键与武器状态
+            // 时停攻击状态诊断（每 30 帧）：观察时停中攻击意图与武器状态
             if (++sandyAtkTick % 30 == 0)
             {
                try
                {
                   var cwS:* = world.gg.currentWeapon;
-                  log("[DIAG] sAtk: A=" + world.ctr.keyAttack + " P=" + world.ctr.keyPunch
+                  log("[DIAG] sAtk: wantA=" + wantA + " wantP=" + wantP + " melee=" + meleeOn
+                      + " A=" + world.ctr.keyAttack + " mouse=" + mouseAtkDown
                       + " tA=" + (cwS != null ? cwS.t_attack : -1)
                       + " cw=" + (cwS != null ? flash.utils.getQualifiedClassName(cwS) : "none"));
                }
@@ -1449,6 +1476,17 @@ package
             keyPressTime = new Array();
          }
          catch (err:*) { }
+      }
+
+      // 鼠标按住状态（近战拦截后，历史记录真实攻击意图用；不拦截事件，游戏照常收到）
+      private function onMouseDown(e:MouseEvent):void
+      {
+         try { mouseAtkDown = true; } catch (err:*) { }
+      }
+
+      private function onMouseUp(e:MouseEvent):void
+      {
+         try { mouseAtkDown = false; } catch (err:*) { }
       }
 
       private function onKeyUp(e:KeyboardEvent):void
