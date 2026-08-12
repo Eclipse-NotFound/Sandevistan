@@ -65,6 +65,7 @@ package
       private var diagTick:int = 0;
       private var replayDiagTick:int = 0;      // 回放段诊断计数
       private var replayAtkTick:int = 0;       // 回放段攻击链路诊断计数
+      private var replayBodyTick:int = 0;      // 回放段攻击体状态诊断计数
       private var sandyAtkTick:int = 0;        // 时停段攻击状态诊断计数
       private var mouseAtkDown:Boolean = false;   // 鼠标攻击键按住状态（近战拦截后记录真实意图）
       private var panelOpen:Boolean = false;
@@ -186,7 +187,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.37 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.38 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -1220,8 +1221,10 @@ package
             replayIdx++;
          }
          // 回放时攻击加速重演：有攻击的帧加速推进武器冷却（远快于正常攻速）
-         // 注意不能清 0：近战（WClub/WPunch）的攻击体在 t_attack 递减到
-         // rapid-5 的窗口触发 shoot，清 0 会破坏窗口导致近战回放无攻击
+         // 注意：近战攻击体在冷却递减到 bindMove 窗口（t_attack ∈ [rapid_act/2,
+         // rapid_act*5/6]，如 [5,8]）才推进结算——加速过猛（清 0 或 -=5）会让窗口
+         // 只剩 1 帧甚至跳过，攻击体无结算机会（挥动画有但无伤害）——近战用 -=3
+         // （窗口 2 帧），枪械用 -=5（attack() 内立即射击不受窗口影响）
          if (atkOn || punchOn || grenOn || magOn)
          {
             try
@@ -1229,8 +1232,18 @@ package
                var cw3:* = world.gg.currentWeapon;
                if (cw3 != null)
                {
-                  cw3.t_attack -= 5;
-                  if (cw3.t_attack < 0) { cw3.t_attack = 0; }
+                  var qn3:String = flash.utils.getQualifiedClassName(cw3);
+                  var melee3:Boolean = qn3 == "fe.weapon::WClub" || qn3 == "fe.weapon::WPunch" || qn3 == "fe.weapon::WKick";
+                  if (melee3)
+                  {
+                     cw3.t_attack -= 3;
+                     if (cw3.t_attack < 0) { cw3.t_attack = 0; }
+                  }
+                  else
+                  {
+                     cw3.t_attack -= 5;
+                     if (cw3.t_attack < 0) { cw3.t_attack = 0; }
+                  }
                   cw3.t_reload = 0;
                }
             }
@@ -1244,6 +1257,22 @@ package
             world.ctr.keyMagic = magOn;
          }
          catch (e:*) { }
+         // 回放攻击体状态诊断（每 3 帧）：攻击体位置/伤害/off 状态（定位近战结算问题）
+         if (++replayBodyTick % 3 == 0)
+         {
+            try
+            {
+               var cwB:* = world.gg.currentWeapon;
+               if (cwB != null && cwB.b != null)
+               {
+                  log("[DIAG] rBody: bX=" + cwB.b.X + " bY=" + cwB.b.Y + " dmg=" + cwB.b.damage
+                      + " off=" + cwB.b.off + " liv=" + cwB.b.liv + " vel=" + cwB.b.vel
+                      + " ggX=" + world.gg.X + " ggY=" + world.gg.Y
+                      + " cwX=" + cwB.X + " cwY=" + cwB.Y + " tA=" + cwB.t_attack);
+               }
+            }
+            catch (e:*) { }
+         }
          // 回放攻击链路诊断（每 10 帧）：确认喂回与游戏攻击条件
          if (++replayAtkTick % 10 == 0)
          {
