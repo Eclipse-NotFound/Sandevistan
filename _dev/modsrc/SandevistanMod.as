@@ -180,7 +180,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.33 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.34 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -948,7 +948,8 @@ package
             // 记录攻击键状态与瞄准方向（回放时攻击指向时停期间的发射方向）
             history.push({ x: gg.X, y: gg.Y, s: gg.storona, r: gg.vis != null ? gg.vis.rotation : 0, v: gg.vis != null ? gg.vis.scaleX : 1,
                            a: world.ctr.keyAttack, p: world.ctr.keyPunch, g: world.ctr.keyGrenad, m: world.ctr.keyMagic,
-                           ax: world.celX, ay: world.celY });
+                           ax: world.celX, ay: world.celY,
+                           w: world.gg.currentWeapon != null ? world.gg.currentWeapon.id : "" });
 
 
             fxTicks++;
@@ -1082,6 +1083,7 @@ package
          var punchOn:Boolean = false;
          var grenOn:Boolean = false;
          var magOn:Boolean = false;
+         var prevWid:String = replayWpn != null ? replayWpn.id : "";   // 当前回放武器 id（用于重演切换）
          for (var i:int = 0; i < n; i++)
          {
             if (replayIdx >= history.length)
@@ -1090,6 +1092,14 @@ package
                return;
             }
             var h:Object = history[replayIdx];
+            // 武器切换重演：历史中武器变化时立即切换（无冷却，跟随时停期间的切枪）
+            if (h.w != null && h.w != prevWid)
+            {
+               var tgtW:Object = h.w == "" ? null : world.invent.weapons[h.w];
+               switchToWeapon(tgtW);
+               replayWpn = tgtW;
+               prevWid = h.w;
+            }
             // 驱动玩家沿历史路径移动（真回放：玩家本体重演）
             try
             {
@@ -1218,7 +1228,7 @@ package
             if (gg.hpbar != null && gg.hpbar.visible) { savedHp = true; gg.hpbar.visible = false; }
             bmp.draw(vis as IBitmapDrawable, m, ct, "normal", null, true);
             if (savedHp) gg.hpbar.visible = true;
-            if (debugTest)
+            if (debugTest || cfgDiagLog)
             {
                var sC:uint = bmp.getPixel32(int(bmp.width / 2), int(bmp.height / 2));
                var sTL:uint = bmp.getPixel32(20, 20);
@@ -1226,8 +1236,18 @@ package
                var sBL:uint = bmp.getPixel32(20, bmp.height - 20);
                var sBR:uint = bmp.getPixel32(bmp.width - 20, bmp.height - 20);
                var sM2:uint = bmp.getPixel32(int(bmp.width / 2), int(bmp.height * 0.25));
+               // 左右半像素 alpha 采样（判断位图内容是否镜像：朝左时左半应更"实"）
+               var lPx:Number = 0;
+               var rPx:Number = 0;
+               var yc:int = int(bmp.height / 2);
+               for (var xi:int = 0; xi < 10; xi++)
+               {
+                  lPx += bmp.getPixel32(int(bmp.width * 0.12) + xi, yc) >>> 24;
+                  rPx += bmp.getPixel32(int(bmp.width * 0.88) - xi, yc) >>> 24;
+               }
                log("[DIAG] ts-ghostbmp C=" + sC.toString(16) + " TL=" + sTL.toString(16) + " TR=" + sTR.toString(16)
                    + " BL=" + sBL.toString(16) + " BR=" + sBR.toString(16) + " M2=" + sM2.toString(16)
+                   + " lPx=" + lPx + " rPx=" + rPx + " storona=" + gg.storona + " visScaleX=" + vis.scaleX
                    + " vis.alpha=" + vis.alpha + " vis.visible=" + vis.visible);
             }
             var bit:Bitmap = new Bitmap(bmp, "auto", true);
@@ -1261,8 +1281,12 @@ package
             var b:Rectangle = vis.getBounds(vis);
             m.tx = -b.left;
             m.ty = -b.top;
+            // 强制镜像为历史朝向（兜底：不依赖 storona 时序，保证残影朝向=时停时刻朝向）
+            var savedSX:Number = vis.scaleX;
+            try { vis.scaleX = s; } catch (e:*) { }
             bmp.draw(vis as IBitmapDrawable, m, ct, "normal", null, true);
-            if (debugTest)
+            try { vis.scaleX = savedSX; } catch (e:*) { }
+            if (debugTest || cfgDiagLog)
             {
                var aC:uint = bmp.getPixel32(int(bmp.width / 2), int(bmp.height / 2));
                var aTL:uint = bmp.getPixel32(5, 5);
