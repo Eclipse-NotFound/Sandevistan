@@ -57,6 +57,7 @@ package
       private var replaying:Boolean = false;
       private var replayIdx:int = 0;
       private var savedGod:Boolean = false;             // 回放期间无敌
+      private var savedInvul:Boolean = false;           // 时停期间玩家免疫（攻击体打不中）
       private var savedGgCtrl:Boolean = true;           // 回放前控制状态
       private var startWeapon:Object = null;               // 时停开始时的武器（回放开始切回它）
       private var endWeapon:Object = null;                 // 时停结束时的武器（回放结束切回它）
@@ -199,7 +200,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.49 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.50 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -654,13 +655,14 @@ package
                   else if (slowPartClass != null && oR is slowPartClass) { /* 粒子跳过 */ }
                   else
                   {
-                  var qnR:String = flash.utils.getQualifiedClassName(oR);
-                  var isAtk:Boolean = qnR.indexOf("fe.weapon::") == 0;
-                  // 单位判断：fe.unit:: / fe.serv::（NPC 在 serv 包）/ 有 setPos 方法（Unit 子类）
-                  var isUnit:Boolean = qnR.indexOf("fe.unit::") == 0 || qnR.indexOf("fe.serv::") == 0 || oR["setPos"] != null;
                      var arrR:Array = replayObjs[oR];
                      if (arrR == null)
                      {
+                        // 未记录：类名判断（类型/移动检测）——已记录对象后续直接 push（省性能）
+                        var qnR:String = flash.utils.getQualifiedClassName(oR);
+                        var isAtk:Boolean = qnR.indexOf("fe.weapon::") == 0;
+                        // 单位判断：fe.unit:: / fe.serv::（NPC 在 serv 包）/ 有 setPos 方法（Unit 子类）
+                        var isUnit:Boolean = qnR.indexOf("fe.unit::") == 0 || qnR.indexOf("fe.serv::") == 0 || oR["setPos"] != null;
                         if (isAtk || isUnit)
                         {
                            // 单位/攻击体：必记录（补前期帧为当前位置，数组对齐 replayIdx）
@@ -677,8 +679,8 @@ package
                               }
                               catch (e:*) { }
                            }
-                           for (var f0:int = 0; f0 < frameN; f0++) { arrR.push({ x: oR.X, y: oR.Y, f: -1, s: "" }); }
-                           arrR.push({ x: oR.X, y: oR.Y, f: animFrameOf(oR), s: sndR });
+                           for (var f0:int = 0; f0 < frameN; f0++) { arrR.push({ x: oR.X, y: oR.Y, f: -1, s: "", r: 0 }); }
+                           arrR.push({ x: oR.X, y: oR.Y, f: animFrameOf(oR), s: sndR, r: oR.rot != null ? oR.rot : 0 });
                         }
                         else
                         {
@@ -690,14 +692,14 @@ package
                               arrR = [];
                               replayObjs[oR] = arrR;
                               replayObjArr.push(oR);
-                              for (var f1:int = 0; f1 < frameN; f1++) { arrR.push({ x: sp.x, y: sp.y, f: -1, s: "" }); }
-                              arrR.push({ x: oR.X, y: oR.Y, f: -1, s: "" });
+                              for (var f1:int = 0; f1 < frameN; f1++) { arrR.push({ x: sp.x, y: sp.y, f: -1, s: "", r: 0 }); }
+                              arrR.push({ x: oR.X, y: oR.Y, f: -1, s: "", r: 0 });
                            }
                         }
                      }
                      else
                      {
-                        arrR.push({ x: oR.X, y: oR.Y, f: animFrameOf(oR), s: "" });
+                        arrR.push({ x: oR.X, y: oR.Y, f: animFrameOf(oR), s: "", r: oR.rot != null ? oR.rot : 0 });
                      }
                   }
                }
@@ -737,6 +739,11 @@ package
                      else if (oR.vis != null) { oR.vis.x = stR.x; oR.vis.y = stR.y; }
                   }
                   catch (e:*) { }
+                  // 攻击体方向恢复（飞行视觉朝记录时的方向——否则横着/反着飞）
+                  if (stR.r != 0 && oR.vis != null)
+                  {
+                     try { oR.vis.rotation = stR.r * 180 / Math.PI; } catch (e:*) { }
+                  }
                   // 动画帧（共用视觉体系，容错）
                   if (stR.f > 0)
                   {
@@ -1077,11 +1084,14 @@ package
             // （1/N 速）。注：位移回退方案因帧序（模组先于游戏 step，渲染在游戏后）
             // 回退被全速移动覆盖而无效——节流是"真慢速"（动作/判定同步 1/N）
             world.onPause = true;
-            // 时停中玩家无敌（敌人攻击体虽已慢速判定，本体碰撞判定仍全速——兜底）
+            // 时停中玩家无敌（godMode 挡伤害；invulner 让攻击体完全打不中——
+            // 否则敌人攻击体命中玩家仍有击退/命中反馈的"当场结算"观感）
             try
             {
                savedGod = world.godMode;
                world.godMode = true;
+               savedInvul = world.gg.invulner;
+               world.gg.invulner = true;
             }
             catch (e:*) { }
             // 记录时停开始时的武器（回放开始切回它重演，回放结束切回时停结束时武器）
@@ -1632,6 +1642,7 @@ package
             // 回放结束：恢复世界运行（敌人/场景恢复自由行动）
             world.onPause = savedOnPause;
             world.godMode = savedGod;    // 恢复无敌状态
+            try { world.gg.invulner = savedInvul; } catch (e:*) { }   // 恢复免疫
             world.ctr.keyAttack = false;
             world.ctr.keyPunch = false;
             world.ctr.keyGrenad = false;
