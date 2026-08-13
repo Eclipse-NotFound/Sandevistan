@@ -88,6 +88,8 @@ package
       private var hitCred:Dictionary = new Dictionary();   // 攻击体 → 已记入的敌人（去重）
       private var predDead:Dictionary = new Dictionary();  // 敌人 → true（时停中放死亡动画）
       private var replayAnimCat:Dictionary = new Dictionary();  // 回放动画档位迟滞（防 walk/run 抖动）
+      private var lastGhostX:Number = 0;   // 上一残影位置（叠加防护：最小位移门槛）
+      private var lastGhostY:Number = 0;
       private var panelOpen:Boolean = false;
       private var optPanelOn:Boolean = false;      // 选项页模组设置面板
       private var optSel:int = 0;                  // 0=生效时间 1=冷却 2=残影不透明度 3=残影频率
@@ -167,9 +169,9 @@ package
       {
          var a:Number = Math.max(0.05, Math.min(1, cfgGhostAlpha / 100));
          var cols:Array = [
-            [1.0, 2.0, 1.0, 0, 90, 0],    // 绿
-            [0.8, 1.8, 1.6, 0, 60, 90],   // 青绿
-            [0.6, 1.6, 1.9, 0, 40, 120],  // 青
+            [1.2, 2.3, 1.1, 0, 110, 20],  // 绿（加亮——快速跑动时明显绿色）
+            [0.9, 1.9, 1.5, 0, 70, 90],   // 青绿
+            [0.7, 1.6, 1.9, 0, 45, 120],  // 青
             [0.6, 1.2, 2.0, 0, 0, 150],   // 蓝青
             [0.7, 0.9, 2.0, 0, 0, 175],   // 蓝
             [0.9, 0.6, 2.0, 20, 0, 195],  // 蓝紫
@@ -180,10 +182,12 @@ package
          return new ColorTransform(c[0], c[1], c[2], a, c[3], c[4], c[5], 0);
       }
 
-      // 速度→渐变索引：速度快（残影稀疏）→ 低索引（绿）；速度慢（残影密集）→ 高索引（蓝紫）
+      // 速度→渐变索引：非线性——速度 ≥10 全绿；10→0 才渐变（幂曲线加速向蓝紫）
       private function speedToEdgeIdx(spd:Number):int
       {
-         var idx:int = 7 - Math.round(spd / 2.5);
+         var t:Number = spd / 10;
+         if (t >= 1) { return 0; }
+         var idx:int = Math.round(7 * Math.pow(1 - t, 1.4));
          if (idx < 0) { idx = 0; }
          if (idx > 7) { idx = 7; }
          return idx;
@@ -247,7 +251,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.67 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.68 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -854,11 +858,13 @@ package
                         var nxtR2:Object = arrR[Math.min(idxR + 1, arrR.length - 1)];
                         var mvx:Number = (nxtR2.x - stR.x) * cfgReplaySpeed;
                         var mvy:Number = (nxtR2.y - stR.y) * cfgReplaySpeed;
-                        // 攻击状态过期（修复"僵死"）：时停结束时残留的 t_punch
-                        // （internal 无法清）让回放中 animate 永远走 attack 分支，
-                        // 攻击动画播完停在末帧。control() 在 World.w.enemyAct<=0
-                        // 时先执行 --t_punch 再早退（无 AI 副作用）——临时置 0
-                        // 调用使攻击状态在回放中过期。NPC 排除（其 control 无
+                        // AI 状态机推进（修复小马类"走路僵死"的关键）：掠夺者等
+                        // 单位的动画状态依赖 aiState（如 aiState==7 时 `dx==0||
+                        // aiState==7` 恒走 stay 分支——回放中 aiState 冻结则动画
+                        // 永不切换/重启）。enemyAct=1 让 control 的 AI 状态机运行
+                        // （aiState/aiTCh 推进）但**不寻敌不攻击**（findCel 需
+                        // enemyAct>1、攻击需 >=3）——动画状态随 AI 自然变化，
+                        // 移动仍由下方量化 dx 控制。NPC 排除（其 control 无
                         // enemyAct 门）。
                         try
                         {
@@ -866,7 +872,7 @@ package
                            if (qnR2.indexOf("NPC") < 0 && oR["currentWeapon"] != null)
                            {
                               var savedEA:Number = world["enemyAct"];
-                              world["enemyAct"] = 0;
+                              world["enemyAct"] = 1;
                               oR.control();
                               world["enemyAct"] = savedEA;
                            }
@@ -875,6 +881,7 @@ package
                         // 量化 dx + 迟滞（防 walk/run 边界抖动→每次切状态都
                         // restart 回首帧=僵死）：按速度选 stay/walk/run 档位，
                         // 显著跨越才切换；dx 取档位代表值（符号取运动方向）
+                        // （覆盖 AI 状态机设置的 dx——移动仍按记录重演）
                         var spd:Number = Math.sqrt(mvx * mvx + mvy * mvy);
                         var newCat:int = spd < 1.5 ? 1 : (spd < 8 ? 2 : 3);
                         var cat:int = replayAnimCat[oR] != null ? replayAnimCat[oR] : 0;
@@ -889,9 +896,9 @@ package
                         oR.stay = true;   // 恒 stay：避免 Monstrik 走 jump 姿势
                         oR.dx = newCat == 1 ? 0 : (newCat == 2 ? (mvx >= 0 ? 4 : -4) : (mvx >= 0 ? 12 : -12));
                         // 小马类单位（Raider/Slaver/Zebra/Pon/Merc）：动画定期重启——
-                        // 其动画状态依赖 aiState（回放中冻结），静止姿态可能是
-                        // 单帧/非循环动画（st=true 后 blit 停止=僵死）；每 12 显示帧
-                        // 反转 dx 让动画状态切换触发 restart（静止→walk；走路→stay）
+                        // 其静止姿态可能是单帧/非循环动画（st=true 后 blit 停止=僵死）；
+                        // 每 12 显示帧反转 dx 让动画状态切换触发 restart（静止→walk；
+                        // 走路→stay）
                         try
                         {
                            var qnA2:String = flash.utils.getQualifiedClassName(oR);
@@ -1568,6 +1575,8 @@ package
             rainbowIdx = 0;
             fxTicks = 0;
             clearAllGhosts();   // 防上一轮残留的无限残影
+            lastGhostX = world.gg.X;
+            lastGhostY = world.gg.Y;
             if (ghostLayer == null)
             {
                ghostLayer = new Sprite();
@@ -2307,6 +2316,19 @@ package
       {
          try
          {
+            // 叠加防护：位移不足不生成（静止时大量残影堆叠在同一位置会破坏
+            // 房间图层显示）；总数上限（无限寿命残影，超限移除最旧的）
+            var dgx:Number = gg.X - lastGhostX;
+            var dgy:Number = gg.Y - lastGhostY;
+            if (dgx * dgx + dgy * dgy < 64) { return; }
+            lastGhostX = gg.X;
+            lastGhostY = gg.Y;
+            if (ghosts.length >= 50)
+            {
+               var go:Object = ghosts.shift();
+               try { if (go.s.parent != null) go.s.parent.removeChild(go.s); } catch (e:*) { }
+               try { go.b.dispose(); } catch (e:*) { }
+            }
             var vis:* = gg.vis;
             if (vis == null || !vis.visible) { log("[DIAG] spawnGhost skip: vis null/not visible"); return; }
             var w:Number = vis.width;
