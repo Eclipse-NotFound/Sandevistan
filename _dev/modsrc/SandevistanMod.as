@@ -207,7 +207,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.63 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.64 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -812,6 +812,20 @@ package
                         replayAnimCat[oR] = newCat;
                         oR.stay = true;   // 恒 stay：避免 Monstrik 走 jump 姿势
                         oR.dx = newCat == 1 ? 0 : (newCat == 2 ? (mvx >= 0 ? 4 : -4) : (mvx >= 0 ? 12 : -12));
+                        // 小马类单位（Raider/Slaver/Zebra/Pon）：静止动画定期重启——
+                        // 其 stay 姿态可能是单帧/非循环动画（st=true 后 blit 停止=僵死），
+                        // 每 12 显示帧注入 1 帧 walk 让动画状态切换触发 restart
+                        try
+                        {
+                           var qnA2:String = flash.utils.getQualifiedClassName(oR);
+                           var isPonyA:Boolean = qnA2.indexOf("Slaver") >= 0 || qnA2.indexOf("Raider") >= 0
+                              || qnA2.indexOf("Zebra") >= 0 || qnA2.indexOf("UnitPon") >= 0;
+                           if (isPonyA && newCat == 1 && replayIdx % 12 == 0)
+                           {
+                              oR.dx = 4;
+                           }
+                        }
+                        catch (e:*) { }
                         oR.dy = 0;
                         oR.animate();
                      }
@@ -1784,6 +1798,8 @@ package
          var prevTA:int = -1;
          var prevHold:Number = -1;
          var fireCnt:int = 0;   // 窗口内真实开火次数（tA 上升沿/弹匣下降沿 = 攻击初始化）
+         var lastAimX:Number = 0;   // 窗口末帧瞄准点（开火前武器重新瞄准用）
+         var lastAimY:Number = 0;
          var prevWid:String = replayWpn != null ? replayWpn.id : "";   // 当前回放武器 id（用于重演切换）
          for (var i:int = 0; i < n; i++)
          {
@@ -1815,6 +1831,8 @@ package
                {
                   world.celX = h.ax;
                   world.celY = h.ay;
+                  lastAimX = h.ax;
+                  lastAimY = h.ay;
                   // 武器位置：枪械强制就位（枪口钉在角色手上，跳过渐进旋转）；
                   // 近战重现时停期间的独立位置（历史 wx/wy + 清插值 del，
                   // 否则 WClub.actions 的追赶插值追不上回放中瞬移的瞄准点，
@@ -1906,6 +1924,20 @@ package
             {
                try
                {
+                  // 开火前武器重新瞄准/就位（枪械）：gg.step 后武器的位置/旋转
+                  // 可能被 setWeaponPos/actions 重算——跳跃场景下子弹会从偏离
+                  // 记录位置发射导致"有攻击无判定"。近战由直接结算处理不需要。
+                  if (!meleeNow)
+                  {
+                     try
+                     {
+                        cwNow.X = world.gg.weaponX;
+                        cwNow.Y = world.gg.weaponY;
+                        cwNow.rot = Math.atan2(lastAimY - world.gg.Y, lastAimX - world.gg.X);
+                        cwNow.ready = true;
+                     }
+                     catch (e:*) { }
+                  }
                   cwNow.t_attack = 0;
                   cwNow.t_auto = 0;
                   cwNow.t_reload = 0;
@@ -2002,7 +2034,21 @@ package
                         }
                         else if (oA.vis.currentFrame != null)
                         {
+                           // MovieClip 视觉：动画在嵌套剪辑（osn.body 等）——
+                           // 采样嵌套帧号（顶层帧恒 0 无意义）
                            hsh = "f" + oA.vis.currentFrame;
+                           try
+                           {
+                              if (oA.vis.osn != null && oA.vis.osn.body != null)
+                              {
+                                 hsh += "/o" + oA.vis.osn.body.currentFrame;
+                              }
+                              else if (oA.vis.body != null)
+                              {
+                                 hsh += "/b" + oA.vis.body.currentFrame;
+                              }
+                           }
+                           catch (e:*) { }
                         }
                      }
                      catch (e:*) { }
