@@ -85,6 +85,7 @@ package
       private var origDam:Dictionary = new Dictionary();   // 攻击体 → 原始伤害（清零前捕获）
       private var hitCred:Dictionary = new Dictionary();   // 攻击体 → 已记入的敌人（去重）
       private var predDead:Dictionary = new Dictionary();  // 敌人 → true（时停中放死亡动画）
+      private var replayAnimCat:Dictionary = new Dictionary();  // 回放动画档位迟滞（防 walk/run 抖动）
       private var panelOpen:Boolean = false;
       private var optPanelOn:Boolean = false;      // 选项页模组设置面板
       private var optSel:int = 0;                  // 0=生效时间 1=冷却
@@ -204,7 +205,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.58 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.59 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -775,13 +776,41 @@ package
                         var nxtR2:Object = arrR[Math.min(idxR + 1, arrR.length - 1)];
                         var mvx:Number = (nxtR2.x - stR.x) * cfgReplaySpeed;
                         var mvy:Number = (nxtR2.y - stR.y) * cfgReplaySpeed;
-                        oR.dx = mvx;
-                        oR.dy = mvy;
-                        // stay 阈值放宽：Monstrik 的 animate 在 stay=false 且非水中/悬浮时
-                        // 走"jump"姿势——回放 5 倍速下移动敌人的速度平方常超旧阈值(36)，
-                        // 导致移动敌人全变跳跃姿势（僵死感）。阈值 900（|v|<30）让
-                        // 移动敌人走 walk/run（按 dx 大小选择）
-                        oR.stay = mvx * mvx + mvy * mvy < 900;
+                        // 攻击状态过期（修复"僵死"）：时停结束时残留的 t_punch
+                        // （internal 无法清）让回放中 animate 永远走 attack 分支，
+                        // 攻击动画播完停在末帧。control() 在 World.w.enemyAct<=0
+                        // 时先执行 --t_punch 再早退（无 AI 副作用）——临时置 0
+                        // 调用使攻击状态在回放中过期。NPC 排除（其 control 无
+                        // enemyAct 门）。
+                        try
+                        {
+                           var qnR2:String = flash.utils.getQualifiedClassName(oR);
+                           if (qnR2.indexOf("NPC") < 0 && oR["currentWeapon"] != null)
+                           {
+                              var savedEA:Number = world["enemyAct"];
+                              world["enemyAct"] = 0;
+                              oR.control();
+                              world["enemyAct"] = savedEA;
+                           }
+                        }
+                        catch (e:*) { }
+                        // 量化 dx + 迟滞（防 walk/run 边界抖动→每次切状态都
+                        // restart 回首帧=僵死）：按速度选 stay/walk/run 档位，
+                        // 显著跨越才切换；dx 取档位代表值（符号取运动方向）
+                        var spd:Number = Math.sqrt(mvx * mvx + mvy * mvy);
+                        var newCat:int = spd < 1.5 ? 1 : (spd < 8 ? 2 : 3);
+                        var cat:int = replayAnimCat[oR] != null ? replayAnimCat[oR] : 0;
+                        if (cat != 0)
+                        {
+                           if (cat == 3 && newCat == 2 && spd > 5) { newCat = 3; }
+                           else if (cat == 2 && newCat == 1 && spd > 2.5) { newCat = 2; }
+                           else if (cat == 1 && newCat == 2 && spd < 3) { newCat = 1; }
+                           else if (cat == 2 && newCat == 3 && spd < 10) { newCat = 2; }
+                        }
+                        replayAnimCat[oR] = newCat;
+                        oR.stay = true;   // 恒 stay：避免 Monstrik 走 jump 姿势
+                        oR.dx = newCat == 1 ? 0 : (newCat == 2 ? (mvx >= 0 ? 4 : -4) : (mvx >= 0 ? 12 : -12));
+                        oR.dy = 0;
                         oR.animate();
                      }
                   }
@@ -876,11 +905,13 @@ package
                if (++gS > 20000) break;
             }
             // 3. 真实世界步进。玩家在 loc.step 内会被步一次（本帧第二次）——
-            //    只清攻击键（防新攻击生成子弹泄漏）与下蹲键（防重复切换）；
+            //    只清攻击键（防新攻击生成子弹泄漏）；
             //    **保留 keyAction**——control 在 keyAction=false 时走 else 分支
             //    置 actionObj=null（取消交互）→ 按住 E 的开锁/破解进度每节流帧
             //    被取消重来（进度条反复跳动）。actAction 对进行中的交互有
             //    actionObj 幂等检查（只做距离判断），重复调用安全。
+            //    **保留 keySit**——下穿平台（throu = (keyJump||!stay) && keySit）
+            //    需要按住下蹲键；清掉会让第二遍步 throu=false 覆盖，无法穿过。
             //    **保留 keyJump/keyBeUp**——清 keyJump 会让腾空时的第二遍步
             //    触发二段跳分支反复起跳，破坏念力悬浮并反复消耗魔力。
             //    步后恢复按键与悬浮状态。
@@ -888,7 +919,7 @@ package
             var savedLevit:int = 0;
             try
             {
-               var kNames:Array = ["keyAttack","keyPunch","keyReload","keyGrenad","keyMagic","keySit"];
+               var kNames:Array = ["keyAttack","keyPunch","keyReload","keyGrenad","keyMagic"];
                for (var ki:int = 0; ki < kNames.length; ki++)
                {
                   cSave[kNames[ki]] = world.ctr[kNames[ki]];
@@ -1326,6 +1357,7 @@ package
             history = new Array();
             // 清空上一轮重演记录（场景级录像：敌人/物品/攻击体每帧状态）
             replayObjs = new Dictionary();
+            replayAnimCat = new Dictionary();
             replayObjArr = [];
             seenPos = new Dictionary();
             rainbowIdx = 0;
@@ -1858,6 +1890,7 @@ package
          catch (e:*) { }
          // 清空场景重演记录
          replayObjs = new Dictionary();
+         replayAnimCat = new Dictionary();
          replayObjArr = [];
          seenPos = new Dictionary();
          // 回放结束：切回时停结束时手上的武器，恢复弹夹/背包（弹夹剩余=时停结束时）

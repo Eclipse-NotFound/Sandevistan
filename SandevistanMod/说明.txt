@@ -1,7 +1,21 @@
 ==========================================================
-  斯安维斯坦模组 (Sandevistan Mod) v1.58
+  斯安维斯坦模组 (Sandevistan Mod) v1.59
   for Fallout Equestria: REMAINS
 ==========================================================
+
+【v1.59 更新内容】（回放敌人僵死 + 下穿平台两项修复）
+  · 回放敌人动画"僵死"根治（两个来源）：
+      - 攻击状态残留：时停结束时敌人 t_punch>0（internal 无法清）→
+        回放中 animate 永远走 attack 分支，攻击动画播完停在末帧。
+        修复：回放中临时置 World.enemyAct=0 调 control()——control 在
+        enemyAct<=0 时先执行 --t_punch 再早退（无 AI 副作用），
+        攻击状态在回放中自然过期（NPC 排除：其 control 无 enemyAct 门）
+      - walk/run 抖动：速度在 5px 边界抖动 → 每次切状态 restart 回首帧
+        （视觉冻在首帧）。修复：dx 按档位量化（stay=0/walk=±4/run=±12）
+        + 迟滞切换（显著跨越才切档）
+  · 下穿平台修复（S+Ctrl 穿过地面）：throu = (keyJump||!stay) && keySit
+    需要按住下蹲键——keySit 从清除列表移除（保留按住状态），
+    第二遍步不再以 throu=false 覆盖
 
 【v1.58 更新内容】（按住 E 交互进度条跳动修复）
   · 根因：control() 在 keyAction=false 时走 else 分支置 actionObj=null
@@ -289,7 +303,7 @@
   2. 双击运行 安装.bat（自动备份原版到 backup\ 并安装补丁）
   3. 从 Steam 正常启动游戏
   4. 进入游戏后按 \ 键触发
-  注：左上角会显示"SandevistanMod v1.58 已加载"标记
+  注：左上角会显示"SandevistanMod v1.59 已加载"标记
      （可在 config.txt 中设置 showmark=0 隐藏）
 
 【修改设置】
