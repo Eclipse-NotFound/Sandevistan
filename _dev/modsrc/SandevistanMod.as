@@ -204,7 +204,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.57 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.58 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -876,15 +876,19 @@ package
                if (++gS > 20000) break;
             }
             // 3. 真实世界步进。玩家在 loc.step 内会被步一次（本帧第二次）——
-            //    只清攻击/动作键（防新攻击生成子弹泄漏与重复交互/下蹲）；
-            //    **保留移动键含 keyJump/keyBeUp**——清 keyJump 会让腾空时的
-            //    第二遍步触发二段跳分支（!stay && !keyJump && isDJ）反复起跳，
-            //    破坏念力悬浮并反复消耗魔力。步后恢复按键与悬浮状态。
+            //    只清攻击键（防新攻击生成子弹泄漏）与下蹲键（防重复切换）；
+            //    **保留 keyAction**——control 在 keyAction=false 时走 else 分支
+            //    置 actionObj=null（取消交互）→ 按住 E 的开锁/破解进度每节流帧
+            //    被取消重来（进度条反复跳动）。actAction 对进行中的交互有
+            //    actionObj 幂等检查（只做距离判断），重复调用安全。
+            //    **保留 keyJump/keyBeUp**——清 keyJump 会让腾空时的第二遍步
+            //    触发二段跳分支反复起跳，破坏念力悬浮并反复消耗魔力。
+            //    步后恢复按键与悬浮状态。
             var cSave:Object = {};
             var savedLevit:int = 0;
             try
             {
-               var kNames:Array = ["keyAttack","keyPunch","keyReload","keyGrenad","keyMagic","keyAction","keySit"];
+               var kNames:Array = ["keyAttack","keyPunch","keyReload","keyGrenad","keyMagic","keySit"];
                for (var ki:int = 0; ki < kNames.length; ki++)
                {
                   cSave[kNames[ki]] = world.ctr[kNames[ki]];
