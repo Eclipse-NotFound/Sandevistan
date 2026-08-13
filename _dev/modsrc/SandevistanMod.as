@@ -204,7 +204,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.55 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.56 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -836,20 +836,23 @@ package
          return -1;
       }
 
-      // ===== 时停慢速世界：节流 step（每 slowfactor 帧对世界对象 step 1 次 = 1/N 速）=====
-      // 玩家每帧手动 step（全速）；敌人/物品/攻击体按节流 step——动作与碰撞判定
-      // 同步 1/N 速（真慢速，判定=视觉）。粒子（Part）由 stepParticles 单独处理。
+      // ===== 时停慢速世界：节流调用真实 loc.step()（每 slowfactor 帧 1 次 = 1/N 速）=====
+      // "世界真慢速运行"：loc.step 步进玩家+全部对象+交互检测（celObj/celDist）——
+      // 移动/计时/AI/交互/动画一致慢速，玩家可交互（门/箱等）。玩家本帧已手动 step
+      // 过一次，loc.step 内的玩家步先清键（自由物理步），步后恢复。
       private function slowStepWorld():void
       {
-         if (++slowTick % cfgSlowFactor != 0) return;
          try
          {
-            if (slowPartClass == null)
-            {
-               try { slowPartClass = ApplicationDomain.currentDomain.getDefinition("fe.graph.Part") as Class; } catch (e:*) { }
-            }
             var locS:Object = world.loc;
             if (locS == null) return;
+            // 1. 预判死亡敌人压住位移（sost=3 控制早退的兜底）
+            for (var kP:Object in predDead)
+            {
+               try { kP.dx = 0; kP.dy = 0; kP.stay = true; } catch (e:*) { }
+            }
+            // 2. 玩家攻击体清零 + 原始伤害捕获（必须在 loc.step 前——玩家刚手动
+            //    step 完，本帧新生成的子弹尚未结算）
             var oS:Object = locS.firstObj;
             var gS:int = 0;
             while (oS != null)
@@ -857,49 +860,76 @@ package
                var nxS:Object = oS.nobj;
                try
                {
-                  if (oS == world.gg) { /* 玩家跳过（手动 step 全速） */ }
-                  else if (slowPartClass != null && oS is slowPartClass) { /* 粒子跳过（stepParticles） */ }
-                  else
+                  if (flash.utils.getQualifiedClassName(oS).indexOf("fe.weapon::") == 0 && oS["owner"] == world.gg)
                   {
-                     // 预判死亡：已判死的敌人固定不动（sost=3 的死亡姿态下 animate 播
-                     // die 动画；control 早退停止行动——每步前再压住 dx/dy 防控制未防护的单位）
-                     if (predDead[oS])
-                     {
-                        try { oS.dx = 0; oS.dy = 0; oS.stay = true; } catch (e:*) { }
-                        oS.step();
-                        continue;
-                     }
-                     // 玩家攻击体伤害清零必须在 step **之前**（step 内 run 碰撞会结算）。
-                     // 只对攻击体（fe.weapon::）访问 owner——动态属性访问对其他对象
-                     // 可能抛异常（会被 catch 吞掉导致对象被跳过 step → 敌人固定不动）
-                     var qnS:String = flash.utils.getQualifiedClassName(oS);
-                     var isPBul:Boolean = false;
-                     if (qnS.indexOf("fe.weapon::") == 0)
-                     {
-                        try
-                        {
-                           if (oS["owner"] == world.gg)
-                           {
-                              isPBul = true;
-                              // 预判伤害：首次见到时捕获原始伤害（清零后不可恢复）
-                              if (origDam[oS] == null && oS.damage > 0) { origDam[oS] = oS.damage; }
-                              oS.damage = 0;
-                              oS.damageExpl = 0;
-                           }
-                        }
-                        catch (e:*) { }
-                     }
-                     oS.step();
-                     // 预判伤害：攻击体移动后检测命中（位置盒判定，去重）
-                     if (isPBul && hitCred[oS] == null && origDam[oS] != null && origDam[oS] > 0)
-                     {
-                        creditHit(oS, origDam[oS]);
-                     }
+                     if (origDam[oS] == null && oS.damage > 0) { origDam[oS] = oS.damage; }
+                     oS.damage = 0;
+                     oS.damageExpl = 0;
                   }
                }
                catch (e:*) { }
                oS = nxS;
                if (++gS > 20000) break;
+            }
+            // 3. 真实世界步进。玩家在 loc.step 内会被步一次（本帧第二次）——
+            //    预先清键使其为无输入的自由物理步（防新攻击/重复加速），步后恢复。
+            var cSave:Object = {};
+            try
+            {
+               var kNames:Array = ["keyLeft","keyRight","keyJump","keySit","keyBeUp","keyRun","keyAttack","keyPunch",
+                  "keyReload","keyGrenad","keyMagic","keyAction"];
+               for (var ki:int = 0; ki < kNames.length; ki++)
+               {
+                  cSave[kNames[ki]] = world.ctr[kNames[ki]];
+                  world.ctr[kNames[ki]] = false;
+               }
+            }
+            catch (e:*) { }
+            try
+            {
+               locS.step();
+            }
+            catch (e:*) { log("[SandyMod] loc.step error: " + e); }
+            try
+            {
+               for (var kj:String in cSave)
+               {
+                  world.ctr[kj] = cSave[kj];
+               }
+            }
+            catch (e:*) { }
+            // 4. 攻击体移动后的命中检测（预判伤害记入）
+            oS = locS.firstObj;
+            gS = 0;
+            while (oS != null)
+            {
+               var nxS2:Object = oS.nobj;
+               try
+               {
+                  if (flash.utils.getQualifiedClassName(oS).indexOf("fe.weapon::") == 0 && oS["owner"] == world.gg
+                      && hitCred[oS] == null && origDam[oS] != null && origDam[oS] > 0)
+                  {
+                     creditHit(oS, origDam[oS]);
+                  }
+               }
+               catch (e:*) { }
+               oS = nxS2;
+               if (++gS > 20000) break;
+            }
+         }
+         catch (e:*) { }
+      }
+
+      // ===== 发射器计数维护（World.step 守卫内的每帧重置，时停中由模组代做）=====
+      private function resetFxCounter():void
+      {
+         try
+         {
+            var EmitterClass:Class = ApplicationDomain.currentDomain.getDefinition("fe.graph.Emitter") as Class;
+            if (EmitterClass != null)
+            {
+               EmitterClass["kol2"] = EmitterClass["kol1"];
+               EmitterClass["kol1"] = 0;
             }
          }
          catch (e:*) { }
@@ -1349,11 +1379,13 @@ package
       {
          try
          {
-            // 时停慢速世界（v1.46）帧序：
+            // 时停慢速世界（v1.56）帧序：
             // 1. 帧首：近战复用攻击体伤害清零（时停中命中 0 伤害，回放重演结算）
-            // 2. 玩家手动 step（全速）
-            // 3. 记录历史（玩家位置）
-            // 4. 节流 step：每 slowfactor 帧对敌人/物品/攻击体 step 1 次（1/N 速）
+            // 2. 玩家手动 step（全速，每帧）
+            // 3. 节流帧：调用真实 loc.step()（世界真慢速运行——移动/计时/AI/交互检测
+            //    一致 1/N 速；玩家在 loc.step 内会被再步一次，预先清键使其为
+            //    "自由物理步"，步后恢复按键）
+            // 4. 记录历史（玩家最终位置）+ 场景录像
             freezeMeleeDamage();
             var wantA:Boolean = false;
             var wantP:Boolean = false;
@@ -1368,6 +1400,13 @@ package
             var loc:Object = world.loc;
             loc.gg.step();   // 玩家全速手动 step
 
+            slowTick++;
+            var isThr:Boolean = (slowTick % cfgSlowFactor == 0);
+            if (isThr)
+            {
+               slowStepWorld();   // 真实 loc.step()：世界 1/N 速步进（含交互检测）
+            }
+
             var gg:Object = loc.gg;
             // 记录攻击键状态与瞄准方向（回放时攻击指向时停期间的发射方向）
             history.push({ x: gg.X, y: gg.Y, s: gg.storona, r: gg.vis != null ? gg.vis.rotation : 0, v: gg.vis != null ? gg.vis.scaleX : 1,
@@ -1376,8 +1415,6 @@ package
                            w: world.gg.currentWeapon != null ? world.gg.currentWeapon.id : "",
                            wx: world.gg.currentWeapon != null ? world.gg.currentWeapon.X : 0,
                            wy: world.gg.currentWeapon != null ? world.gg.currentWeapon.Y : 0 });
-            // 节流 step：敌人/物品/攻击体 1/N 速（含攻击体慢速判定）
-            slowStepWorld();
             // 记录重演状态（场景级录像：敌人/物品/攻击体每帧位置+动画帧+生成音效）
             recordReplayObjects();
             // 时停攻击状态诊断（每 30 帧）：观察时停中攻击意图与武器状态
@@ -1438,7 +1475,12 @@ package
 
             if (cfgFxRun)
             {
-               stepParticles(world.loc);
+               // 节流帧粒子已被 loc.step 步进——跳过手动 step，只维护发射器计数
+               resetFxCounter();
+               if (!isThr)
+               {
+                  stepParticles(world.loc);
+               }
             }
 
             // [DIAG] jump simulation: every 60 frames press jump for 3 frames
