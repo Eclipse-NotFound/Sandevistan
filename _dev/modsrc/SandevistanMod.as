@@ -265,7 +265,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.75 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.76 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -769,6 +769,9 @@ package
                      // 投掷武器（手雷/投掷物，非 currentWeapon）与魔法武器同样记录
                      var txR:Number = 0;
                      var tyR:Number = 0;
+                     // 视觉可见性（v1.76：尸鬼钻地/炮塔死亡隐藏等按记录重演）
+                     var vvR:Boolean = true;
+                     try { if (oR.vis != null) { vvR = oR.vis.visible; } } catch (e:*) { }
                      try
                      {
                         var cwR:* = oR["currentWeapon"];
@@ -801,8 +804,8 @@ package
                               }
                               catch (e:*) { }
                            }
-                           for (var f0:int = 0; f0 < frameN; f0++) { arrR.push({ x: oR.X, y: oR.Y, f: -1, s: "", wx: wxR, wy: wyR, twx: txR, twy: tyR }); }
-                           arrR.push({ x: oR.X, y: oR.Y, f: animFrameOf(oR), s: sndR, wx: wxR, wy: wyR, twx: txR, twy: tyR });
+                           for (var f0:int = 0; f0 < frameN; f0++) { arrR.push({ x: oR.X, y: oR.Y, f: -1, s: "", wx: wxR, wy: wyR, twx: txR, twy: tyR, vv: vvR }); }
+                           arrR.push({ x: oR.X, y: oR.Y, f: animFrameOf(oR), s: sndR, wx: wxR, wy: wyR, twx: txR, twy: tyR, vv: vvR });
                         }
                         else
                         {
@@ -814,14 +817,14 @@ package
                               arrR = [];
                               replayObjs[oR] = arrR;
                               replayObjArr.push(oR);
-                              for (var f1:int = 0; f1 < frameN; f1++) { arrR.push({ x: sp.x, y: sp.y, f: -1, s: "", wx: 0, wy: 0, twx: 0, twy: 0 }); }
-                              arrR.push({ x: oR.X, y: oR.Y, f: -1, s: "", wx: 0, wy: 0, twx: 0, twy: 0 });
+                              for (var f1:int = 0; f1 < frameN; f1++) { arrR.push({ x: sp.x, y: sp.y, f: -1, s: "", wx: 0, wy: 0, twx: 0, twy: 0, vv: vvR }); }
+                              arrR.push({ x: oR.X, y: oR.Y, f: -1, s: "", wx: 0, wy: 0, twx: 0, twy: 0, vv: vvR });
                            }
                         }
                      }
                      else
                      {
-                        arrR.push({ x: oR.X, y: oR.Y, f: animFrameOf(oR), s: "", wx: wxR, wy: wyR, twx: txR, twy: tyR });
+                        arrR.push({ x: oR.X, y: oR.Y, f: animFrameOf(oR), s: "", wx: wxR, wy: wyR, twx: txR, twy: tyR, vv: vvR });
                      }
                   }
                }
@@ -851,8 +854,10 @@ package
                            var arr2:Array = [];
                            replayObjs[oB2] = arr2;
                            replayObjArr.push(oB2);
-                           for (var f2:int = 0; f2 < frameN; f2++) { arr2.push({ x: sp2.x, y: sp2.y, f: -1, s: "", wx: 0, wy: 0, twx: 0, twy: 0 }); }
-                           arr2.push({ x: oB2.X, y: oB2.Y, f: -1, s: "", wx: 0, wy: 0, twx: 0, twy: 0 });
+                           var vvB:Boolean = true;
+                           try { if (oB2.vis != null) { vvB = oB2.vis.visible; } } catch (e:*) { }
+                           for (var f2:int = 0; f2 < frameN; f2++) { arr2.push({ x: sp2.x, y: sp2.y, f: -1, s: "", wx: 0, wy: 0, twx: 0, twy: 0, vv: vvB }); }
+                           arr2.push({ x: oB2.X, y: oB2.Y, f: -1, s: "", wx: 0, wy: 0, twx: 0, twy: 0, vv: vvB });
                         }
                      }
                      catch (e:*) { }
@@ -874,6 +879,7 @@ package
                try { sndClass = ApplicationDomain.currentDomain.getDefinition("fe.Snd") as Class; } catch (e:*) { }
             }
             var idxR:int = replayIdx;
+            var nRepSteps:int = Math.ceil(cfgReplaySpeed);   // 敌对单位每显示帧步进次数（回放节奏）
             for each (var oR:Object in replayObjArr)
             {
                try
@@ -890,6 +896,14 @@ package
                   {
                      if (oR["setVisPos"] != null) { oR.setVisPos(); }
                      else if (oR.vis != null) { oR.vis.x = stR.x; oR.vis.y = stR.y; }
+                  }
+                  catch (e:*) { }
+                  // 视觉可见性重演（v1.76）：按记录强制 vis.visible——尸鬼钻地
+                  // （aiState=5 隐身）、炮塔预判死亡隐藏等，回放中 AI 状态可能与
+                  // 记录不同步，可见性按记录恢复（钻地/爆炸消失如实重演）
+                  try
+                  {
+                     if (oR.vis != null && stR.vv != null) { oR.vis.visible = stR.vv; }
                   }
                   catch (e:*) { }
                   // 敌人武器位置恢复（回放中武器不 step——按历史位置放回，与重演身体贴合）
@@ -949,19 +963,25 @@ package
                         {
                            try
                            {
-                              // enemyAct=2：AI 可寻敌（findCel → aiState 进入追击
-                              // 状态 → 走路/跑步动画自然）但攻击需 >=3 不会出手。
-                              // v1.71 用 1（不寻敌）时 AI 常停留 aiState==7（警觉
-                              // 待机）→ 动画僵死——"有时正常有时僵死"的根源。
+                              // enemyAct=3（v1.76）：AI 完全运行（寻敌+追击+**攻击**）
+                              // ——攻击动画与实体型攻击（天角兽闪电等）在回放中真实
+                              // 重演。时停中子弹刚生成就命中无敌玩家、活不到录像帧
+                              // （rStart 诊断 atk 恒 0 的根源），回放改为让 AI 重新
+                              // 出手。步进 N=replayspeed 次/显示帧（冷却按回放节奏
+                              // 推进，攻击节奏与时停对应；v1.74 用 2 只寻敌不攻击）。
                               var savedEA:Number = world["enemyAct"];
-                              world["enemyAct"] = 2;
+                              world["enemyAct"] = 3;
                               try
                               {
                                  var ewBlk:* = oR["currentWeapon"];
                                  if (ewBlk != null) { ewBlk.t_attack = 1; ewBlk.t_auto = 0; }  // 防残留射击
                               }
                               catch (e:*) { }
-                              try { oR.step(); } catch (e:*) { }
+                              try
+                              {
+                                 for (var stN:int = 0; stN < nRepSteps; stN++) { oR.step(); }
+                              }
+                              catch (e:*) { }
                               world["enemyAct"] = savedEA;
                               // 重钉位置/视觉（step 内 run() 移动了单位）
                               try { oR.setPos(stR.x, stR.y); } catch (e:*) { }
@@ -1051,10 +1071,11 @@ package
          catch (e:*) { }
       }
 
-      // ===== 回放中未被录制的敌人攻击体手动 step（v1.75）=====
-      // 实体型攻击（如天角兽闪电等）若不在录像中（replayObjs 未覆盖），回放
-      // 中会静止在时停结束位置、回放结束后才继续运动——改为每显示帧 step 1 次
-      // （回放 5 倍速 = 时停中 1/5 速度的 5 倍 = 自然全速重演轨迹）。
+      // ===== 回放中未被录制的敌人攻击体手动 step（v1.75/1.76）=====
+      // 实体型攻击（如天角兽闪电等）若不在录像中（replayObjs 未覆盖——时停中
+      // 子弹刚生成就命中无敌玩家、活不到录像帧），回放中会静止在时停结束位置。
+      // v1.76：回放中敌人重新出手（enemyAct=3）生成的新攻击体同样经此 step——
+      // 每显示帧 step N=replayspeed 次（回放 5 倍速 = 自然全速飞行）。
       // 已录制的攻击体仍由 replayObjects 按记录重钉（精确重演）。
       private function stepUnrecordedAtk():void
       {
@@ -1062,6 +1083,7 @@ package
          {
             var locB:Object = world.loc;
             if (locB == null) return;
+            var nSteps:int = Math.ceil(cfgReplaySpeed);
             var oB:Object = locB.firstObj;
             var gB:int = 0;
             while (oB != null)
@@ -1072,9 +1094,20 @@ package
                   if (oB != world.gg && replayObjs[oB] == null)
                   {
                      var qnB:String = flash.utils.getQualifiedClassName(oB);
-                     if (qnB.indexOf("fe.weapon::") == 0 || qnB.indexOf("fe.unit::") == 0 || qnB.indexOf("fe.loc::") == 0)
+                     var isAtkB:Boolean = qnB.indexOf("fe.weapon::") == 0;
+                     if (isAtkB || qnB.indexOf("fe.unit::") == 0 || qnB.indexOf("fe.loc::") == 0)
                      {
-                        if (oB["step"] != null) { oB.step(); }
+                        if (oB["step"] != null)
+                        {
+                           if (isAtkB)
+                           {
+                              for (var stB:int = 0; stB < nSteps; stB++) { oB.step(); }
+                           }
+                           else
+                           {
+                              oB.step();
+                           }
+                        }
                      }
                   }
                }
@@ -2545,6 +2578,7 @@ package
          // 被投掷单位撞击伤害结算（v1.74）：时停中记录的首次撞击——回放推进
          // 到撞击帧时按游戏 damageWall 公式结算（时停中已跳过伤害）。单位
          // 位置由 replayObjects 重钉在撞击位置，伤害与视觉同步。
+         // v1.76：补撞击反馈（游戏 damageWall 的撞击音效 hit_flesh + 尘土 bum）
          try
          {
             for (var kTI:Object in thrownImpacts)
@@ -2557,6 +2591,13 @@ package
                      if (impTI.dam > 0 && kTI.damage != null)
                      {
                         kTI.damage(impTI.dam, 2);   // D_PHIS=2（物理撞击）
+                        try
+                        {
+                           if (sndClass != null) { sndClass["ps"]("hit_flesh", kTI.X, kTI.Y); }
+                           var EmClass:Class = ApplicationDomain.currentDomain.getDefinition("fe.graph.Emitter") as Class;
+                           if (EmClass != null) { EmClass["emit"]("bum", world.loc, kTI.X, kTI.Y); }
+                        }
+                        catch (e:*) { }
                      }
                      delete thrownImpacts[kTI];
                   }
