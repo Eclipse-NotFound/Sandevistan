@@ -265,7 +265,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.77 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.78 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -879,7 +879,6 @@ package
                try { sndClass = ApplicationDomain.currentDomain.getDefinition("fe.Snd") as Class; } catch (e:*) { }
             }
             var idxR:int = replayIdx;
-            var nRepSteps:int = Math.ceil(cfgReplaySpeed);   // 敌对单位每显示帧步进次数（回放节奏）
             for each (var oR:Object in replayObjArr)
             {
                try
@@ -967,8 +966,7 @@ package
                               // ——攻击动画与实体型攻击（天角兽闪电等）在回放中真实
                               // 重演。时停中子弹刚生成就命中无敌玩家、活不到录像帧
                               // （rStart 诊断 atk 恒 0 的根源），回放改为让 AI 重新
-                              // 出手。步进 N=replayspeed 次/显示帧（冷却按回放节奏
-                              // 推进，攻击节奏与时停对应；v1.74 用 2 只寻敌不攻击）。
+                              // 出手。步进速率见下方（1 世界步/显示帧）。
                               var savedEA:Number = world["enemyAct"];
                               world["enemyAct"] = 3;
                               try
@@ -977,24 +975,24 @@ package
                                  if (ewBlk != null) { ewBlk.t_attack = 1; ewBlk.t_auto = 0; }  // 防残留射击
                               }
                               catch (e:*) { }
-                              // v1.77：强制瞄准目标=重演中的玩家当前位置——AI 的
-                              // cel 是 findCel 时的快照（玩家 5 倍速跑动时严重滞后，
-                              // 攻击方向偏离记录、武器/炮塔头转动发飘）。每步前把
-                              // celX/celY/celUnit 钉到玩家当前位置（武器 rot 向 cel
-                              // 转动 → 攻击方向正确、转动平滑）。
+                              // v1.78 速率修正：敌对单位每显示帧 step **1** 次——
+                              // 时停中世界每 5 显示帧才步 1 次，回放每显示帧消耗
+                              // 5 个历史帧 = 恰好 1 个世界步（v1.76 误用 5 次/帧，
+                              // 攻击节奏与子弹飞行被错误加速 5 倍——玩家子弹一直
+                              // 是 1 次/帧且速度正确，可作对照）。
+                              // v1.77：每步前把瞄准点钉到重演中的玩家当前位置——
+                              // AI 的 cel 是 findCel 瞬间的快照（玩家 5 倍速跑动时
+                              // 滞后→攻击方向偏离、武器/炮塔头转动发飘）。
                               try
                               {
-                                 for (var stN:int = 0; stN < nRepSteps; stN++)
+                                 try
                                  {
-                                    try
-                                    {
-                                       oR.celX = world.gg.X;
-                                       oR.celY = world.gg.Y;
-                                       oR["celUnit"] = world.gg;
-                                    }
-                                    catch (e:*) { }
-                                    oR.step();
+                                    oR.celX = world.gg.X;
+                                    oR.celY = world.gg.Y;
+                                    oR["celUnit"] = world.gg;
                                  }
+                                 catch (e:*) { }
+                                 oR.step();
                               }
                               catch (e:*) { }
                               world["enemyAct"] = savedEA;
@@ -1086,19 +1084,20 @@ package
          catch (e:*) { }
       }
 
-      // ===== 回放中未被录制的敌人攻击体手动 step（v1.75/1.76）=====
+      // ===== 回放中未被录制的敌人攻击体手动 step（v1.75/1.78）=====
       // 实体型攻击（如天角兽闪电等）若不在录像中（replayObjs 未覆盖——时停中
-      // 子弹刚生成就命中无敌玩家、活不到录像帧），回放中会静止在时停结束位置。
-      // v1.76：回放中敌人重新出手（enemyAct=3）生成的新攻击体同样经此 step——
-      // 每显示帧 step N=replayspeed 次（回放 5 倍速 = 自然全速飞行）。
-      // 已录制的攻击体仍由 replayObjects 按记录重钉（精确重演）。
+      // 子弹刚生成就命中无敌玩家、活不到录像帧），回放中会静止在时停结束位置；
+      // 回放中敌人重新出手（enemyAct=3）生成的新攻击体同样经此 step。
+      // 速率（v1.78 修正）：每显示帧 step **1** 次——时停中攻击体随世界节流
+      // 每 5 显示帧步 1 次，回放每显示帧消耗 5 个历史帧 = 恰好 1 个世界步
+      // （与玩家攻击体 stepPlayerBullets 同速率；v1.76 误用 5 次/帧，敌人
+      // 子弹飞行被错误加速 5 倍）。已录制的攻击体由 replayObjects 按记录重钉。
       private function stepUnrecordedAtk():void
       {
          try
          {
             var locB:Object = world.loc;
             if (locB == null) return;
-            var nSteps:int = Math.ceil(cfgReplaySpeed);
             var oB:Object = locB.firstObj;
             var gB:int = 0;
             while (oB != null)
@@ -1109,20 +1108,9 @@ package
                   if (oB != world.gg && replayObjs[oB] == null)
                   {
                      var qnB:String = flash.utils.getQualifiedClassName(oB);
-                     var isAtkB:Boolean = qnB.indexOf("fe.weapon::") == 0;
-                     if (isAtkB || qnB.indexOf("fe.unit::") == 0 || qnB.indexOf("fe.loc::") == 0)
+                     if (qnB.indexOf("fe.weapon::") == 0 || qnB.indexOf("fe.unit::") == 0 || qnB.indexOf("fe.loc::") == 0)
                      {
-                        if (oB["step"] != null)
-                        {
-                           if (isAtkB)
-                           {
-                              for (var stB:int = 0; stB < nSteps; stB++) { oB.step(); }
-                           }
-                           else
-                           {
-                              oB.step();
-                           }
-                        }
+                        if (oB["step"] != null) { oB.step(); }
                      }
                   }
                }
