@@ -206,7 +206,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.60 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.61 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -1001,9 +1001,46 @@ package
          catch (e:*) { }
       }
 
+      // ===== 期望命中率（预判死亡用）：按 udarBullet 的命中判定期望值——
+      // miss 判定 ×（弹道类：accuracy=precision/dist 与 dexter 的对抗；
+      // 近战类 tipBullet==1：闪避 dodge 判定）
+      private function expectedHitCh(body:Object, enemy:Object):Number
+      {
+         var p:Number = 1;
+         try
+         {
+            if (body.miss > 0) { p *= 1 - body.miss; }
+            if (body.tipBullet == 1)
+            {
+               var dg:Number = enemy.dodge != null ? enemy.dodge : 0;
+               if (dg < 1) { p *= (dg <= 0 ? 1 : 1 - dg); }
+            }
+            else
+            {
+               var acc:Number = 1;
+               if (body.precision != 0 && body.dist > 0)
+               {
+                  acc = body.precision / body.dist;
+                  if (body.antiprec > 0 && body.dist < body.antiprec)
+                  {
+                     acc = body.dist / body.antiprec * 0.75 + 0.25;
+                  }
+               }
+               var dex:Number = (enemy.dexter != null ? enemy.dexter : 0) + (enemy.dexterPlus != null ? enemy.dexterPlus : 0) + 0.05;
+               if (enemy.dexter > 0 && acc < dex) { p *= acc / dex; }
+            }
+            if (p > 1) { p = 1; }
+            if (p < 0) { p = 0; }
+         }
+         catch (e:*) { }
+         return p;
+      }
+
       // ===== 期望伤害估算（预判死亡用）：按游戏 damage() 公式的期望值——
       // 类型易伤 × 期望暴击 − 护甲减伤（(skin + armor_qual×armor + shitArmor)×
-      // armorMult − pier 穿甲）× 全局易伤。替代 0.7 粗因子，纳入护甲/穿甲克制对。
+      // armorMult − pier 穿甲）× 全局易伤 × 武器耐久减伤（breaking——武器每射
+      // 一发掉耐久，回放时比时停记录时更破）× 玩家特攻（damPony 等）×
+      // 期望命中率（距离/精度/闪避）× 回放损耗余量。
       private function expectedDam(body:Object, enemy:Object, dmg:Number):Number
       {
          var ed:Number = dmg;
@@ -1027,6 +1064,43 @@ package
             if (dr > 0) { ed -= dr; }
             // 4) 全局易伤倍率
             if (enemy.allVulnerMult != null) { ed *= enemy.allVulnerMult; }
+            // 5) 武器耐久减伤：breaking = (maxhp-hp)/maxhp×2−1（hp<maxhp/2 时）
+            //    枪械 resultDamage 用 ×(1−0.3×brk)、近战 ×(1−0.6×brk)——
+            //    武器每发掉耐久，回放时比时停记录时更破，取类对应系数
+            try
+            {
+               var wpn:* = body.weap;
+               if (wpn != null && wpn.hp != null && wpn.maxhp != null && wpn.hp < wpn.maxhp / 2)
+               {
+                  var brk:Number = (wpn.maxhp - wpn.hp) / wpn.maxhp * 2 - 1;
+                  if (brk > 0)
+                  {
+                     var qnW2:String = flash.utils.getQualifiedClassName(wpn);
+                     var brkK:Number = (qnW2 == "fe.weapon::WClub" || qnW2 == "fe.weapon::WPunch" || qnW2 == "fe.weapon::WKick") ? 0.6 : 0.3;
+                     ed *= 1 - brk * brkK;
+                  }
+               }
+            }
+            catch (e:*) { }
+            // 6) 玩家对敌类型的特攻倍率（pers.damPony/damZombie/...，默认 1）
+            try
+            {
+               if (body.owner != null && body.owner.player && enemy.opt != null && body.owner.pers != null)
+               {
+                  var po:* = body.owner.pers;
+                  if (enemy.opt.pony && po.damPony != null) { ed *= po.damPony; }
+                  if (enemy.opt.zombie && po.damZombie != null) { ed *= po.damZombie; }
+                  if (enemy.opt.robot && po.damRobot != null) { ed *= po.damRobot; }
+                  if (enemy.opt.insect && po.damInsect != null) { ed *= po.damInsect; }
+                  if (enemy.opt.monster && po.damMonster != null) { ed *= po.damMonster; }
+                  if (enemy.opt.alicorn && po.damAlicorn != null) { ed *= po.damAlicorn; }
+               }
+            }
+            catch (e:*) { }
+            // 7) 期望命中率（回放中命中随机重掷——时停的"已命中"以真实概率折算）
+            ed *= expectedHitCh(body, enemy);
+            // 8) 回放损耗余量（回放时武器额外损耗、未建模的随机项）
+            ed *= 0.9;
             if (ed < 0) { ed = 0; }
          }
          catch (e:*) { }

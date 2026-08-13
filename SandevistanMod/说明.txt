@@ -1,7 +1,19 @@
 ==========================================================
-  斯安维斯坦模组 (Sandevistan Mod) v1.60
+  斯安维斯坦模组 (Sandevistan Mod) v1.61
   for Fallout Equestria: REMAINS
 ==========================================================
+
+【v1.61 更新内容】（预判死亡模型扩展——按你的两个探查方向）
+  · 武器耐久减伤纳入：breaking（hp<maxhp/2 时 (maxhp-hp)/maxhp×2−1）
+    ——武器每射一发掉耐久、回放时比时停记录时更破，回放伤害更低；
+    枪械按 ×(1−0.3×brk)、近战 ×(1−0.6×brk)（对应游戏 resultDamage 系数）
+  · 玩家特攻倍率纳入：pers.damPony/damZombie/damRobot/damInsect/
+    damMonster/damAlicorn（对敌类型 opt 的加成，默认 1）
+  · 期望命中率纳入：按 udarBullet 命中判定期望值——
+    弹道类：accuracy = precision/dist（距离越远命中越低）与敌人
+    dexter/dexterPlus 对抗；近战类：闪避 dodge 判定；miss 判定
+    → 时停"已命中"的伤害按真实命中概率折算
+  · 回放损耗余量 ×0.9（回放中武器额外损耗与未建模随机项的保守补偿）
 
 【v1.60 更新内容】（预判死亡纳入护甲/穿甲 + 回放动画诊断）
   · 预判死亡伤害估算升级（按游戏 damage() 公式的期望值）：
@@ -313,7 +325,7 @@
   2. 双击运行 安装.bat（自动备份原版到 backup\ 并安装补丁）
   3. 从 Steam 正常启动游戏
   4. 进入游戏后按 \ 键触发
-  注：左上角会显示"SandevistanMod v1.60 已加载"标记
+  注：左上角会显示"SandevistanMod v1.61 已加载"标记
      （可在 config.txt 中设置 showmark=0 隐藏）
 
 【修改设置】
