@@ -100,7 +100,7 @@ package
       private var lastGhostY:Number = 0;
       private var panelOpen:Boolean = false;
       private var optPanelOn:Boolean = false;      // 选项页模组设置面板
-      private var optSel:int = 0;                  // 0=生效 1=冷却 2=残影不透明度 3=残影频率 4=渐变门槛 5=回放残影间隔 6=回放残影寿命
+      private var optSel:int = 0;                  // 0=生效 1=冷却 2=残影不透明度 3=残影频率 4=渐变门槛 5=回放残影间隔 6=回放残影寿命 7=投掷物可击落
       private var optTf:TextField = null;
       private var optBg:Sprite = null;
       private var lastGgControl:Boolean = true;
@@ -165,6 +165,10 @@ package
       private var enemyAtks:Dictionary = new Dictionary();      // 敌对单位 → [{frame, w, cx, cy}] 时停记录的开火事件（回放复现）
       private var preExistB:Dictionary = new Dictionary();       // 时停开始时已在飞的玩家攻击体（不清除，回放继续飞行）
       private var gSnapKol:Number = -1;   // 时停结束时手雷库存（回放结束恢复——重演抛掷不二次消耗）
+      private var cfgProjHits:Boolean = true;   // 投掷物可被击落（手雷/导弹/榴弹受击至 0 爆炸）
+      private var cfgProjHp:Number = 30;        // 投掷物血量
+      private var cfgProjArmor:Number = 0;      // 投掷物护甲（预留接口：伤害先减护甲）
+      private var projHp:Dictionary = new Dictionary();  // 投掷物 → 当前血量
       private function addEnemyAtk(u:Object, ev:Object):void
       {
          var arr:Array = enemyAtks[u];
@@ -274,7 +278,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.82 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.83 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -346,6 +350,9 @@ package
                   else if (k == "ghostalpha") cfgGhostAlpha = parseInt(v);
                   else if (k == "replayghost") cfgReplayGhost = parseInt(v);
                   else if (k == "replayghostlife") cfgReplayGhostLife = parseInt(v);
+                  else if (k == "projhits") cfgProjHits = v.toLowerCase() == "1" || v.toLowerCase() == "true";
+                  else if (k == "projhp") cfgProjHp = parseInt(v);
+                  else if (k == "projarmor") cfgProjArmor = parseInt(v);
                   else if (k == "slowfactor") cfgSlowFactor = parseFloat(v);
                   else if (k == "colormode") cfgColorMode = parseInt(v);
                   else if (k == "edgethresh") cfgEdgeThresh = parseFloat(v);
@@ -364,6 +371,10 @@ package
          if (cfgGhostAlpha > 100) cfgGhostAlpha = 100;
          if (cfgReplayGhost < 1) cfgReplayGhost = 1;
          if (cfgReplayGhostLife < 1) cfgReplayGhostLife = 1;
+         if (cfgProjHp < 1) cfgProjHp = 1;
+         if (cfgProjHp > 1000) cfgProjHp = 1000;
+         if (cfgProjArmor < 0) cfgProjArmor = 0;
+         if (cfgProjArmor > 500) cfgProjArmor = 500;
          trace("[SandyMod] config hotkey=" + cfgHotkey + " dur=" + cfgDuration + " cd=" + cfgCooldown);
       }
 
@@ -667,10 +678,15 @@ package
             // 回放残影生成间隔（显示帧，1-30）
             cfgReplayGhost = Math.max(1, Math.min(30, cfgReplayGhost + dir));
          }
-         else
+         else if (optSel == 6)
          {
             // 回放残影寿命（显示帧，1-60）
             cfgReplayGhostLife = Math.max(1, Math.min(60, cfgReplayGhostLife + dir));
+         }
+         else
+         {
+            // 投掷物可击落开关（手雷/导弹/榴弹受击至 0 爆炸）
+            cfgProjHits = !cfgProjHits;
          }
       }
 
@@ -688,6 +704,7 @@ package
             lines.push((optSel == 4 ? "> " : "  ") + "渐变门槛    " + cfgEdgeThresh);
             lines.push((optSel == 5 ? "> " : "  ") + "回放残影间隔 " + cfgReplayGhost + "帧");
             lines.push((optSel == 6 ? "> " : "  ") + "回放残影寿命 " + cfgReplayGhostLife + "帧");
+            lines.push((optSel == 7 ? "> " : "  ") + "投掷物可击落 " + (cfgProjHits ? "开" : "关"));
             lines.push("");
             lines.push("上下选择 左右调值 Enter保存");
             optTf.text = lines.join(String.fromCharCode(10));
@@ -696,7 +713,7 @@ package
             optTf.x = sw - 300;
             optTf.y = 120;
             optTf.width = 260;
-            optTf.height = 260;
+            optTf.height = 290;
             optBg.graphics.clear();
             optBg.graphics.lineStyle(1, 0x00FF99, 0.8);
             optBg.graphics.beginFill(0x002211, 0.75);
@@ -1301,6 +1318,100 @@ package
          return -1;
       }
 
+      // ===== 投掷物可击落（v1.83）：手雷（PhisBullet）/导弹（SmartBullet）/
+      // 榴弹（PhisBullet）受击至血量归零直接爆炸。仅限有爆炸半径的这两类
+      // ——普通子弹（含天角兽闪电）不参与。护甲 cfgProjArmor 为预留接口
+      // （伤害先减护甲）。时停中爆炸仅视觉（伤害清零——真实伤害由回放中
+      // 重演的子弹命中重演的投掷物结算，与攻击结算架构一致）。
+      private function stepProjHits(locP:Object, isSandy:Boolean):void
+      {
+         if (!cfgProjHits) return;
+         try
+         {
+            var projs:Array = [];
+            var objs:Array = [];
+            var o:Object = locP.firstObj;
+            var g:int = 0;
+            while (o != null)
+            {
+               try
+               {
+                  var qn:String = flash.utils.getQualifiedClassName(o);
+                  if (qn == "fe.weapon::PhisBullet" || qn == "fe.weapon::SmartBullet")
+                  {
+                     try { if (o.explRadius != null && o.explRadius > 0 && o.isExpl != true) { projs.push(o); } } catch (e:*) { }
+                  }
+                  else if (qn.indexOf("fe.weapon::") == 0)
+                  {
+                     objs.push(o);
+                  }
+               }
+               catch (e:*) { }
+               o = o.nobj;
+               if (++g > 20000) break;
+            }
+            // 清理已消失投掷物的血量记录
+            for (var kH:Object in projHp)
+            {
+               try { if (projs.indexOf(kH) < 0) { delete projHp[kH]; } } catch (e:*) { }
+            }
+            if (projs.length == 0 || objs.length == 0) return;
+            for each (var p:Object in projs)
+            {
+               for each (var b:Object in objs)
+               {
+                  try
+                  {
+                     if (b.owner == p.owner) continue;   // 同源不互击
+                     var dxp:Number = p.X - b.X;
+                     var dyp:Number = p.Y - b.Y;
+                     if (dxp * dxp + dyp * dyp > 28 * 28) continue;
+                     var dmg:Number = b.damage != null ? b.damage : 0;
+                     // 时停中玩家子弹伤害被清零——用捕获的原始伤害
+                     if (dmg <= 0 && b.owner == world.gg && origDam[b] != null) { dmg = origDam[b]; }
+                     if (dmg <= 0) continue;
+                     dmg -= cfgProjArmor;   // 护甲（预留接口）
+                     if (dmg <= 0) continue;
+                     try { locP.remObj(b); } catch (e:*) { }   // 命中子弹弹出
+                     var hpP:Number = projHp[p] != null ? projHp[p] : cfgProjHp;
+                     hpP -= dmg;
+                     if (hpP <= 0)
+                     {
+                        delete projHp[p];
+                        if (isSandy)
+                        {
+                           // 时停中：爆炸仅视觉（伤害清零后爆炸，结束恢复原值；
+                           // 真实伤害由回放中重演结算）
+                           try
+                           {
+                              var svExpl:Number = p.damageExpl != null ? p.damageExpl : 0;
+                              var svDest:Number = p.destroy != null ? p.destroy : 0;
+                              p.damageExpl = 0;
+                              p.destroy = 0;
+                              p.explosion();
+                              p.damageExpl = svExpl;
+                              p.destroy = svDest;
+                           }
+                           catch (e:*) { }
+                        }
+                        else
+                        {
+                           try { p.explosion(); } catch (e:*) { }
+                        }
+                     }
+                     else
+                     {
+                        projHp[p] = hpP;
+                     }
+                     break;
+                  }
+                  catch (e:*) { }
+               }
+            }
+         }
+         catch (e:*) { }
+      }
+
       // ===== 时停慢速世界：节流调用真实 loc.step()（每 slowfactor 帧 1 次 = 1/N 速）=====
       // "世界真慢速运行"：loc.step 步进玩家+全部对象+交互检测（celObj/celDist）——
       // 移动/计时/AI/交互/动画一致慢速，玩家可交互（门/箱等）。玩家本帧已手动 step
@@ -1533,6 +1644,9 @@ package
                }
             }
             catch (e:*) { }
+            // 3d. 投掷物可击落检测（v1.83）：子弹命中手雷/导弹/榴弹——
+            // 血量归零直接爆炸（时停中仅视觉）
+            stepProjHits(locS, true);
             // 4. 攻击体移动后的命中检测（预判伤害记入）
             oS = locS.firstObj;
             gS = 0;
@@ -2021,6 +2135,9 @@ package
             sb.push("ghostevery=" + cfgGhostEvery);
             sb.push("replayghost=" + cfgReplayGhost);
             sb.push("replayghostlife=" + cfgReplayGhostLife);
+            sb.push("projhits=" + (cfgProjHits ? 1 : 0));
+            sb.push("projhp=" + cfgProjHp);
+            sb.push("projarmor=" + cfgProjArmor);
             sb.push("ghostalpha=" + cfgGhostAlpha);
             sb.push("ghostblend=" + cfgGhostBlend);
             sb.push("colormode=" + cfgColorMode);
@@ -2899,6 +3016,9 @@ package
          stepPlayerBullets();
          stepUnrecordedAtk();
          replayObjects();
+         // 投掷物可击落检测（v1.83）：回放中重演的子弹命中重演的
+         // 投掷物 → 真实爆炸结算（时停中的引爆只是视觉预告）
+         stepProjHits(world.loc, false);
          // 被投掷单位撞击伤害结算（v1.74）：时停中记录的首次撞击——回放推进
          // 到撞击帧时按游戏 damageWall 公式结算（时停中已跳过伤害）。单位
          // 位置由 replayObjects 重钉在撞击位置，伤害与视觉同步。
@@ -3505,8 +3625,8 @@ package
          // ===== 选项页模组设置面板（主菜单/游戏内 Options 页）=====
          if (optPanelOn)
          {
-            if (e.keyCode == Keyboard.UP) { optSel = (optSel + 7 - 1) % 7; return; }
-            if (e.keyCode == Keyboard.DOWN) { optSel = (optSel + 1) % 7; return; }
+            if (e.keyCode == Keyboard.UP) { optSel = (optSel + 8 - 1) % 8; return; }
+            if (e.keyCode == Keyboard.DOWN) { optSel = (optSel + 1) % 8; return; }
             if (e.keyCode == Keyboard.LEFT) { optAdj(-1); return; }
             if (e.keyCode == Keyboard.RIGHT) { optAdj(1); return; }
             if (e.keyCode == Keyboard.ENTER) { saveConfigFile(); return; }
