@@ -265,7 +265,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.76 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.77 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -977,9 +977,24 @@ package
                                  if (ewBlk != null) { ewBlk.t_attack = 1; ewBlk.t_auto = 0; }  // 防残留射击
                               }
                               catch (e:*) { }
+                              // v1.77：强制瞄准目标=重演中的玩家当前位置——AI 的
+                              // cel 是 findCel 时的快照（玩家 5 倍速跑动时严重滞后，
+                              // 攻击方向偏离记录、武器/炮塔头转动发飘）。每步前把
+                              // celX/celY/celUnit 钉到玩家当前位置（武器 rot 向 cel
+                              // 转动 → 攻击方向正确、转动平滑）。
                               try
                               {
-                                 for (var stN:int = 0; stN < nRepSteps; stN++) { oR.step(); }
+                                 for (var stN:int = 0; stN < nRepSteps; stN++)
+                                 {
+                                    try
+                                    {
+                                       oR.celX = world.gg.X;
+                                       oR.celY = world.gg.Y;
+                                       oR["celUnit"] = world.gg;
+                                    }
+                                    catch (e:*) { }
+                                    oR.step();
+                                 }
                               }
                               catch (e:*) { }
                               world["enemyAct"] = savedEA;
@@ -1880,7 +1895,17 @@ package
             {
                ghostLayer.parent.removeChild(ghostLayer);
             }
-            world.visual.addChild(ghostLayer);
+            // 残影层插到玩家视觉层**下方**（v1.77：原 addChild 把残影叠在玩家
+            // 本体之上——玩家显示在残影下层）。按玩家 vis 所在层（visObjs[sloy]）
+            // 的索引前插，残影绘制在玩家本体之后（被本体遮挡）
+            try
+            {
+               var pvParent:Object = world.gg.vis != null ? world.gg.vis.parent : null;
+               var pvIdx:int = pvParent != null ? world.visual.getChildIndex(pvParent) : -1;
+               if (pvIdx > 0) { world.visual.addChildAt(ghostLayer, pvIdx); }
+               else { world.visual.addChild(ghostLayer); }
+            }
+            catch (e:*) { world.visual.addChild(ghostLayer); }
             log("[SandyMod] 斯安维斯坦 ON");
          }
          catch (err:*) { trace("[SandyMod] start error: " + err); }
