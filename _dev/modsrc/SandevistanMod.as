@@ -90,7 +90,7 @@ package
       private var replayAnimCat:Dictionary = new Dictionary();  // 回放动画档位迟滞（防 walk/run 抖动）
       private var panelOpen:Boolean = false;
       private var optPanelOn:Boolean = false;      // 选项页模组设置面板
-      private var optSel:int = 0;                  // 0=生效时间 1=冷却
+      private var optSel:int = 0;                  // 0=生效时间 1=冷却 2=残影不透明度 3=残影频率
       private var optTf:TextField = null;
       private var optBg:Sprite = null;
       private var lastGgControl:Boolean = true;
@@ -247,7 +247,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.66 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.67 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -609,9 +609,19 @@ package
          {
             cfgDuration = Math.max(30, Math.min(3600, cfgDuration + dir * 30));
          }
-         else
+         else if (optSel == 1)
          {
             cfgCooldown = Math.max(0, Math.min(3600, cfgCooldown + dir * 30));
+         }
+         else if (optSel == 2)
+         {
+            // 残影不透明度（5-100%，步进 5%）
+            cfgGhostAlpha = Math.max(5, Math.min(100, cfgGhostAlpha + dir * 5));
+         }
+         else
+         {
+            // 残影生成频率（帧间隔，1-30）
+            cfgGhostEvery = Math.max(1, Math.min(30, cfgGhostEvery + dir));
          }
       }
 
@@ -622,8 +632,10 @@ package
             if (optTf == null) return;
             var lines:Array = [];
             lines.push("-- SandevistanMod --");
-            lines.push((optSel == 0 ? "> " : "  ") + "生效时间  " + (cfgDuration / 30).toFixed(1) + "s");
-            lines.push((optSel == 1 ? "> " : "  ") + "冷却      " + (cfgCooldown / 30).toFixed(1) + "s");
+            lines.push((optSel == 0 ? "> " : "  ") + "生效时间   " + (cfgDuration / 30).toFixed(1) + "s");
+            lines.push((optSel == 1 ? "> " : "  ") + "冷却       " + (cfgCooldown / 30).toFixed(1) + "s");
+            lines.push((optSel == 2 ? "> " : "  ") + "残影不透明度 " + cfgGhostAlpha + "%");
+            lines.push((optSel == 3 ? "> " : "  ") + "残影频率    " + cfgGhostEvery + "帧");
             lines.push("");
             lines.push("上下选择 左右调值 Enter保存");
             optTf.text = lines.join(String.fromCharCode(10));
@@ -632,7 +644,7 @@ package
             optTf.x = sw - 300;
             optTf.y = 120;
             optTf.width = 260;
-            optTf.height = 140;
+            optTf.height = 170;
             optBg.graphics.clear();
             optBg.graphics.lineStyle(1, 0x00FF99, 0.8);
             optBg.graphics.beginFill(0x002211, 0.75);
@@ -1474,11 +1486,16 @@ package
             sb.push("duration=" + cfgDuration);
             sb.push("cooldown=" + cfgCooldown);
             sb.push("replayspeed=" + cfgReplaySpeed);
+            sb.push("slowfactor=" + cfgSlowFactor);
             sb.push("ghostevery=" + cfgGhostEvery);
+            sb.push("replayghost=" + cfgReplayGhost);
+            sb.push("ghostalpha=" + cfgGhostAlpha);
+            sb.push("ghostblend=" + cfgGhostBlend);
+            sb.push("colormode=" + cfgColorMode);
             sb.push("fxrun=" + (cfgFxRun ? 1 : 0));
             sb.push("showmark=" + (cfgShowMark ? 1 : 0));
-            sb.push("colormode=" + cfgColorMode);
             sb.push("panelkey=" + cfgPanelKey);
+            sb.push("diaglog=" + (cfgDiagLog ? 1 : 0));
             sb.push("debugtest=0");
             stream.writeUTFBytes(sb.join(NL) + NL);
             stream.close();
@@ -2582,8 +2599,8 @@ package
          // ===== 选项页模组设置面板（主菜单/游戏内 Options 页）=====
          if (optPanelOn)
          {
-            if (e.keyCode == Keyboard.UP) { optSel = 0; return; }
-            if (e.keyCode == Keyboard.DOWN) { optSel = 1; return; }
+            if (e.keyCode == Keyboard.UP) { optSel = (optSel + 4 - 1) % 4; return; }
+            if (e.keyCode == Keyboard.DOWN) { optSel = (optSel + 1) % 4; return; }
             if (e.keyCode == Keyboard.LEFT) { optAdj(-1); return; }
             if (e.keyCode == Keyboard.RIGHT) { optAdj(1); return; }
             if (e.keyCode == Keyboard.ENTER) { saveConfigFile(); return; }
