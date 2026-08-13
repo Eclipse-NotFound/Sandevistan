@@ -162,6 +162,14 @@ package
       private var thrownImpacts:Dictionary = new Dictionary();  // 被投掷单位 → {frame, dam} 首次撞击（回放该帧结算伤害）
       private var thrownPreV:Dictionary = new Dictionary();     // 被投掷单位 → {dx, dy} 节流步前速度（撞击检测）
       private var thrownUnits:Dictionary = new Dictionary();    // 时停中被投掷过的单位（回放全程只重钉不 step）
+      private var enemyAtks:Dictionary = new Dictionary();      // 敌对单位 → [{frame, w, cx, cy}] 时停记录的开火事件（回放复现）
+      private var gSnapKol:Number = -1;   // 时停结束时手雷库存（回放结束恢复——重演抛掷不二次消耗）
+      private function addEnemyAtk(u:Object, ev:Object):void
+      {
+         var arr:Array = enemyAtks[u];
+         if (arr == null) { arr = []; enemyAtks[u] = arr; }
+         arr.push(ev);
+      }
       private var testStage:int = 0;                     // 0=等待world 1=开始新游戏 2=等待进游戏 3=启动sandy 4=结束sandy
       private var testTicks:int = 0;
 
@@ -265,7 +273,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.80 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.81 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -783,6 +791,10 @@ package
                         if (cwRec != null && cwRec.rot != null) { wrotR = cwRec.rot; }
                      }
                      catch (e:*) { }
+                     // 视觉帧（v1.81：门开关等场景交互动画——帧变化触发记录，
+                     // 回放按帧重演）
+                     var vfR2:int = -1;
+                     try { if (oR.vis != null && oR.vis.currentFrame != null) { vfR2 = oR.vis.currentFrame; } } catch (e:*) { }
                      try
                      {
                         var cwR:* = oR["currentWeapon"];
@@ -820,22 +832,24 @@ package
                         }
                         else
                         {
-                           // 场景对象：移动检测（动了才记录）
+                           // 场景对象：移动或视觉帧变化（门开关/机关动画）才记录
+                           // ——视觉帧变化=交互动画（位置不动也记录，回放按帧重演）
                            var sp:Object = seenPos[oR];
-                           if (sp == null) { seenPos[oR] = { x: oR.X, y: oR.Y }; }
-                           else if (sp.x != oR.X || sp.y != oR.Y)
+                           if (sp == null) { seenPos[oR] = { x: oR.X, y: oR.Y, vf: vfR2 }; }
+                           else if (sp.x != oR.X || sp.y != oR.Y || sp.vf != vfR2)
                            {
                               arrR = [];
                               replayObjs[oR] = arrR;
                               replayObjArr.push(oR);
-                              for (var f1:int = 0; f1 < frameN; f1++) { arrR.push({ x: sp.x, y: sp.y, f: -1, s: "", wx: 0, wy: 0, twx: 0, twy: 0, vv: vvR }); }
-                              arrR.push({ x: oR.X, y: oR.Y, f: -1, s: "", wx: 0, wy: 0, twx: 0, twy: 0, vv: vvR });
+                              for (var f1:int = 0; f1 < frameN; f1++) { arrR.push({ x: sp.x, y: sp.y, f: -1, s: "", wx: 0, wy: 0, twx: 0, twy: 0, vv: vvR, vf: sp.vf }); }
+                              arrR.push({ x: oR.X, y: oR.Y, f: -1, s: "", wx: 0, wy: 0, twx: 0, twy: 0, vv: vvR, vf: vfR2 });
+                              sp.vf = vfR2;
                            }
                         }
                      }
                      else
                      {
-                        arrR.push({ x: oR.X, y: oR.Y, f: animFrameOf(oR), s: "", wx: wxR, wy: wyR, twx: txR, twy: tyR, vv: vvR, sto: stoR, wrot: wrotR });
+                        arrR.push({ x: oR.X, y: oR.Y, f: animFrameOf(oR), s: "", wx: wxR, wy: wyR, twx: txR, twy: tyR, vv: vvR, sto: stoR, wrot: wrotR, vf: vfR2 });
                      }
                   }
                }
@@ -855,20 +869,23 @@ package
                      try
                      {
                         if (oB2 == null || oB2 == world.gg || replayObjs[oB2] != null) continue;
+                        var vfB:int = -1;
+                        try { if (oB2.vis != null && oB2.vis.currentFrame != null) { vfB = oB2.vis.currentFrame; } } catch (e:*) { }
                         var sp2:Object = seenPos[oB2];
                         if (sp2 == null)
                         {
-                           seenPos[oB2] = { x: oB2.X, y: oB2.Y };
+                           seenPos[oB2] = { x: oB2.X, y: oB2.Y, vf: vfB };
                         }
-                        else if (sp2.x != oB2.X || sp2.y != oB2.Y)
+                        else if (sp2.x != oB2.X || sp2.y != oB2.Y || sp2.vf != vfB)
                         {
                            var arr2:Array = [];
                            replayObjs[oB2] = arr2;
                            replayObjArr.push(oB2);
                            var vvB:Boolean = true;
                            try { if (oB2.vis != null) { vvB = oB2.vis.visible; } } catch (e:*) { }
-                           for (var f2:int = 0; f2 < frameN; f2++) { arr2.push({ x: sp2.x, y: sp2.y, f: -1, s: "", wx: 0, wy: 0, twx: 0, twy: 0, vv: vvB }); }
-                           arr2.push({ x: oB2.X, y: oB2.Y, f: -1, s: "", wx: 0, wy: 0, twx: 0, twy: 0, vv: vvB });
+                           for (var f2:int = 0; f2 < frameN; f2++) { arr2.push({ x: sp2.x, y: sp2.y, f: -1, s: "", wx: 0, wy: 0, twx: 0, twy: 0, vv: vvB, vf: sp2.vf }); }
+                           arr2.push({ x: oB2.X, y: oB2.Y, f: -1, s: "", wx: 0, wy: 0, twx: 0, twy: 0, vv: vvB, vf: vfB });
+                           sp2.vf = vfB;
                         }
                      }
                      catch (e:*) { }
@@ -914,6 +931,16 @@ package
                   try
                   {
                      if (oR.vis != null && stR.vv != null) { oR.vis.visible = stR.vv; }
+                  }
+                  catch (e:*) { }
+                  // 场景对象视觉帧重演（v1.81）：门开关/机关等交互动画——
+                  // 按记录 gotoAndStop（帧动画逐帧恢复；仅非单位对象）
+                  try
+                  {
+                     if (oR["setPos"] == null && oR.vis != null && stR.vf != null && stR.vf >= 0)
+                     {
+                        oR.vis.gotoAndStop(stR.vf);
+                     }
                   }
                   catch (e:*) { }
                   // 敌人武器位置恢复（回放中武器不 step——按历史位置放回，与重演身体贴合）
@@ -973,28 +1000,25 @@ package
                         {
                            try
                            {
-                              // enemyAct=3（v1.76）：AI 完全运行（寻敌+追击+**攻击**）
-                              // ——攻击动画与实体型攻击（天角兽闪电等）在回放中真实
-                              // 重演。时停中子弹刚生成就命中无敌玩家、活不到录像帧
-                              // （rStart 诊断 atk 恒 0 的根源），回放改为让 AI 重新
-                              // 出手。步进速率见下方（1 世界步/显示帧）。
+                              // v1.81：攻击改由时停记录的开火事件复现（方向/时机
+                              // 忠实重演）——时停中子弹刚生成就命中无敌玩家、活不到
+                              // 录像帧（rStart 诊断 atk 恒 0），改在武器层面记录
+                              // t_attack 上升沿（含瞄准点），回放逐事件复现。
                               var savedEA:Number = world["enemyAct"];
-                              world["enemyAct"] = 3;
-                              // v1.80：移除旧守卫 t_attack=1——每帧把 t_attack 置 1
-                              // 会阻塞该帧 attack() 的初始化（attack 要求 t_attack<=0）；
-                              // 1 步/帧（v1.78）后每个显示帧的唯一一次 step 都被阻塞
-                              // → 攻击永不触发（无攻击动画/音效/子弹的根源）。
-                              // 残留射击无需防——enemyAct=3 下武器状态自然循环。
+                              world["enemyAct"] = 2;
+                              // v1.81：enemyAct=2——AI 寻敌/追击（走路跑步动画
+                              // 自然）但攻击需 >=3 **不会实时出手**（回放期间玩家
+                              // 不受攻击）；攻击改由时停记录的开火事件复现
+                              // （见下方——方向/时机忠实重演，替代 v1.76 的
+                              // "AI 重新开火"——那是瞄准回放中的玩家而非重演）。
                               // v1.78 速率修正：敌对单位每显示帧 step **1** 次——
                               // 时停中世界每 5 显示帧才步 1 次，回放每显示帧消耗
                               // 5 个历史帧 = 恰好 1 个世界步（v1.76 误用 5 次/帧，
                               // 攻击节奏与子弹飞行被错误加速 5 倍——玩家子弹一直
                               // 是 1 次/帧且速度正确，可作对照）。
                               // v1.79 瞄准按记录方向：cel 沿本帧记录的武器角延伸
-                              // （AI 步内把武器 rot 对准 cel → 攻击方向与时停一致）；
-                              // 替代 v1.77 的"钉到当前玩家"——玩家 5 倍瞬移使
-                              // 炮塔头每帧猛甩（抖动）。findCel 帧偶尔重瞄玩家，
-                              // 可接受。
+                              // （替代 v1.77 的"钉到当前玩家"——玩家 5 倍瞬移使
+                              // 炮塔头每帧猛甩）。
                               try
                               {
                                  try
@@ -1054,6 +1078,44 @@ package
                                  if (qnR2.indexOf("Turret") >= 0)
                                  {
                                     try { oR.animate(); } catch (e:*) { }
+                                 }
+                              }
+                              catch (e:*) { }
+                              // 按记录事件复现攻击（v1.81）：事件帧到达时，设
+                              // cel=记录瞄准点（世界坐标）、清冷却/蓄力，调
+                              // attack()+step() → 子弹按记录方向生成（枪弹/导弹
+                              // navod/手雷/魔法全覆盖）——时机与方向忠实重演；
+                              // 玩家回放期间不承受 AI 实时攻击（enemyAct=2）。
+                              try
+                              {
+                                 var eArr:Array = enemyAtks[oR];
+                                 if (eArr != null && eArr.length > 0)
+                                 {
+                                    for (var ei:int = eArr.length - 1; ei >= 0; ei--)
+                                    {
+                                       var ev:Object = eArr[ei];
+                                       if (ev.frame <= idxR)
+                                       {
+                                          try
+                                          {
+                                             var wA:* = ev.w == 0 ? oR["currentWeapon"] : (ev.w == 1 ? oR["throwWeapon"] : oR["magicWeapon"]);
+                                             if (wA != null && wA.attack != null)
+                                             {
+                                                oR.celX = ev.cx;
+                                                oR.celY = ev.cy;
+                                                try { oR["celUnit"] = world.gg; } catch (e:*) { }
+                                                wA.t_attack = 0;
+                                                wA.t_auto = 0;
+                                                wA.t_reload = 0;
+                                                try { if (wA.prep != null && wA.prep > 0) { wA.t_prep = wA.prep; } } catch (e:*) { }
+                                                wA.attack();
+                                                try { wA.step(); } catch (e:*) { }
+                                             }
+                                          }
+                                          catch (e:*) { }
+                                          eArr.splice(ei, 1);
+                                       }
+                                    }
                                  }
                               }
                               catch (e:*) { }
@@ -1244,6 +1306,47 @@ package
                }
             }
             catch (e:*) { }
+            // 1c. 敌人攻击事件快照（v1.81）：步前记录敌对单位各武器的
+            // t_attack——攻击初始化（attack() 置 t_attack=rapid）产生上升沿，
+            // 步后检测=本步开火。回放按记录事件复现攻击（方向/时机忠实
+            // 重演，AI 在回放中不再实时开火）。瞄准点取步前 cel（世界坐标）。
+            var atkPre:Dictionary = new Dictionary();
+            try
+            {
+               var unitsA:Array = locS.units;
+               if (unitsA != null)
+               {
+                  for each (var uA:Object in unitsA)
+                  {
+                     try
+                     {
+                        if (uA == null || uA == world.gg) continue;
+                        var qnA:String = flash.utils.getQualifiedClassName(uA);
+                        if (qnA.indexOf("NPC") >= 0) continue;
+                        var cwA:* = uA["currentWeapon"];
+                        if (cwA == null) continue;
+                        var recA:Object = { ta: cwA.t_attack != null ? cwA.t_attack : -1,
+                                            cx: uA.celX != null ? uA.celX : 0,
+                                            cy: uA.celY != null ? uA.celY : 0, tt: -1, tm: -1 };
+                        try
+                        {
+                           var twA:* = uA["throwWeapon"];
+                           if (twA != null && twA.t_attack != null) { recA.tt = twA.t_attack; }
+                        }
+                        catch (e:*) { }
+                        try
+                        {
+                           var mwA:* = uA["magicWeapon"];
+                           if (mwA != null && mwA.t_attack != null) { recA.tm = mwA.t_attack; }
+                        }
+                        catch (e:*) { }
+                        atkPre[uA] = recA;
+                     }
+                     catch (e:*) { }
+                  }
+               }
+            }
+            catch (e:*) { }
             // 2. 玩家攻击体清零 + 原始伤害捕获（必须在 loc.step 前——玩家刚手动
             //    step 完，本帧新生成的子弹尚未结算）
             var oS:Object = locS.firstObj;
@@ -1331,6 +1434,35 @@ package
                         // 投掷自然过期（未撞击）——无伤害记录
                         delete thrownPreV[kTV];
                      }
+                  }
+                  catch (e:*) { }
+               }
+            }
+            catch (e:*) { }
+            // 3c. 敌人攻击事件检测（v1.81）：t_attack 上升沿=本步开火——
+            // 记录 {帧号, 武器槽 0=枪 1=手雷 2=魔法, 瞄准点世界坐标} 供回放复现
+            try
+            {
+               var frameAtk:int = cfgDuration - sandyLeft;
+               for (var kA:Object in atkPre)
+               {
+                  try
+                  {
+                     var recA2:Object = atkPre[kA];
+                     var cwA2:* = kA["currentWeapon"];
+                     if (cwA2 != null && cwA2.t_attack > recA2.ta) { addEnemyAtk(kA, { frame: frameAtk, w: 0, cx: recA2.cx, cy: recA2.cy }); }
+                     try
+                     {
+                        var twA2:* = kA["throwWeapon"];
+                        if (twA2 != null && twA2.t_attack > recA2.tt) { addEnemyAtk(kA, { frame: frameAtk, w: 1, cx: recA2.cx, cy: recA2.cy }); }
+                     }
+                     catch (e:*) { }
+                     try
+                     {
+                        var mwA2:* = kA["magicWeapon"];
+                        if (mwA2 != null && mwA2.t_attack > recA2.tm) { addEnemyAtk(kA, { frame: frameAtk, w: 2, cx: recA2.cx, cy: recA2.cy }); }
+                     }
+                     catch (e:*) { }
                   }
                   catch (e:*) { }
                }
@@ -1905,6 +2037,8 @@ package
             thrownPreV = new Dictionary();
             thrownUnits = new Dictionary();
             thrownDamWall = new Dictionary();
+            enemyAtks = new Dictionary();       // 敌人攻击事件记录重置
+            gSnapKol = -1;
             rainbowIdx = 0;
             fxTicks = 0;
             replayDiagOnce = false;   // 回放开始诊断每轮重置
@@ -1957,6 +2091,18 @@ package
          {
             endSnapWpnHp = world.gg.currentWeapon != null ? world.gg.currentWeapon.hp : -1;
             endSnapMana = world.gg["mana"] != null ? world.gg["mana"] : -1;
+            // 手雷库存快照（v1.81：回放重演抛掷会二次消耗——结束恢复）
+            gSnapKol = -1;
+            try
+            {
+               var twG:* = world.gg["throwWeapon"];
+               if (twG != null && twG.ammo != null && world.invent != null
+                   && world.invent.items != null && world.invent.items[twG.ammo] != null)
+               {
+                  gSnapKol = world.invent.items[twG.ammo].kol;
+               }
+            }
+            catch (e:*) { }
          }
          catch (e:*) { }
 
@@ -2838,6 +2984,35 @@ package
             catch (e:*) { }
             endSnapWpnHp = -1;
             endSnapMana = -1;
+            // 手雷库存恢复（v1.81：回放重演抛掷不应二次消耗——恢复至时停结束
+            // 时数量，同步修正负重）
+            try
+            {
+               if (gSnapKol >= 0)
+               {
+                  var twG2:* = world.gg["throwWeapon"];
+                  if (twG2 != null && twG2.ammo != null && world.invent != null
+                      && world.invent.items != null && world.invent.items[twG2.ammo] != null)
+                  {
+                     var itG:* = world.invent.items[twG2.ammo];
+                     var dKol:Number = gSnapKol - itG.kol;
+                     if (dKol != 0)
+                     {
+                        try
+                        {
+                           if (world.invent.mass != null && world.invent.mass[2] != null && itG.mass != null)
+                           {
+                              world.invent.mass[2] += dKol * itG.mass;
+                           }
+                        }
+                        catch (e:*) { }
+                        itG.kol = gSnapKol;
+                     }
+                  }
+                  gSnapKol = -1;
+               }
+            }
+            catch (e:*) { }
             // 恢复被投掷单位的 damWall（时停中清零延后撞墙伤害——伤害已在
             // 回放撞击帧结算；恢复后世界正常运行）+ 清空撞击记录
             try
