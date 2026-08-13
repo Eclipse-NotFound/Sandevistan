@@ -35,10 +35,10 @@ package
    {
       // ---------- 配置（默认值，被 SandevistanMod/config.txt 覆盖） ----------
       private var cfgHotkey:int = Keyboard.BACKSLASH;   // 默认 \
-      private var cfgDuration:int = 240;                // 生效帧数（30fps -> 8 秒）
+      private var cfgDuration:int = 120;                // 生效帧数（30fps -> 4 秒）
       private var cfgCooldown:int = 0;                  // 冷却帧数（默认 0 = 无冷却，便于调试）
       private var cfgReplaySpeed:Number = 5;            // 回放速度倍率（回放时世界冻结，无渲染压力）
-      private var cfgGhostEvery:int = 6;                // 每 N 帧生成一个残影（时停期，默认 6）
+      private var cfgGhostEvery:int = 5;                // 每 N 帧生成一个残影（时停期，默认 5）
       private var cfgFxRun:Boolean = true;              // 时停期间粒子特效是否继续
 
       // ---------- 运行时状态 ----------
@@ -152,12 +152,15 @@ package
       private var cfgShowMark:Boolean = true;            // 启动时显示模组已加载标记
       private var cfgPanelKey:int = Keyboard.F9;         // 参数面板热键
       private var cfgGhostBlend:int = 1;                  // 残影混合: 1=normal柔和 0=add发光
-      private var cfgGhostAlpha:int = 60;                 // 残影不透明度（百分比，默认 60）
-      private var cfgReplayGhost:int = 2;                 // 回放残影生成间隔（每 N 个显示帧 1 个）
-      private var cfgReplayGhostLife:int = 8;             // 回放残影寿命（显示帧，短寿命=拖尾）
+      private var cfgGhostAlpha:int = 70;                 // 残影不透明度（百分比，默认 70）
+      private var cfgReplayGhost:int = 1;                 // 回放残影生成间隔（每 N 个显示帧 1 个）
+      private var cfgReplayGhostLife:int = 4;             // 回放残影寿命（显示帧，短寿命=拖尾）
       private var cfgColorMode:int = 0;                   // 残影配色: 0=彩虹 1=边缘行者绿蓝紫
-      private var cfgEdgeThresh:Number = 10;             // 边缘行者渐变门槛（速度≥此值全绿）
+      private var cfgEdgeThresh:Number = 15;             // 边缘行者渐变门槛（速度≥此值全绿）
       private var playerAnimCat:int = 0;                  // 回放玩家动画档位迟滞（1=待机 2=走 3=跑）
+      private var thrownImpacts:Dictionary = new Dictionary();  // 被投掷单位 → {frame, dam} 首次撞击（回放该帧结算伤害）
+      private var thrownPreV:Dictionary = new Dictionary();     // 被投掷单位 → {dx, dy} 节流步前速度（撞击检测）
+      private var thrownUnits:Dictionary = new Dictionary();    // 时停中被投掷过的单位（回放全程只重钉不 step）
       private var testStage:int = 0;                     // 0=等待world 1=开始新游戏 2=等待进游戏 3=启动sandy 4=结束sandy
       private var testTicks:int = 0;
 
@@ -261,7 +264,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.73 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.74 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -646,8 +649,8 @@ package
          }
          else if (optSel == 4)
          {
-            // 渐变门槛（速度阈值，2-30，步进 2）
-            cfgEdgeThresh = Math.max(2, Math.min(30, cfgEdgeThresh + dir * 2));
+            // 渐变门槛（速度阈值，1-30，步进 1——允许奇数）
+            cfgEdgeThresh = Math.max(1, Math.min(30, cfgEdgeThresh + dir));
          }
          else if (optSel == 5)
          {
@@ -933,11 +936,11 @@ package
                         // enemyAct 门）。
                         var qnR2:String = flash.utils.getQualifiedClassName(oR);
                         var isHostile:Boolean = qnR2.indexOf("NPC") < 0 && oR["currentWeapon"] != null;
-                        // 被念力投掷的单位：只重钉位置（不 step）——step 会物理移动
-                        // 单位并可能撞墙触发 damageWall（伤害应延后到回放结束后
-                        // 自然结算）；飞行姿态定格在时停末帧，飞行轨迹按记录重演
+                        // 被念力投掷过的单位：只重钉位置（不 step）——step 会物理
+                        // 移动单位并可能撞墙触发 damageWall（撞击伤害在回放中按
+                        // 记录帧结算，见 stepReplay）；飞行姿态定格，轨迹按记录重演
                         var isThrownU:Boolean = false;
-                        try { isThrownU = oR.t_throw > 0; } catch (e:*) { }
+                        try { isThrownU = oR.t_throw > 0 || thrownUnits[oR] != null; } catch (e:*) { }
                         if (isThrownU)
                         {
                         }
@@ -945,8 +948,12 @@ package
                         {
                            try
                            {
+                              // enemyAct=2：AI 可寻敌（findCel → aiState 进入追击
+                              // 状态 → 走路/跑步动画自然）但攻击需 >=3 不会出手。
+                              // v1.71 用 1（不寻敌）时 AI 常停留 aiState==7（警觉
+                              // 待机）→ 动画僵死——"有时正常有时僵死"的根源。
                               var savedEA:Number = world["enemyAct"];
-                              world["enemyAct"] = 1;
+                              world["enemyAct"] = 2;
                               try
                               {
                                  var ewBlk:* = oR["currentWeapon"];
@@ -1069,9 +1076,11 @@ package
             {
                try { kP.dx = 0; kP.dy = 0; kP.stay = true; } catch (e:*) { }
             }
-            // 1b. 念力投掷的箱子/敌人：钉住 t_throw 防过期——碰撞在 t_throw>0 时
+            // 1b. 念力投掷的箱子：钉住 t_throw 防过期——碰撞在 t_throw>0 时
             // 只打晕、过期后结算伤害（时停中不当场结算）；时停结束不恢复，
-            // 抛射物在回放结束后继续飞行自然结算撞击伤害
+            // 箱子在回放结束后继续飞行自然结算撞击伤害。
+            // 敌人见下方循环：不钉 t_throw（真实反弹+首撞结束投掷），撞击
+            // 记录后回放中结算伤害。
             try
             {
                var objsT:Array = locS.objs;
@@ -1099,15 +1108,20 @@ package
                      {
                         if (uT != null && uT != world.gg && uT.t_throw > 0)
                         {
-                           // 钉住投掷状态（飞行延续）+ 清零 damWall——撞墙伤害
-                           // （damageWall 在 t_throw>0 且 |速度|>damWallSpeed 时当场
-                           // 结算，钉 t_throw 反而让条件恒真）必须清零才真正延后。
-                           // 原值回放结束恢复，伤害在回放结束后自然结算。
-                           uT.t_throw = 50;
+                           // 时停中撞墙不当场结算：清零 damWall（damageWall 的
+                           // 伤害被跳过，碰撞反弹照常）。**不再钉 t_throw**——
+                           // 首次撞击后由模组手动置 0 结束投掷（等价真实
+                           // damageWall 行为）→ 单位自然制动下坠，反弹真实。
+                           // 步前快照速度，步后检测撞击（见步进后的第 5 步）。
                            try
                            {
                               if (thrownDamWall[uT] == null) { thrownDamWall[uT] = uT.damWall; }
                               uT.damWall = 0;
+                              thrownUnits[uT] = true;
+                              if (thrownImpacts[uT] == null && thrownPreV[uT] == null)
+                              {
+                                 thrownPreV[uT] = { dx: uT.dx, dy: uT.dy };
+                              }
                            }
                            catch (e:*) { }
                         }
@@ -1173,6 +1187,40 @@ package
                   world.ctr[kj] = cSave[kj];
                }
                world.gg["levit"] = savedLevit;
+            }
+            catch (e:*) { }
+            // 3b. 被投掷单位撞击检测（v1.74）：步后速度反转（elast 反弹/落地
+            //     dy=0）且 |步前速度|>damWallSpeed = 撞墙/地/天花板。记录首次
+            //     撞击帧与伤害（游戏 damageWall 公式：速度/damWallSpeed×damWall），
+            //     并手动置 t_throw=0 结束投掷（等价真实 damageWall——单位自然
+            //     制动下坠，反弹真实）；伤害在回放中撞击帧结算。
+            try
+            {
+               for (var kTV:Object in thrownPreV)
+               {
+                  try
+                  {
+                     var pvT:Object = thrownPreV[kTV];
+                     var dwsT:Number = kTV.damWallSpeed != null ? kTV.damWallSpeed : 12;
+                     var spdT:Number = Math.sqrt(pvT.dx * pvT.dx + pvT.dy * pvT.dy);
+                     var hitT:Boolean = (pvT.dx < -dwsT && kTV.dx >= 0) || (pvT.dx > dwsT && kTV.dx <= 0)
+                                      || (pvT.dy < -dwsT && kTV.dy >= 0) || (pvT.dy > dwsT && kTV.dy <= 0);
+                     if (hitT)
+                     {
+                        var dWallT:Number = thrownDamWall[kTV] != null ? thrownDamWall[kTV] : 0;
+                        var damT:Number = spdT / dwsT * dWallT;
+                        thrownImpacts[kTV] = { frame: cfgDuration - sandyLeft, dam: damT };
+                        kTV.t_throw = 0;   // 结束投掷（真实 damageWall 行为）
+                        delete thrownPreV[kTV];
+                     }
+                     else if (kTV.t_throw <= 0)
+                     {
+                        // 投掷自然过期（未撞击）——无伤害记录
+                        delete thrownPreV[kTV];
+                     }
+                  }
+                  catch (e:*) { }
+               }
             }
             catch (e:*) { }
             // 4. 攻击体移动后的命中检测（预判伤害记入）
@@ -1720,6 +1768,10 @@ package
             replayAnimCat = new Dictionary();
             replayObjArr = [];
             seenPos = new Dictionary();
+            thrownImpacts = new Dictionary();   // 投掷撞击记录重置
+            thrownPreV = new Dictionary();
+            thrownUnits = new Dictionary();
+            thrownDamWall = new Dictionary();
             rainbowIdx = 0;
             fxTicks = 0;
             playerAnimCat = 0;   // 回放玩家动画档位迟滞重置
@@ -2392,6 +2444,29 @@ package
          }
          stepPlayerBullets();
          replayObjects();
+         // 被投掷单位撞击伤害结算（v1.74）：时停中记录的首次撞击——回放推进
+         // 到撞击帧时按游戏 damageWall 公式结算（时停中已跳过伤害）。单位
+         // 位置由 replayObjects 重钉在撞击位置，伤害与视觉同步。
+         try
+         {
+            for (var kTI:Object in thrownImpacts)
+            {
+               try
+               {
+                  var impTI:Object = thrownImpacts[kTI];
+                  if (replayIdx >= impTI.frame)
+                  {
+                     if (impTI.dam > 0 && kTI.damage != null)
+                     {
+                        kTI.damage(impTI.dam, 2);   // D_PHIS=2（物理撞击）
+                     }
+                     delete thrownImpacts[kTI];
+                  }
+               }
+               catch (e:*) { }
+            }
+         }
+         catch (e:*) { }
          if (cfgFxRun) { try { stepParticles(world.loc); } catch (e:*) { } }
          // 回放动画诊断（每 30 帧）：采样前 2 个重演单位的视觉像素哈希——
          // 哈希随帧变化=动画在播放；恒不变=渲染冻结（僵死根因判定）
@@ -2546,8 +2621,8 @@ package
             catch (e:*) { }
             endSnapWpnHp = -1;
             endSnapMana = -1;
-            // 恢复被投掷单位的 damWall（时停中清零以延后撞墙伤害——回放结束后
-            // 世界恢复，飞行单位撞墙自然结算）
+            // 恢复被投掷单位的 damWall（时停中清零延后撞墙伤害——伤害已在
+            // 回放撞击帧结算；恢复后世界正常运行）+ 清空撞击记录
             try
             {
                for (var kT:Object in thrownDamWall)
@@ -2555,6 +2630,9 @@ package
                   try { kT.damWall = thrownDamWall[kT]; } catch (e:*) { }
                }
                thrownDamWall = new Dictionary();
+               thrownImpacts = new Dictionary();
+               thrownPreV = new Dictionary();
+               thrownUnits = new Dictionary();
             }
             catch (e:*) { }
             replayWpn = null;
