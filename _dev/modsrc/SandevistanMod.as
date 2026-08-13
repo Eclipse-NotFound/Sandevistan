@@ -65,6 +65,7 @@ package
       private var fxTicks:int = 0;
       private var diagTick:int = 0;
       private var replayDiagTick:int = 0;      // 回放段诊断计数
+      private var replayDiagOnce:Boolean = false;  // 回放开始诊断（每轮回放一次）
       private var replayAtkTick:int = 0;       // 回放段攻击链路诊断计数
       private var replayBodyTick:int = 0;      // 回放段攻击体状态诊断计数
       private var replayAnimTick:int = 0;      // 回放段动画像素哈希诊断计数
@@ -264,7 +265,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.74 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.75 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -1050,6 +1051,41 @@ package
          catch (e:*) { }
       }
 
+      // ===== 回放中未被录制的敌人攻击体手动 step（v1.75）=====
+      // 实体型攻击（如天角兽闪电等）若不在录像中（replayObjs 未覆盖），回放
+      // 中会静止在时停结束位置、回放结束后才继续运动——改为每显示帧 step 1 次
+      // （回放 5 倍速 = 时停中 1/5 速度的 5 倍 = 自然全速重演轨迹）。
+      // 已录制的攻击体仍由 replayObjects 按记录重钉（精确重演）。
+      private function stepUnrecordedAtk():void
+      {
+         try
+         {
+            var locB:Object = world.loc;
+            if (locB == null) return;
+            var oB:Object = locB.firstObj;
+            var gB:int = 0;
+            while (oB != null)
+            {
+               var nxB:Object = oB.nobj;
+               try
+               {
+                  if (oB != world.gg && replayObjs[oB] == null)
+                  {
+                     var qnB:String = flash.utils.getQualifiedClassName(oB);
+                     if (qnB.indexOf("fe.weapon::") == 0 || qnB.indexOf("fe.unit::") == 0 || qnB.indexOf("fe.loc::") == 0)
+                     {
+                        if (oB["step"] != null) { oB.step(); }
+                     }
+                  }
+               }
+               catch (e:*) { }
+               oB = nxB;
+               if (++gB > 20000) break;
+            }
+         }
+         catch (e:*) { }
+      }
+
       // ===== 读取对象动画帧（共用视觉体系 vis.osn.body，容错）=====
       private function animFrameOf(o:Object):int
       {
@@ -1340,6 +1376,19 @@ package
             var dr:Number = enemy.skin != null ? enemy.skin : 0;
             if (enemy.armor_qual > 0) { dr += enemy.armor_qual * (enemy.armor != null ? enemy.armor : 0); }
             if (enemy.shithp > 0) { dr += enemy.shitArmor != null ? enemy.shitArmor : 0; }
+            // 3b) 炮塔 turret3 的临时护盾（damage() 内每次受击临时设
+            //     shithp=1000/shitArmor=25，受击后立刻清零——模型平时读不到，
+            //     预测偏松的根源）：护盾在子弹速度与朝向同向（dx*storona>0，
+            //     即绕到炮塔后方）时失效，正面/侧向命中减伤 25
+            try
+            {
+               if (enemy.id != null && String(enemy.id).indexOf("turret3") == 0
+                   && body.dx != null && body.dx * enemy.storona <= 0)
+               {
+                  dr += 25;
+               }
+            }
+            catch (e:*) { }
             dr = dr * (body.armorMult != null ? body.armorMult : 1) - (body.pier != null ? body.pier : 0);
             if (dr > 0) { ed -= dr; }
             // 4) 全局易伤倍率
@@ -1464,7 +1513,10 @@ package
                enemy.sost = 3;   // 死亡姿态：control 早退（Monstrik 检查 sost==3）+
                                  // animate 播 die 动画；不走 timerDie（internal 无法访问）
                // 无死亡动画的单位（炮塔/机器等 animate 不检查 sost）：禁用使其
-               // 停止行动（Unit.step 对 disabled 早退）——炮塔类死亡判定可视化
+               // 停止行动（Unit.step 对 disabled 早退）——炮塔类死亡判定可视化；
+               // v1.75 增补：调用其 expl() 慢速播放爆炸动画（粒子只随节流帧
+               // 步进=1/N 慢动作）+ 隐藏本体视觉（真实死亡的爆炸+消失观感；
+               // endSandy 的 restorePredDead 恢复，回放中真实结算死亡）
                try
                {
                   var qnPd:String = flash.utils.getQualifiedClassName(enemy);
@@ -1473,6 +1525,8 @@ package
                   {
                      enemy.disabled = true;
                      try { if (enemy.hpbar != null) enemy.hpbar.visible = false; } catch (e:*) { }
+                     try { if (enemy.expl != null) { enemy.expl(); } } catch (e:*) { }
+                     try { if (enemy.vis != null) { enemy.vis.visible = false; } } catch (e:*) { }
                   }
                }
                catch (e:*) { }
@@ -1494,6 +1548,8 @@ package
                {
                   if (k != null && k.sost == 3) { k.sost = 1; }
                   if (k != null && k.disabled) { k.disabled = false; }
+                  // 炮塔类预判死亡时隐藏的视觉恢复（回放中真实结算死亡）
+                  if (k != null && k.vis != null) { k.vis.visible = true; }
                }
                catch (e:*) { }
             }
@@ -1774,6 +1830,7 @@ package
             thrownDamWall = new Dictionary();
             rainbowIdx = 0;
             fxTicks = 0;
+            replayDiagOnce = false;   // 回放开始诊断每轮重置
             playerAnimCat = 0;   // 回放玩家动画档位迟滞重置
             recPrevHold = -1;   // 开火记录基线重置
             recPrevTA = -1;
@@ -2027,12 +2084,10 @@ package
 
             if (cfgFxRun)
             {
-               // 节流帧粒子已被 loc.step 步进——跳过手动 step，只维护发射器计数
+               // v1.75：粒子只随节流帧（loc.step）步进 = 1/N 慢速——与"世界真
+               // 慢速运行"一致；炮塔预判死亡的爆炸粒子自然慢放（慢动作爆炸）。
+               // 每帧仍维护发射器计数（World.step 守卫内的重置由模组代做）
                resetFxCounter();
-               if (!isThr)
-               {
-                  stepParticles(world.loc);
-               }
             }
 
             // [DIAG] jump simulation: every 60 frames press jump for 3 frames
@@ -2114,6 +2169,48 @@ package
             catch (e:*) { }
          }
          catch (e:*) { }
+         // 回放开始诊断（每轮回放一次，v1.75）：录像构成（按类前缀计数）+
+         // loc 中敌人攻击体（类名/位置/是否已录制）——定位"实体型攻击回放
+         // 中静止"的未覆盖对象
+         if (!replayDiagOnce)
+         {
+            replayDiagOnce = true;
+            try
+            {
+               var cntWp:int = 0, cntUn:int = 0, cntSc:int = 0, cntOt:int = 0;
+               for each (var roX:Object in replayObjArr)
+               {
+                  try
+                  {
+                     var qnX:String = flash.utils.getQualifiedClassName(roX);
+                     if (qnX.indexOf("fe.weapon::") == 0) { cntWp++; }
+                     else if (qnX.indexOf("fe.unit::") == 0 || qnX.indexOf("fe.serv::") == 0) { cntUn++; }
+                     else if (qnX.indexOf("fe.loc::") == 0) { cntSc++; }
+                     else { cntOt++; }
+                  }
+                  catch (e:*) { }
+               }
+               log("[DIAG] rStart: recObjs=" + replayObjArr.length + " atk=" + cntWp + " unit=" + cntUn + " scene=" + cntSc + " other=" + cntOt);
+               var oR2:Object = world.loc != null ? world.loc.firstObj : null;
+               var gR2:int = 0;
+               while (oR2 != null)
+               {
+                  try
+                  {
+                     var qnR3:String = flash.utils.getQualifiedClassName(oR2);
+                     if (qnR3.indexOf("fe.weapon::") == 0 && oR2["owner"] != world.gg)
+                     {
+                        log("[DIAG] rStart: enemyAtk cls=" + qnR3 + " X=" + oR2.X + " Y=" + oR2.Y
+                            + " rec=" + (replayObjs[oR2] != null ? 1 : 0));
+                     }
+                  }
+                  catch (e:*) { }
+                  oR2 = oR2.nobj;
+                  if (++gR2 > 20000) break;
+               }
+            }
+            catch (e:*) { }
+         }
          // 回放段诊断：loc 中攻击体计数（生成/结算是否平衡）与弹夹状态（每 60 帧）
          if (++replayDiagTick % 60 == 1)
          {
@@ -2443,6 +2540,7 @@ package
             catch (e:*) { }
          }
          stepPlayerBullets();
+         stepUnrecordedAtk();
          replayObjects();
          // 被投掷单位撞击伤害结算（v1.74）：时停中记录的首次撞击——回放推进
          // 到撞击帧时按游戏 damageWall 公式结算（时停中已跳过伤害）。单位
