@@ -265,7 +265,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.78 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.79 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -772,6 +772,17 @@ package
                      // 视觉可见性（v1.76：尸鬼钻地/炮塔死亡隐藏等按记录重演）
                      var vvR:Boolean = true;
                      try { if (oR.vis != null) { vvR = oR.vis.visible; } } catch (e:*) { }
+                     // 朝向与武器转动（v1.79：回放中 AI 因位置重钉不转向、
+                     // 瞄准目标失真——按记录恢复 storona 与武器 rot）
+                     var stoR:Number = 1;
+                     try { if (oR.storona != null) { stoR = oR.storona; } } catch (e:*) { }
+                     var wrotR:Number = -99;
+                     try
+                     {
+                        var cwRec:* = oR["currentWeapon"];
+                        if (cwRec != null && cwRec.rot != null) { wrotR = cwRec.rot; }
+                     }
+                     catch (e:*) { }
                      try
                      {
                         var cwR:* = oR["currentWeapon"];
@@ -804,8 +815,8 @@ package
                               }
                               catch (e:*) { }
                            }
-                           for (var f0:int = 0; f0 < frameN; f0++) { arrR.push({ x: oR.X, y: oR.Y, f: -1, s: "", wx: wxR, wy: wyR, twx: txR, twy: tyR, vv: vvR }); }
-                           arrR.push({ x: oR.X, y: oR.Y, f: animFrameOf(oR), s: sndR, wx: wxR, wy: wyR, twx: txR, twy: tyR, vv: vvR });
+                           for (var f0:int = 0; f0 < frameN; f0++) { arrR.push({ x: oR.X, y: oR.Y, f: -1, s: "", wx: wxR, wy: wyR, twx: txR, twy: tyR, vv: vvR, sto: stoR, wrot: wrotR }); }
+                           arrR.push({ x: oR.X, y: oR.Y, f: animFrameOf(oR), s: sndR, wx: wxR, wy: wyR, twx: txR, twy: tyR, vv: vvR, sto: stoR, wrot: wrotR });
                         }
                         else
                         {
@@ -824,7 +835,7 @@ package
                      }
                      else
                      {
-                        arrR.push({ x: oR.X, y: oR.Y, f: animFrameOf(oR), s: "", wx: wxR, wy: wyR, twx: txR, twy: tyR, vv: vvR });
+                        arrR.push({ x: oR.X, y: oR.Y, f: animFrameOf(oR), s: "", wx: wxR, wy: wyR, twx: txR, twy: tyR, vv: vvR, sto: stoR, wrot: wrotR });
                      }
                   }
                }
@@ -980,15 +991,20 @@ package
                               // 5 个历史帧 = 恰好 1 个世界步（v1.76 误用 5 次/帧，
                               // 攻击节奏与子弹飞行被错误加速 5 倍——玩家子弹一直
                               // 是 1 次/帧且速度正确，可作对照）。
-                              // v1.77：每步前把瞄准点钉到重演中的玩家当前位置——
-                              // AI 的 cel 是 findCel 瞬间的快照（玩家 5 倍速跑动时
-                              // 滞后→攻击方向偏离、武器/炮塔头转动发飘）。
+                              // v1.79 瞄准按记录方向：cel 沿本帧记录的武器角延伸
+                              // （AI 步内把武器 rot 对准 cel → 攻击方向与时停一致）；
+                              // 替代 v1.77 的"钉到当前玩家"——玩家 5 倍瞬移使
+                              // 炮塔头每帧猛甩（抖动）。findCel 帧偶尔重瞄玩家，
+                              // 可接受。
                               try
                               {
                                  try
                                  {
-                                    oR.celX = world.gg.X;
-                                    oR.celY = world.gg.Y;
+                                    if (stR.wrot != null && stR.wrot != -99)
+                                    {
+                                       oR.celX = oR.X + Math.cos(stR.wrot) * 300;
+                                       oR.celY = oR.Y + Math.sin(stR.wrot) * 300;
+                                    }
                                     oR["celUnit"] = world.gg;
                                  }
                                  catch (e:*) { }
@@ -1013,6 +1029,32 @@ package
                                     cwE2.X = stR.wx;
                                     cwE2.Y = stR.wy;
                                     if (cwE2.vis != null) { cwE2.vis.x = stR.wx; cwE2.vis.y = stR.wy; }
+                                 }
+                              }
+                              catch (e:*) { }
+                              // 朝向与武器转动如实重演（v1.79）：AI 因位置重钉
+                              // 不转向（storona 冻结在时停结束方向）；按记录恢复
+                              // storona 与武器 rot（武器视觉随 rot 重摆；炮塔头等
+                              // 嵌套视觉经 animate() 重摆——炮塔 animate 无逐帧
+                              // 动画推进，多调一次无副作用）
+                              try
+                              {
+                                 if (stR.sto != null) { oR.storona = stR.sto; }
+                                 try
+                                 {
+                                    if (oR["setVisPos"] != null) { oR.setVisPos(); }
+                                    else if (oR.vis != null) { oR.vis.scaleX = stR.sto != null ? stR.sto : 1; }
+                                 }
+                                 catch (e:*) { }
+                                 var cwE3:* = oR["currentWeapon"];
+                                 if (cwE3 != null && stR.wrot != null && stR.wrot != -99)
+                                 {
+                                    cwE3.rot = stR.wrot;
+                                    try { if (cwE3.vis != null) { cwE3.vis.rotation = stR.wrot * 180 / Math.PI; } } catch (e:*) { }
+                                 }
+                                 if (qnR2.indexOf("Turret") >= 0)
+                                 {
+                                    try { oR.animate(); } catch (e:*) { }
                                  }
                               }
                               catch (e:*) { }
