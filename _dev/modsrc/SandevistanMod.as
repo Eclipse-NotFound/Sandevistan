@@ -265,7 +265,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.79 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.80 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -980,12 +980,11 @@ package
                               // 出手。步进速率见下方（1 世界步/显示帧）。
                               var savedEA:Number = world["enemyAct"];
                               world["enemyAct"] = 3;
-                              try
-                              {
-                                 var ewBlk:* = oR["currentWeapon"];
-                                 if (ewBlk != null) { ewBlk.t_attack = 1; ewBlk.t_auto = 0; }  // 防残留射击
-                              }
-                              catch (e:*) { }
+                              // v1.80：移除旧守卫 t_attack=1——每帧把 t_attack 置 1
+                              // 会阻塞该帧 attack() 的初始化（attack 要求 t_attack<=0）；
+                              // 1 步/帧（v1.78）后每个显示帧的唯一一次 step 都被阻塞
+                              // → 攻击永不触发（无攻击动画/音效/子弹的根源）。
+                              // 残留射击无需防——enemyAct=3 下武器状态自然循环。
                               // v1.78 速率修正：敌对单位每显示帧 step **1** 次——
                               // 时停中世界每 5 显示帧才步 1 次，回放每显示帧消耗
                               // 5 个历史帧 = 恰好 1 个世界步（v1.76 误用 5 次/帧，
@@ -2775,6 +2774,30 @@ package
             world.ctr.keyPunch = false;
             world.ctr.keyGrenad = false;
             world.ctr.keyMagic = false;
+         }
+         catch (e:*) { }
+         // v1.80：预判死亡隐藏（vis.visible=false）的炮塔类若回放中未被真实
+         // 击杀（预测偏松/子弹未命中），回放结束后恢复可见——否则以隐身状态
+         // 存活并继续攻击。正常钻地的尸鬼由 AI 状态（aiState=5）自行控制
+         // 可见性，不受影响。
+         try
+         {
+            for each (var oV:Object in replayObjArr)
+            {
+               try
+               {
+                  if (oV != null && oV["setPos"] != null && oV.vis != null)
+                  {
+                     var qnV:String = flash.utils.getQualifiedClassName(oV);
+                     if (qnV.indexOf("Turret") >= 0 || qnV.indexOf("Bloat") >= 0
+                         || qnV.indexOf("Robot") >= 0 || qnV.indexOf("Msp") >= 0)
+                     {
+                        oV.vis.visible = true;
+                     }
+                  }
+               }
+               catch (e:*) { }
+            }
          }
          catch (e:*) { }
          // 清空场景重演记录
