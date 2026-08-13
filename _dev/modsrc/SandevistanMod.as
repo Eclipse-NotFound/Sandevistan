@@ -68,6 +68,7 @@ package
       private var replayAtkTick:int = 0;       // 回放段攻击链路诊断计数
       private var replayBodyTick:int = 0;      // 回放段攻击体状态诊断计数
       private var replayAnimTick:int = 0;      // 回放段动画像素哈希诊断计数
+      private var replayFireTick:int = 0;      // 回放段开火诊断计数
       private var sandyAtkTick:int = 0;        // 时停段攻击状态诊断计数
       private var sandyEnemyTick:int = 0;      // 时停段敌人移动诊断计数
       private var mouseAtkDown:Boolean = false;   // 鼠标攻击键按住状态
@@ -206,7 +207,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.62 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.63 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -1581,6 +1582,10 @@ package
             mouseAtkPulse = false;   // 脉冲每帧消费一次
             var loc:Object = world.loc;
             loc.gg.step();   // 玩家全速手动 step
+            // 单步后的武器状态（节流帧第二遍步会再递减一次——用单步值做开火检测，
+            // 否则小攻速武器（rapid 1-2）的开火帧记录值与上一帧相同，上升沿检测不到）
+            var tAManual:int = world.gg.currentWeapon != null ? world.gg.currentWeapon.t_attack : 0;
+            var holdManual:Number = world.gg.currentWeapon != null ? world.gg.currentWeapon.hold : -1;
 
             slowTick++;
             var isThr:Boolean = (slowTick % cfgSlowFactor == 0);
@@ -1597,7 +1602,7 @@ package
                            w: world.gg.currentWeapon != null ? world.gg.currentWeapon.id : "",
                            wx: world.gg.currentWeapon != null ? world.gg.currentWeapon.X : 0,
                            wy: world.gg.currentWeapon != null ? world.gg.currentWeapon.Y : 0,
-                           tA: world.gg.currentWeapon != null ? world.gg.currentWeapon.t_attack : 0 });
+                           tA: tAManual, hold: holdManual });
             // 记录重演状态（场景级录像：敌人/物品/攻击体每帧位置+动画帧+生成音效）
             recordReplayObjects();
             // 时停攻击状态诊断（每 30 帧）：观察时停中攻击意图与武器状态
@@ -1777,7 +1782,8 @@ package
          var grenOn:Boolean = false;
          var magOn:Boolean = false;
          var prevTA:int = -1;
-         var fireCnt:int = 0;   // 窗口内真实开火次数（tA 上升沿 = 攻击初始化）
+         var prevHold:Number = -1;
+         var fireCnt:int = 0;   // 窗口内真实开火次数（tA 上升沿/弹匣下降沿 = 攻击初始化）
          var prevWid:String = replayWpn != null ? replayWpn.id : "";   // 当前回放武器 id（用于重演切换）
          for (var i:int = 0; i < n; i++)
          {
@@ -1794,6 +1800,8 @@ package
                switchToWeapon(tgtW);
                replayWpn = tgtW;
                prevWid = h.w;
+               prevTA = -1;      // 换武器重置开火检测基线（t_attack/hold 被 setNull 清零）
+               prevHold = -1;
             }
             // 驱动玩家沿历史路径移动（真回放：玩家本体重演）
             try
@@ -1842,16 +1850,23 @@ package
             if (h.p == true) punchOn = true;
             if (h.g == true) grenOn = true;
             if (h.m == true) magOn = true;
-            // 真实开火计数：t_attack 上升沿 = 攻击初始化（时停中每帧记录武器冷却）
+            // 真实开火计数：
+            // 1) tA 上升沿 = 攻击初始化（时停中每帧记录武器冷却）
+            // 2) 小攻速武器（rapid 1-2）开火帧 tA 与上一帧相同——弹匣下降沿兜底
             if (h.tA != null)
             {
-               if (prevTA >= 0 && h.tA > prevTA) { fireCnt++; }
+               if (prevTA >= 0)
+               {
+                  if (h.tA > prevTA) { fireCnt++; }
+                  else if (h.tA == prevTA && h.hold != null && prevHold >= 0 && h.hold < prevHold) { fireCnt++; }
+               }
                prevTA = h.tA;
             }
             else
             {
                prevTA = -1;
             }
+            if (h.hold != null) { prevHold = h.hold; } else { prevHold = -1; }
             // 残影抽稀：每 cfgReplayGhost 个历史帧生成 1 个（每帧最多 1 个）
             if (cfgReplayGhost < 1) cfgReplayGhost = 1;
             if (ghostIdx % cfgReplayGhost == 0)
@@ -1882,6 +1897,7 @@ package
          // 5. 粒子特效照常（枪口火焰等）
          try { world.loc.gg.step(); } catch (e:*) { }
          var cwNow:* = world.gg.currentWeapon;
+         var execCnt:int = 0;   // 实际执行的开火数（attack() 返回 true）
          if (cwNow != null && fireCnt > 0)
          {
             var qnNow:String = flash.utils.getQualifiedClassName(cwNow);
@@ -1893,7 +1909,14 @@ package
                   cwNow.t_attack = 0;
                   cwNow.t_auto = 0;
                   cwNow.t_reload = 0;
-                  cwNow.attack();     // 初始化（t_attack=rapid）
+                  // 蓄力武器（prep>0）：强制充满蓄力——单次 attack() 只加 2 点
+                  // t_prep，不满 prep 不会开火（跳跃时蓄力武器吞攻击的来源之一）
+                  try
+                  {
+                     if (cwNow.prep > 0) { cwNow.t_prep = cwNow.prep; }
+                  }
+                  catch (e:*) { }
+                  if (cwNow.attack() == true) { execCnt++; }
                   cwNow.step();       // 武器步进（shoot 在 t_attack==rapid 触发）
                   // 连发武器（dkol>0）：初始化后持续步进完成整个连发
                   try
@@ -1939,6 +1962,19 @@ package
                   catch (e:*) { }
                }
             }
+         }
+         // 开火诊断（每 15 帧）：fireCnt=检测到应开火数 exec=实际执行数
+         // 玩家 stay（跳跃状态）——定位跳跃相关吞攻击
+         if (++replayFireTick % 15 == 0)
+         {
+            try
+            {
+               log("[DIAG] rFire: cnt=" + fireCnt + " exec=" + execCnt
+                   + " pStay=" + world.gg.stay + " pJump=" + world.gg.isJump
+                   + " cw=" + (cwNow != null ? flash.utils.getQualifiedClassName(cwNow) : "none")
+                   + " tA=" + (cwNow != null ? cwNow.t_attack : -1));
+            }
+            catch (e:*) { }
          }
          stepPlayerBullets();
          replayObjects();
