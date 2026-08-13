@@ -144,7 +144,8 @@ package
       private var cfgPanelKey:int = Keyboard.F9;         // 参数面板热键
       private var cfgGhostBlend:int = 1;                  // 残影混合: 1=normal柔和 0=add发光
       private var cfgGhostAlpha:int = 25;                 // 残影不透明度（百分比）
-      private var cfgReplayGhost:int = 12;                 // 回放残影间隔（每 N 个历史帧生成 1 个）
+      private var cfgReplayGhost:int = 24;                // 回放残影间隔（每 N 个历史帧生成 1 个）
+      private var cfgColorMode:int = 0;                   // 残影配色: 0=彩虹 1=边缘行者绿蓝紫
       private var testStage:int = 0;                     // 0=等待world 1=开始新游戏 2=等待进游戏 3=启动sandy 4=结束sandy
       private var testTicks:int = 0;
 
@@ -159,6 +160,45 @@ package
          ];
          var c:Array = cols[idx % cols.length];
          return new ColorTransform(c[0], c[1], c[2], a, c[3], c[4], c[5], 0);
+      }
+
+      // 边缘行者绿-蓝-紫渐变（索引 0=绿 ... 7=紫红）
+      private function edgePalette(idx:int):ColorTransform
+      {
+         var a:Number = Math.max(0.05, Math.min(1, cfgGhostAlpha / 100));
+         var cols:Array = [
+            [1.0, 2.0, 1.0, 0, 90, 0],    // 绿
+            [0.8, 1.8, 1.6, 0, 60, 90],   // 青绿
+            [0.6, 1.6, 1.9, 0, 40, 120],  // 青
+            [0.6, 1.2, 2.0, 0, 0, 150],   // 蓝青
+            [0.7, 0.9, 2.0, 0, 0, 175],   // 蓝
+            [0.9, 0.6, 2.0, 20, 0, 195],  // 蓝紫
+            [1.2, 0.4, 1.9, 50, 0, 195],  // 紫
+            [1.4, 0.3, 1.5, 70, 0, 175]   // 紫红
+         ];
+         var c:Array = cols[Math.max(0, Math.min(7, idx))];
+         return new ColorTransform(c[0], c[1], c[2], a, c[3], c[4], c[5], 0);
+      }
+
+      // 速度→渐变索引：速度快（残影稀疏）→ 低索引（绿）；速度慢（残影密集）→ 高索引（蓝紫）
+      private function speedToEdgeIdx(spd:Number):int
+      {
+         var idx:int = 7 - Math.round(spd / 2.5);
+         if (idx < 0) { idx = 0; }
+         if (idx > 7) { idx = 7; }
+         return idx;
+      }
+
+      // 残影配色分发：colormode=1 边缘行者（速度映射绿蓝紫）；否则彩虹循环
+      private function ghostColor(spd:Number):ColorTransform
+      {
+         if (cfgColorMode == 1)
+         {
+            return edgePalette(speedToEdgeIdx(spd));
+         }
+         var ct:ColorTransform = palette(rainbowIdx);
+         rainbowIdx++;
+         return ct;
       }
 
       public function SandevistanMod()
@@ -207,7 +247,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.65 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.66 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -279,6 +319,7 @@ package
                   else if (k == "ghostalpha") cfgGhostAlpha = parseInt(v);
                   else if (k == "replayghost") cfgReplayGhost = parseInt(v);
                   else if (k == "slowfactor") cfgSlowFactor = parseFloat(v);
+                  else if (k == "colormode") cfgColorMode = parseInt(v);
                }
             }
          }
@@ -1436,6 +1477,7 @@ package
             sb.push("ghostevery=" + cfgGhostEvery);
             sb.push("fxrun=" + (cfgFxRun ? 1 : 0));
             sb.push("showmark=" + (cfgShowMark ? 1 : 0));
+            sb.push("colormode=" + cfgColorMode);
             sb.push("panelkey=" + cfgPanelKey);
             sb.push("debugtest=0");
             stream.writeUTFBytes(sb.join(NL) + NL);
@@ -1508,6 +1550,7 @@ package
             seenPos = new Dictionary();
             rainbowIdx = 0;
             fxTicks = 0;
+            clearAllGhosts();   // 防上一轮残留的无限残影
             if (ghostLayer == null)
             {
                ghostLayer = new Sprite();
@@ -1528,6 +1571,8 @@ package
          sandyActive = false;
          // 预判死亡的敌人恢复存活（回放中真实结算死亡——时停的死亡动画只是预告）
          restorePredDead();
+         // 清除时停期间的无限残影（回放开始，残影全部清场）
+         clearAllGhosts();
          // 清除时停期间玩家发射的冻结子弹（回放重演攻击，避免双倍火力）
          clearFrozenBullets();
          // 快照时停结束状态（回放结束后恢复：弹夹剩余=时停结束时，背包弹药不被回放消耗）
@@ -1690,8 +1735,7 @@ package
             if (fxTicks >= cfgGhostEvery)
             {
                fxTicks = 0;
-               spawnGhost(gg, palette(rainbowIdx));
-               rainbowIdx++;
+               spawnGhost(gg, ghostColor(Math.abs(gg.dx) + Math.abs(gg.dy)));
             }
             if (diagTick++ % 30 == 0)
             {
@@ -1827,6 +1871,8 @@ package
          var fireCnt:int = 0;   // 窗口内真实开火次数（tA 上升沿/弹匣下降沿 = 攻击初始化）
          var lastAimX:Number = 0;   // 窗口末帧瞄准点（开火前武器重新瞄准用）
          var lastAimY:Number = 0;
+         var prevGx:Number = 0;   // 上一历史帧位置（残影速度/配色用）
+         var prevGy:Number = 0;
          var prevWid:String = replayWpn != null ? replayWpn.id : "";   // 当前回放武器 id（用于重演切换）
          for (var i:int = 0; i < n; i++)
          {
@@ -1933,9 +1979,12 @@ package
             if (cfgReplayGhost < 1) cfgReplayGhost = 1;
             if (ghostIdx % cfgReplayGhost == 0)
             {
-               spawnGhostAt(h.x, h.y, h.s, h.r, h.v, palette(rainbowIdx));
-               rainbowIdx++;
+               // 回放残影配色：按回放速度（历史相邻帧位移×回放倍率）映射
+               var gSpd:Number = Math.sqrt((h.x - prevGx) * (h.x - prevGx) + (h.y - prevGy) * (h.y - prevGy)) * cfgReplaySpeed;
+               spawnGhostAt(h.x, h.y, h.s, h.r, h.v, ghostColor(gSpd));
             }
+            prevGx = h.x;
+            prevGy = h.y;
             replayIdx++;
          }
          // ===== 攻击重演（v1.62）：按历史记录的真实开火次数精确驱动 =====
@@ -2290,7 +2339,7 @@ package
             spr.addChild(bit);
             bit.blendMode = cfgGhostBlend == 0 ? "add" : "normal";
             ghostLayer.addChild(spr);
-            ghosts.push({ s: spr, t: 30, b: bmp });
+            ghosts.push({ s: spr, t: -1, life: 0, b: bmp });   // 无限残影（时停结束才清除）
          }
          catch (e:*) { log("[DIAG] spawnGhost ERROR: " + e + " vis=" + (world != null && world.gg != null ? world.gg.vis : "n/a")); }
       }
@@ -2345,9 +2394,20 @@ package
             spr.addChild(bit);
             bit.blendMode = cfgGhostBlend == 0 ? "add" : "normal";
             ghostLayer.addChild(spr);
-            ghosts.push({ s: spr, t: 15, b: bmp });
+            ghosts.push({ s: spr, t: 45, life: 45, b: bmp });  // 回放残影：寿命 45 帧
          }
          catch (e:*) { log("[DIAG] spawnGhostAt ERROR: " + e); }
+      }
+
+      // ===== 清除全部残影（时停结束/新时停开始时调用——时停残影无限寿命）=====
+      private function clearAllGhosts():void
+      {
+         for each (var g:Object in ghosts)
+         {
+            try { if (g.s.parent != null) g.s.parent.removeChild(g.s); } catch (e:*) { }
+            try { g.b.dispose(); } catch (e:*) { }
+         }
+         ghosts = [];
       }
 
       private function updateGhosts():void
@@ -2357,13 +2417,21 @@ package
          while (i >= 0)
          {
             var g:Object = ghosts[i];
-            g.t--;
-            g.s.alpha = g.t / 30;
-            if (g.t <= 0)
+            if (g.t < 0)
             {
-               if (g.s.parent != null) g.s.parent.removeChild(g.s);
-               g.b.dispose();
-               ghosts.splice(i, 1);
+               // 无限残影（时停期间）：恒定低透明度，只在时停结束统一清除
+               g.s.alpha = Math.max(0.05, Math.min(1, cfgGhostAlpha / 100));
+            }
+            else
+            {
+               g.t--;
+               g.s.alpha = g.t / (g.life != null && g.life > 0 ? g.life : 30);
+               if (g.t <= 0)
+               {
+                  if (g.s.parent != null) g.s.parent.removeChild(g.s);
+                  g.b.dispose();
+                  ghosts.splice(i, 1);
+               }
             }
             i--;
          }
