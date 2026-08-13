@@ -204,7 +204,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.56 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.57 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -777,7 +777,11 @@ package
                         var mvy:Number = (nxtR2.y - stR.y) * cfgReplaySpeed;
                         oR.dx = mvx;
                         oR.dy = mvy;
-                        oR.stay = mvx * mvx + mvy * mvy < 36;
+                        // stay 阈值放宽：Monstrik 的 animate 在 stay=false 且非水中/悬浮时
+                        // 走"jump"姿势——回放 5 倍速下移动敌人的速度平方常超旧阈值(36)，
+                        // 导致移动敌人全变跳跃姿势（僵死感）。阈值 900（|v|<30）让
+                        // 移动敌人走 walk/run（按 dx 大小选择）
+                        oR.stay = mvx * mvx + mvy * mvy < 900;
                         oR.animate();
                      }
                   }
@@ -872,17 +876,21 @@ package
                if (++gS > 20000) break;
             }
             // 3. 真实世界步进。玩家在 loc.step 内会被步一次（本帧第二次）——
-            //    预先清键使其为无输入的自由物理步（防新攻击/重复加速），步后恢复。
+            //    只清攻击/动作键（防新攻击生成子弹泄漏与重复交互/下蹲）；
+            //    **保留移动键含 keyJump/keyBeUp**——清 keyJump 会让腾空时的
+            //    第二遍步触发二段跳分支（!stay && !keyJump && isDJ）反复起跳，
+            //    破坏念力悬浮并反复消耗魔力。步后恢复按键与悬浮状态。
             var cSave:Object = {};
+            var savedLevit:int = 0;
             try
             {
-               var kNames:Array = ["keyLeft","keyRight","keyJump","keySit","keyBeUp","keyRun","keyAttack","keyPunch",
-                  "keyReload","keyGrenad","keyMagic","keyAction"];
+               var kNames:Array = ["keyAttack","keyPunch","keyReload","keyGrenad","keyMagic","keyAction","keySit"];
                for (var ki:int = 0; ki < kNames.length; ki++)
                {
                   cSave[kNames[ki]] = world.ctr[kNames[ki]];
                   world.ctr[kNames[ki]] = false;
                }
+               savedLevit = world.gg["levit"];
             }
             catch (e:*) { }
             try
@@ -896,6 +904,7 @@ package
                {
                   world.ctr[kj] = cSave[kj];
                }
+               world.gg["levit"] = savedLevit;
             }
             catch (e:*) { }
             // 4. 攻击体移动后的命中检测（预判伤害记入）
@@ -956,11 +965,42 @@ package
          catch (e:*) { }
       }
 
-      // ===== 预判伤害记入：攻击体位置盒检测命中敌人（同阵营跳过），累计并判定死亡 =====
+      // ===== 预判伤害记入：优先用攻击体 parr（真实碰撞命中的单位——时停中碰撞
+      // 仍发生，只是伤害被清零）；parr 为空时（近战捕获早于 bindMove 窗口）退回
+      // 位置盒检测。伤害 × 0.7 补偿 udarBullet 的随机伤害系数(0.7-1.0)与闪避/精度。
       private function creditHit(body:Object, dmg:Number):void
       {
          try
          {
+            var factor:Number = 0.7;
+            // 1) 精确路径：真实碰撞证据 parr（public）
+            try
+            {
+               var parrA:Array = body.parr;
+               if (parrA != null && parrA.length > 0)
+               {
+                  var credArr:Array = hitCred[body];
+                  if (credArr == null) { credArr = []; hitCred[body] = credArr; }
+                  for each (var u2:Object in parrA)
+                  {
+                     if (u2 == null || u2 == world.gg) continue;
+                     try
+                     {
+                        if (credArr.indexOf(u2) != -1) continue;
+                        if (u2.sost != 1) continue;
+                        if (u2.fraction == world.gg.fraction) continue;
+                        if (predDam[u2] == null) { predDam[u2] = 0; }
+                        predDam[u2] += dmg * factor;
+                        credArr.push(u2);
+                        checkPredDeath(u2);
+                     }
+                     catch (e:*) { }
+                  }
+                  return;
+               }
+            }
+            catch (e:*) { }
+            // 2) 兜底：位置盒检测（近战挥击捕获时 parr 尚未命中）
             if (hitCred[body] != null) return;
             var unitsU:Object = world.loc != null ? world.loc.units : null;
             if (unitsU == null) return;
@@ -976,7 +1016,7 @@ package
                   if (bx >= u.X1 && bx <= u.X2 && by >= u.Y1 && by <= u.Y2)
                   {
                      if (predDam[u] == null) { predDam[u] = 0; }
-                     predDam[u] += dmg;
+                     predDam[u] += dmg * factor;
                      hitCred[body] = u;
                      checkPredDeath(u);
                      return;
