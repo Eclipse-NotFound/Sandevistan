@@ -89,11 +89,13 @@ package
       private var hitCred:Dictionary = new Dictionary();   // 攻击体 → 已记入的敌人（去重）
       private var predDead:Dictionary = new Dictionary();  // 敌人 → true（时停中放死亡动画）
       private var replayAnimCat:Dictionary = new Dictionary();  // 回放动画档位迟滞（防 walk/run 抖动）
+      private var endSnapWpnHp:Number = -1;  // 时停结束时武器耐久（回放结束恢复——防双倍损耗）
+      private var endSnapMana:Number = -1;   // 时停结束时魔法值（回放结束恢复——防双倍消耗）
       private var lastGhostX:Number = 0;   // 上一残影位置（叠加防护：最小位移门槛）
       private var lastGhostY:Number = 0;
       private var panelOpen:Boolean = false;
       private var optPanelOn:Boolean = false;      // 选项页模组设置面板
-      private var optSel:int = 0;                  // 0=生效时间 1=冷却 2=残影不透明度 3=残影频率
+      private var optSel:int = 0;                  // 0=生效 1=冷却 2=残影不透明度 3=残影频率 4=渐变门槛
       private var optTf:TextField = null;
       private var optBg:Sprite = null;
       private var lastGgControl:Boolean = true;
@@ -149,6 +151,7 @@ package
       private var cfgGhostAlpha:int = 25;                 // 残影不透明度（百分比）
       private var cfgReplayGhost:int = 24;                // 回放残影间隔（每 N 个历史帧生成 1 个）
       private var cfgColorMode:int = 0;                   // 残影配色: 0=彩虹 1=边缘行者绿蓝紫
+      private var cfgEdgeThresh:Number = 10;             // 边缘行者渐变门槛（速度≥此值全绿）
       private var testStage:int = 0;                     // 0=等待world 1=开始新游戏 2=等待进游戏 3=启动sandy 4=结束sandy
       private var testTicks:int = 0;
 
@@ -186,7 +189,7 @@ package
       // 速度→渐变索引：非线性——速度 ≥10 全绿；10→0 才渐变（幂曲线加速向蓝紫）
       private function speedToEdgeIdx(spd:Number):int
       {
-         var t:Number = spd / 10;
+         var t:Number = spd / (cfgEdgeThresh > 0 ? cfgEdgeThresh : 10);
          if (t >= 1) { return 0; }
          var idx:int = Math.round(7 * Math.pow(1 - t, 1.4));
          if (idx < 0) { idx = 0; }
@@ -252,7 +255,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.70 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.71 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -325,6 +328,7 @@ package
                   else if (k == "replayghost") cfgReplayGhost = parseInt(v);
                   else if (k == "slowfactor") cfgSlowFactor = parseFloat(v);
                   else if (k == "colormode") cfgColorMode = parseInt(v);
+                  else if (k == "edgethresh") cfgEdgeThresh = parseFloat(v);
                }
             }
          }
@@ -623,10 +627,15 @@ package
             // 残影不透明度（5-100%，步进 5%）
             cfgGhostAlpha = Math.max(5, Math.min(100, cfgGhostAlpha + dir * 5));
          }
-         else
+         else if (optSel == 3)
          {
             // 残影生成频率（帧间隔，1-30）
             cfgGhostEvery = Math.max(1, Math.min(30, cfgGhostEvery + dir));
+         }
+         else
+         {
+            // 渐变门槛（速度阈值，2-30，步进 2）
+            cfgEdgeThresh = Math.max(2, Math.min(30, cfgEdgeThresh + dir * 2));
          }
       }
 
@@ -641,6 +650,7 @@ package
             lines.push((optSel == 1 ? "> " : "  ") + "冷却       " + (cfgCooldown / 30).toFixed(1) + "s");
             lines.push((optSel == 2 ? "> " : "  ") + "残影不透明度 " + cfgGhostAlpha + "%");
             lines.push((optSel == 3 ? "> " : "  ") + "残影频率    " + cfgGhostEvery + "帧");
+            lines.push((optSel == 4 ? "> " : "  ") + "渐变门槛    " + cfgEdgeThresh);
             lines.push("");
             lines.push("上下选择 左右调值 Enter保存");
             optTf.text = lines.join(String.fromCharCode(10));
@@ -649,7 +659,7 @@ package
             optTf.x = sw - 300;
             optTf.y = 120;
             optTf.width = 260;
-            optTf.height = 170;
+            optTf.height = 190;
             optBg.graphics.clear();
             optBg.graphics.lineStyle(1, 0x00FF99, 0.8);
             optBg.graphics.beginFill(0x002211, 0.75);
@@ -890,61 +900,71 @@ package
                         var nxtR2:Object = arrR[Math.min(idxR + 1, arrR.length - 1)];
                         var mvx:Number = (nxtR2.x - stR.x) * cfgReplaySpeed;
                         var mvy:Number = (nxtR2.y - stR.y) * cfgReplaySpeed;
-                        // AI 状态机推进（修复小马类"走路僵死"的关键）：掠夺者等
-                        // 单位的动画状态依赖 aiState（如 aiState==7 时 `dx==0||
-                        // aiState==7` 恒走 stay 分支——回放中 aiState 冻结则动画
-                        // 永不切换/重启）。enemyAct=1 让 control 的 AI 状态机运行
-                        // （aiState/aiTCh 推进）但**不寻敌不攻击**（findCel 需
-                        // enemyAct>1、攻击需 >=3）——动画状态随 AI 自然变化，
-                        // 移动仍由下方量化 dx 控制。NPC 排除（其 control 无
+                        // 动画驱动（v1.71 定稿）：敌对单位完整 step + 位置重钉——
+                        // enemyAct=1 让 AI 状态机运行（aiState/aiTCh 推进，动画
+                        // 状态随 AI 自然变化——走路/跑步/待机全部正常）但**不寻敌
+                        // 不攻击**（findCel 需 >1、攻击需 >=3）；step 内 run() 会
+                        // 移动单位，步后重钉到记录位置（视觉按记录重演，动画按
+                        // AI 状态自然播放）。NPC 保留量化驱动（其 control 无
                         // enemyAct 门）。
-                        try
+                        var qnR2:String = flash.utils.getQualifiedClassName(oR);
+                        var isHostile:Boolean = qnR2.indexOf("NPC") < 0 && oR["currentWeapon"] != null;
+                        if (isHostile)
                         {
-                           var qnR2:String = flash.utils.getQualifiedClassName(oR);
-                           if (qnR2.indexOf("NPC") < 0 && oR["currentWeapon"] != null)
+                           try
                            {
                               var savedEA:Number = world["enemyAct"];
                               world["enemyAct"] = 1;
-                              oR.control();
+                              try
+                              {
+                                 var ewBlk:* = oR["currentWeapon"];
+                                 if (ewBlk != null) { ewBlk.t_attack = 1; ewBlk.t_auto = 0; }  // 防残留射击
+                              }
+                              catch (e:*) { }
+                              try { oR.step(); } catch (e:*) { }
                               world["enemyAct"] = savedEA;
+                              // 重钉位置/视觉（step 内 run() 移动了单位）
+                              try { oR.setPos(stR.x, stR.y); } catch (e:*) { }
+                              try
+                              {
+                                 if (oR["setVisPos"] != null) { oR.setVisPos(); }
+                                 else if (oR.vis != null) { oR.vis.x = stR.x; oR.vis.y = stR.y; }
+                              }
+                              catch (e:*) { }
+                              // 武器位置重钉（step 内武器 step 会移动武器）
+                              try
+                              {
+                                 var cwE2:* = oR["currentWeapon"];
+                                 if (cwE2 != null && stR.wx != null)
+                                 {
+                                    cwE2.X = stR.wx;
+                                    cwE2.Y = stR.wy;
+                                    if (cwE2.vis != null) { cwE2.vis.x = stR.wx; cwE2.vis.y = stR.wy; }
+                                 }
+                              }
+                              catch (e:*) { }
                            }
+                           catch (e:*) { }
                         }
-                        catch (e:*) { }
-                        // 量化 dx + 迟滞（防 walk/run 边界抖动→每次切状态都
-                        // restart 回首帧=僵死）：按速度选 stay/walk/run 档位，
-                        // 显著跨越才切换；dx 取档位代表值（符号取运动方向）
-                        // （覆盖 AI 状态机设置的 dx——移动仍按记录重演）
-                        var spd:Number = Math.sqrt(mvx * mvx + mvy * mvy);
-                        var newCat:int = spd < 1.5 ? 1 : (spd < 8 ? 2 : 3);
-                        var cat:int = replayAnimCat[oR] != null ? replayAnimCat[oR] : 0;
-                        if (cat != 0)
+                        else
                         {
-                           if (cat == 3 && newCat == 2 && spd > 5) { newCat = 3; }
-                           else if (cat == 2 && newCat == 1 && spd > 2.5) { newCat = 2; }
-                           else if (cat == 1 && newCat == 2 && spd < 3) { newCat = 1; }
-                           else if (cat == 2 && newCat == 3 && spd < 10) { newCat = 2; }
-                        }
-                        replayAnimCat[oR] = newCat;
-                        oR.stay = true;   // 恒 stay：避免 Monstrik 走 jump 姿势
-                        oR.dx = newCat == 1 ? 0 : (newCat == 2 ? (mvx >= 0 ? 4 : -4) : (mvx >= 0 ? 12 : -12));
-                        // 小马类单位（Raider/Slaver/Zebra/Pon/Merc）：动画定期重启——
-                        // 其静止姿态可能是单帧/非循环动画（st=true 后 blit 停止=僵死）；
-                        // 每 12 显示帧反转 dx 让动画状态切换触发 restart（静止→walk；
-                        // 走路→stay）
-                        try
-                        {
-                           var qnA2:String = flash.utils.getQualifiedClassName(oR);
-                           var isPonyA:Boolean = qnA2.indexOf("Slaver") >= 0 || qnA2.indexOf("Raider") >= 0
-                              || qnA2.indexOf("Zebra") >= 0 || qnA2.indexOf("UnitPon") >= 0
-                              || qnA2.indexOf("Merc") >= 0;
-                           if (isPonyA && replayIdx % 12 == 0 && newCat != 3)
+                           // NPC/无武器单位：量化驱动（按记录位移选择动画档位）
+                           var spd:Number = Math.sqrt(mvx * mvx + mvy * mvy);
+                           var newCat:int = spd < 1.5 ? 1 : (spd < 8 ? 2 : 3);
+                           var cat:int = replayAnimCat[oR] != null ? replayAnimCat[oR] : 0;
+                           if (cat != 0)
                            {
-                              oR.dx = newCat == 1 ? 4 : 0;
+                              if (cat == 3 && newCat == 2 && spd > 5) { newCat = 3; }
+                              else if (cat == 2 && newCat == 1 && spd > 2.5) { newCat = 2; }
+                              else if (cat == 1 && newCat == 2 && spd < 3) { newCat = 1; }
+                              else if (cat == 2 && newCat == 3 && spd < 10) { newCat = 2; }
                            }
+                           replayAnimCat[oR] = newCat;
+                           oR.stay = true;
+                           oR.dx = newCat == 1 ? 0 : (newCat == 2 ? (mvx >= 0 ? 4 : -4) : (mvx >= 0 ? 12 : -12));
+                           oR.dy = 0;
+                           oR.animate();
                         }
-                        catch (e:*) { }
-                        oR.dy = 0;
-                        oR.animate();
                      }
                   }
                   catch (e:*) { }
@@ -1017,9 +1037,9 @@ package
             {
                try { kP.dx = 0; kP.dy = 0; kP.stay = true; } catch (e:*) { }
             }
-            // 1b. 念力投掷的箱子：钉住 t_throw 防过期——Box 碰撞在 t_throw>0 时
-            // 只打晕（neujaz=12）、过期后 udarBox 结算伤害（时停中不当场结算）；
-            // 时停结束不恢复，箱子在回放结束后继续飞行自然结算撞击伤害
+            // 1b. 念力投掷的箱子/敌人：钉住 t_throw 防过期——碰撞在 t_throw>0 时
+            // 只打晕、过期后结算伤害（时停中不当场结算）；时停结束不恢复，
+            // 抛射物在回放结束后继续飞行自然结算撞击伤害
             try
             {
                var objsT:Array = locS.objs;
@@ -1030,6 +1050,22 @@ package
                      try
                      {
                         if (oT != null && oT.isThrow == true) { oT.t_throw = 5; }
+                     }
+                     catch (e:*) { }
+                  }
+               }
+            }
+            catch (e:*) { }
+            try
+            {
+               var unitsT:Array = locS.units;
+               if (unitsT != null)
+               {
+                  for each (var uT:Object in unitsT)
+                  {
+                     try
+                     {
+                        if (uT != null && uT != world.gg && uT.t_throw > 0) { uT.t_throw = 50; }
                      }
                      catch (e:*) { }
                   }
@@ -1564,6 +1600,7 @@ package
             sb.push("ghostalpha=" + cfgGhostAlpha);
             sb.push("ghostblend=" + cfgGhostBlend);
             sb.push("colormode=" + cfgColorMode);
+            sb.push("edgethresh=" + cfgEdgeThresh);
             sb.push("fxrun=" + (cfgFxRun ? 1 : 0));
             sb.push("showmark=" + (cfgShowMark ? 1 : 0));
             sb.push("panelkey=" + cfgPanelKey);
@@ -1669,6 +1706,13 @@ package
          clearFrozenBullets();
          // 快照时停结束状态（回放结束后恢复：弹夹剩余=时停结束时，背包弹药不被回放消耗）
          buildSandyEndSnap();
+         // 快照武器耐久/魔法值（回放重演会再次消耗——回放结束恢复，防双倍）
+         try
+         {
+            endSnapWpnHp = world.gg.currentWeapon != null ? world.gg.currentWeapon.hp : -1;
+            endSnapMana = world.gg["mana"] != null ? world.gg["mana"] : -1;
+         }
+         catch (e:*) { }
 
          try
          {
@@ -1780,7 +1824,8 @@ package
                            wy: world.gg.currentWeapon != null ? world.gg.currentWeapon.Y : 0,
                            tA: tAManual, hold: holdManual,
                            tx: world.gg.teleObj != null ? world.gg.teleObj.X : 0,
-                           ty: world.gg.teleObj != null ? world.gg.teleObj.Y : 0 });
+                           ty: world.gg.teleObj != null ? world.gg.teleObj.Y : 0,
+                           ci: speedToEdgeIdx(Math.abs(gg.dx) + Math.abs(gg.dy)) });
             // 记录重演状态（场景级录像：敌人/物品/攻击体每帧位置+动画帧+生成音效）
             recordReplayObjects();
             // 时停攻击状态诊断（每 30 帧）：观察时停中攻击意图与武器状态
@@ -2071,18 +2116,20 @@ package
             prevGy = h.y;
             replayIdx++;
          }
-         // 回放残影：按显示帧计数生成（原 ghostIdx % replayghost 与 5 帧步进
-         // 互质导致 lcm 别名——残影只在少数时段生成）；每 4 显示帧 1 个
-         //（约 20 历史帧），寿命由残影系统自身（45 帧淡出）提供
+         // 回放残影（v1.71）：较快生成频率+短寿命形成拖尾——每 2 显示帧 1 个、
+         // 寿命 12 帧；颜色用**时停期间记录的颜色索引**（按回放实际速度算会
+         // 因采样步长全变紫色——Sandy 记录时的真实速度映射才正确）
          try
          {
             if (replayIdx > 0)
             {
                var ghH:Object = history[Math.min(replayIdx - 1, history.length - 1)];
-               if (++replayGhostDisp % 4 == 0)
+               if (++replayGhostDisp % 2 == 0)
                {
-                  var ghSpd:Number = Math.sqrt((ghH.x - prevGx) * (ghH.x - prevGx) + (ghH.y - prevGy) * (ghH.y - prevGy)) * cfgReplaySpeed;
-                  spawnGhostAt(ghH.x, ghH.y, ghH.s, ghH.r, ghH.v, ghostColor(ghSpd));
+                  var gct:ColorTransform = (cfgColorMode == 1)
+                     ? edgePalette(ghH.ci != null ? ghH.ci : 0)
+                     : palette(rainbowIdx++);
+                  spawnGhostAt(ghH.x, ghH.y, ghH.s, ghH.r, ghH.v, gct);
                }
             }
          }
@@ -2342,6 +2389,21 @@ package
             savedRapids = {};
             switchToWeapon(endWeapon);
             restoreSandyEndSnap();
+            // 恢复武器耐久/魔法值（回放重演不应二次消耗）
+            try
+            {
+               if (endSnapWpnHp >= 0 && world.gg.currentWeapon != null)
+               {
+                  world.gg.currentWeapon.hp = endSnapWpnHp;
+               }
+               if (endSnapMana >= 0 && world.gg["mana"] != null)
+               {
+                  world.gg["mana"] = endSnapMana;
+               }
+            }
+            catch (e:*) { }
+            endSnapWpnHp = -1;
+            endSnapMana = -1;
             replayWpn = null;
          }
          catch (e:*) { log("[SandyMod] endReplay restore error: " + e); }
@@ -2507,7 +2569,7 @@ package
             spr.addChild(bit);
             bit.blendMode = cfgGhostBlend == 0 ? "add" : "normal";
             ghostLayer.addChild(spr);
-            ghosts.push({ s: spr, t: 45, life: 45, b: bmp });  // 回放残影：寿命 45 帧
+            ghosts.push({ s: spr, t: 12, life: 12, b: bmp });  // 回放残影：短寿命拖尾（12 帧）
          }
          catch (e:*) { log("[DIAG] spawnGhostAt ERROR: " + e); }
       }
@@ -2695,8 +2757,8 @@ package
          // ===== 选项页模组设置面板（主菜单/游戏内 Options 页）=====
          if (optPanelOn)
          {
-            if (e.keyCode == Keyboard.UP) { optSel = (optSel + 4 - 1) % 4; return; }
-            if (e.keyCode == Keyboard.DOWN) { optSel = (optSel + 1) % 4; return; }
+            if (e.keyCode == Keyboard.UP) { optSel = (optSel + 5 - 1) % 5; return; }
+            if (e.keyCode == Keyboard.DOWN) { optSel = (optSel + 1) % 5; return; }
             if (e.keyCode == Keyboard.LEFT) { optAdj(-1); return; }
             if (e.keyCode == Keyboard.RIGHT) { optAdj(1); return; }
             if (e.keyCode == Keyboard.ENTER) { saveConfigFile(); return; }

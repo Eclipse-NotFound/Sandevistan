@@ -46,4 +46,7 @@ debugtest=0
 slowfactor=5
 
 # 残影配色模式（0=彩虹循环 1=边缘行者绿-蓝-紫渐变，按移动速度映射）
-colormode=0
+colormode=1
+
+# 边缘行者渐变门槛（速度≥此值全绿；低于此值渐变为蓝紫）
+edgethresh=10
