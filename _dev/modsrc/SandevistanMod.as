@@ -207,7 +207,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.64 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.65 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -670,10 +670,20 @@ package
                      // 滞留在时停结束位置，与重演的身体脱节）
                      var wxR:Number = 0;
                      var wyR:Number = 0;
+                     // 投掷武器（手雷/投掷物，非 currentWeapon）与魔法武器同样记录
+                     var txR:Number = 0;
+                     var tyR:Number = 0;
                      try
                      {
                         var cwR:* = oR["currentWeapon"];
                         if (cwR != null) { wxR = cwR.X; wyR = cwR.Y; }
+                        var twR:* = oR["throwWeapon"];
+                        if (twR != null) { txR = twR.X; tyR = twR.Y; }
+                        else
+                        {
+                           var mwR:* = oR["magicWeapon"];
+                           if (mwR != null) { txR = mwR.X; tyR = mwR.Y; }
+                        }
                      }
                      catch (e:*) { }
                      var arrR:Array = replayObjs[oR];
@@ -695,8 +705,8 @@ package
                               }
                               catch (e:*) { }
                            }
-                           for (var f0:int = 0; f0 < frameN; f0++) { arrR.push({ x: oR.X, y: oR.Y, f: -1, s: "", wx: wxR, wy: wyR }); }
-                           arrR.push({ x: oR.X, y: oR.Y, f: animFrameOf(oR), s: sndR, wx: wxR, wy: wyR });
+                           for (var f0:int = 0; f0 < frameN; f0++) { arrR.push({ x: oR.X, y: oR.Y, f: -1, s: "", wx: wxR, wy: wyR, twx: txR, twy: tyR }); }
+                           arrR.push({ x: oR.X, y: oR.Y, f: animFrameOf(oR), s: sndR, wx: wxR, wy: wyR, twx: txR, twy: tyR });
                         }
                         else
                         {
@@ -708,14 +718,14 @@ package
                               arrR = [];
                               replayObjs[oR] = arrR;
                               replayObjArr.push(oR);
-                              for (var f1:int = 0; f1 < frameN; f1++) { arrR.push({ x: sp.x, y: sp.y, f: -1, s: "", wx: 0, wy: 0 }); }
-                              arrR.push({ x: oR.X, y: oR.Y, f: -1, s: "", wx: 0, wy: 0 });
+                              for (var f1:int = 0; f1 < frameN; f1++) { arrR.push({ x: sp.x, y: sp.y, f: -1, s: "", wx: 0, wy: 0, twx: 0, twy: 0 }); }
+                              arrR.push({ x: oR.X, y: oR.Y, f: -1, s: "", wx: 0, wy: 0, twx: 0, twy: 0 });
                            }
                         }
                      }
                      else
                      {
-                        arrR.push({ x: oR.X, y: oR.Y, f: animFrameOf(oR), s: "", wx: wxR, wy: wyR });
+                        arrR.push({ x: oR.X, y: oR.Y, f: animFrameOf(oR), s: "", wx: wxR, wy: wyR, twx: txR, twy: tyR });
                      }
                   }
                }
@@ -765,6 +775,19 @@ package
                         cwE.Y = stR.wy;
                         if (cwE.vis != null) { cwE.vis.x = stR.wx; cwE.vis.y = stR.wy; }
                      }
+                     // 投掷武器（手雷/投掷物）与魔法武器位置同样恢复（否则滞留在
+                     // 时停结束位置——用户报告手雷不复位）
+                     if (stR.twx != null && stR.twx != 0)
+                     {
+                        var twE:* = oR["throwWeapon"];
+                        if (twE == null) { twE = oR["magicWeapon"]; }
+                        if (twE != null)
+                        {
+                           twE.X = stR.twx;
+                           twE.Y = stR.twy;
+                           if (twE.vis != null) { twE.vis.x = stR.twx; twE.vis.y = stR.twy; }
+                        }
+                     }
                   }
                   catch (e:*) { }
                   // 动画驱动（核心修复）：根据历史位移设置 dx/dy/stay 并调 animate()——
@@ -812,17 +835,19 @@ package
                         replayAnimCat[oR] = newCat;
                         oR.stay = true;   // 恒 stay：避免 Monstrik 走 jump 姿势
                         oR.dx = newCat == 1 ? 0 : (newCat == 2 ? (mvx >= 0 ? 4 : -4) : (mvx >= 0 ? 12 : -12));
-                        // 小马类单位（Raider/Slaver/Zebra/Pon）：静止动画定期重启——
-                        // 其 stay 姿态可能是单帧/非循环动画（st=true 后 blit 停止=僵死），
-                        // 每 12 显示帧注入 1 帧 walk 让动画状态切换触发 restart
+                        // 小马类单位（Raider/Slaver/Zebra/Pon/Merc）：动画定期重启——
+                        // 其动画状态依赖 aiState（回放中冻结），静止姿态可能是
+                        // 单帧/非循环动画（st=true 后 blit 停止=僵死）；每 12 显示帧
+                        // 反转 dx 让动画状态切换触发 restart（静止→walk；走路→stay）
                         try
                         {
                            var qnA2:String = flash.utils.getQualifiedClassName(oR);
                            var isPonyA:Boolean = qnA2.indexOf("Slaver") >= 0 || qnA2.indexOf("Raider") >= 0
-                              || qnA2.indexOf("Zebra") >= 0 || qnA2.indexOf("UnitPon") >= 0;
-                           if (isPonyA && newCat == 1 && replayIdx % 12 == 0)
+                              || qnA2.indexOf("Zebra") >= 0 || qnA2.indexOf("UnitPon") >= 0
+                              || qnA2.indexOf("Merc") >= 0;
+                           if (isPonyA && replayIdx % 12 == 0 && newCat != 3)
                            {
-                              oR.dx = 4;
+                              oR.dx = newCat == 1 ? 4 : 0;
                            }
                         }
                         catch (e:*) { }
@@ -1616,7 +1641,9 @@ package
                            w: world.gg.currentWeapon != null ? world.gg.currentWeapon.id : "",
                            wx: world.gg.currentWeapon != null ? world.gg.currentWeapon.X : 0,
                            wy: world.gg.currentWeapon != null ? world.gg.currentWeapon.Y : 0,
-                           tA: tAManual, hold: holdManual });
+                           tA: tAManual, hold: holdManual,
+                           tx: world.gg.teleObj != null ? world.gg.teleObj.X : 0,
+                           ty: world.gg.teleObj != null ? world.gg.teleObj.Y : 0 });
             // 记录重演状态（场景级录像：敌人/物品/攻击体每帧位置+动画帧+生成音效）
             recordReplayObjects();
             // 时停攻击状态诊断（每 30 帧）：观察时停中攻击意图与武器状态
@@ -1826,6 +1853,23 @@ package
                world.gg.Y = h.y;
                world.gg.storona = h.s;
                world.gg.setVisPos();
+               // 念力投掷物复位：回放开始时（及全程）钉在历史位置——否则
+               // 物品仍从时停结束位置开始移动（玩家 gg.step 的 teleObj 逻辑会
+               // 跟随玩家更新其位置，覆盖场景记录）
+               try
+               {
+                  if (world.gg.teleObj != null && h.tx != null)
+                  {
+                     world.gg.teleObj.X = h.tx;
+                     world.gg.teleObj.Y = h.ty;
+                     if (world.gg.teleObj.vis != null)
+                     {
+                        world.gg.teleObj.vis.x = h.tx;
+                        world.gg.teleObj.vis.y = h.ty;
+                     }
+                  }
+               }
+               catch (e:*) { }
                // 喂回记录的瞄准方向（攻击指向时停期间的发射方向）
                if (h.ax != null)
                {
@@ -2034,8 +2078,8 @@ package
                         }
                         else if (oA.vis.currentFrame != null)
                         {
-                           // MovieClip 视觉：动画在嵌套剪辑（osn.body 等）——
-                           // 采样嵌套帧号（顶层帧恒 0 无意义）
+                           // MovieClip 视觉：动画在嵌套剪辑或子 Bitmap 中——
+                           // 采样嵌套帧号与子 Bitmap 像素（顶层帧恒 0 无意义）
                            hsh = "f" + oA.vis.currentFrame;
                            try
                            {
@@ -2046,6 +2090,20 @@ package
                               else if (oA.vis.body != null)
                               {
                                  hsh += "/b" + oA.vis.body.currentFrame;
+                              }
+                           }
+                           catch (e:*) { }
+                           try
+                           {
+                              var nc:int = oA.vis.numChildren;
+                              for (var ci:int = 0; ci < nc && ci < 3; ci++)
+                              {
+                                 var ch:* = oA.vis.getChildAt(ci);
+                                 if (ch != null && ch.bitmapData != null)
+                                 {
+                                    hsh += "/c" + ch.bitmapData.getPixel32(int(ch.bitmapData.width / 2), int(ch.bitmapData.height / 2)).toString(16);
+                                    break;
+                                 }
                               }
                            }
                            catch (e:*) { }
