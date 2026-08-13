@@ -38,7 +38,7 @@ package
       private var cfgDuration:int = 240;                // 生效帧数（30fps -> 8 秒）
       private var cfgCooldown:int = 0;                  // 冷却帧数（默认 0 = 无冷却，便于调试）
       private var cfgReplaySpeed:Number = 5;            // 回放速度倍率（回放时世界冻结，无渲染压力）
-      private var cfgGhostEvery:int = 3;                // 每 N 帧生成一个残影
+      private var cfgGhostEvery:int = 6;                // 每 N 帧生成一个残影（时停期，默认 6）
       private var cfgFxRun:Boolean = true;              // 时停期间粒子特效是否继续
 
       // ---------- 运行时状态 ----------
@@ -99,7 +99,7 @@ package
       private var lastGhostY:Number = 0;
       private var panelOpen:Boolean = false;
       private var optPanelOn:Boolean = false;      // 选项页模组设置面板
-      private var optSel:int = 0;                  // 0=生效 1=冷却 2=残影不透明度 3=残影频率 4=渐变门槛
+      private var optSel:int = 0;                  // 0=生效 1=冷却 2=残影不透明度 3=残影频率 4=渐变门槛 5=回放残影间隔 6=回放残影寿命
       private var optTf:TextField = null;
       private var optBg:Sprite = null;
       private var lastGgControl:Boolean = true;
@@ -152,10 +152,12 @@ package
       private var cfgShowMark:Boolean = true;            // 启动时显示模组已加载标记
       private var cfgPanelKey:int = Keyboard.F9;         // 参数面板热键
       private var cfgGhostBlend:int = 1;                  // 残影混合: 1=normal柔和 0=add发光
-      private var cfgGhostAlpha:int = 25;                 // 残影不透明度（百分比）
-      private var cfgReplayGhost:int = 24;                // 回放残影间隔（每 N 个历史帧生成 1 个）
+      private var cfgGhostAlpha:int = 60;                 // 残影不透明度（百分比，默认 60）
+      private var cfgReplayGhost:int = 2;                 // 回放残影生成间隔（每 N 个显示帧 1 个）
+      private var cfgReplayGhostLife:int = 8;             // 回放残影寿命（显示帧，短寿命=拖尾）
       private var cfgColorMode:int = 0;                   // 残影配色: 0=彩虹 1=边缘行者绿蓝紫
       private var cfgEdgeThresh:Number = 10;             // 边缘行者渐变门槛（速度≥此值全绿）
+      private var playerAnimCat:int = 0;                  // 回放玩家动画档位迟滞（1=待机 2=走 3=跑）
       private var testStage:int = 0;                     // 0=等待world 1=开始新游戏 2=等待进游戏 3=启动sandy 4=结束sandy
       private var testTicks:int = 0;
 
@@ -259,7 +261,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.72 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.73 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -330,6 +332,7 @@ package
                   else if (k == "ghostblend") cfgGhostBlend = parseInt(v);
                   else if (k == "ghostalpha") cfgGhostAlpha = parseInt(v);
                   else if (k == "replayghost") cfgReplayGhost = parseInt(v);
+                  else if (k == "replayghostlife") cfgReplayGhostLife = parseInt(v);
                   else if (k == "slowfactor") cfgSlowFactor = parseFloat(v);
                   else if (k == "colormode") cfgColorMode = parseInt(v);
                   else if (k == "edgethresh") cfgEdgeThresh = parseFloat(v);
@@ -343,6 +346,11 @@ package
          if (cfgReplaySpeed < 1) cfgReplaySpeed = 1;
          if (cfgSlowFactor < 1) cfgSlowFactor = 1;
          if (cfgSlowFactor > 20) cfgSlowFactor = 20;
+         if (cfgGhostEvery < 1) cfgGhostEvery = 1;
+         if (cfgGhostAlpha < 5) cfgGhostAlpha = 5;
+         if (cfgGhostAlpha > 100) cfgGhostAlpha = 100;
+         if (cfgReplayGhost < 1) cfgReplayGhost = 1;
+         if (cfgReplayGhostLife < 1) cfgReplayGhostLife = 1;
          trace("[SandyMod] config hotkey=" + cfgHotkey + " dur=" + cfgDuration + " cd=" + cfgCooldown);
       }
 
@@ -636,10 +644,20 @@ package
             // 残影生成频率（帧间隔，1-30）
             cfgGhostEvery = Math.max(1, Math.min(30, cfgGhostEvery + dir));
          }
-         else
+         else if (optSel == 4)
          {
             // 渐变门槛（速度阈值，2-30，步进 2）
             cfgEdgeThresh = Math.max(2, Math.min(30, cfgEdgeThresh + dir * 2));
+         }
+         else if (optSel == 5)
+         {
+            // 回放残影生成间隔（显示帧，1-30）
+            cfgReplayGhost = Math.max(1, Math.min(30, cfgReplayGhost + dir));
+         }
+         else
+         {
+            // 回放残影寿命（显示帧，1-60）
+            cfgReplayGhostLife = Math.max(1, Math.min(60, cfgReplayGhostLife + dir));
          }
       }
 
@@ -655,6 +673,8 @@ package
             lines.push((optSel == 2 ? "> " : "  ") + "残影不透明度 " + cfgGhostAlpha + "%");
             lines.push((optSel == 3 ? "> " : "  ") + "残影频率    " + cfgGhostEvery + "帧");
             lines.push((optSel == 4 ? "> " : "  ") + "渐变门槛    " + cfgEdgeThresh);
+            lines.push((optSel == 5 ? "> " : "  ") + "回放残影间隔 " + cfgReplayGhost + "帧");
+            lines.push((optSel == 6 ? "> " : "  ") + "回放残影寿命 " + cfgReplayGhostLife + "帧");
             lines.push("");
             lines.push("上下选择 左右调值 Enter保存");
             optTf.text = lines.join(String.fromCharCode(10));
@@ -663,7 +683,7 @@ package
             optTf.x = sw - 300;
             optTf.y = 120;
             optTf.width = 260;
-            optTf.height = 190;
+            optTf.height = 260;
             optBg.graphics.clear();
             optBg.graphics.lineStyle(1, 0x00FF99, 0.8);
             optBg.graphics.beginFill(0x002211, 0.75);
@@ -1622,6 +1642,7 @@ package
             sb.push("slowfactor=" + cfgSlowFactor);
             sb.push("ghostevery=" + cfgGhostEvery);
             sb.push("replayghost=" + cfgReplayGhost);
+            sb.push("replayghostlife=" + cfgReplayGhostLife);
             sb.push("ghostalpha=" + cfgGhostAlpha);
             sb.push("ghostblend=" + cfgGhostBlend);
             sb.push("colormode=" + cfgColorMode);
@@ -1701,6 +1722,7 @@ package
             seenPos = new Dictionary();
             rainbowIdx = 0;
             fxTicks = 0;
+            playerAnimCat = 0;   // 回放玩家动画档位迟滞重置
             recPrevHold = -1;   // 开火记录基线重置
             recPrevTA = -1;
             recPrevWid = "";
@@ -2167,15 +2189,16 @@ package
             prevGy = h.y;
             replayIdx++;
          }
-         // 回放残影（v1.71）：较快生成频率+短寿命形成拖尾——每 2 显示帧 1 个、
-         // 寿命 12 帧；颜色用**时停期间记录的颜色索引**（按回放实际速度算会
-         // 因采样步长全变紫色——Sandy 记录时的真实速度映射才正确）
+         // 回放残影（v1.73）：生成间隔 replayghost（显示帧）+ 寿命 replayghostlife
+         // （显示帧）均可配置——高频率+短寿命=拖尾。颜色用**时停期间记录的颜色
+         // 索引**（按回放实际速度算会因采样步长全变紫色——Sandy 记录时的真实
+         // 速度映射才正确）
          try
          {
             if (replayIdx > 0)
             {
                var ghH:Object = history[Math.min(replayIdx - 1, history.length - 1)];
-               if (++replayGhostDisp % 2 == 0)
+               if (++replayGhostDisp % Math.max(1, cfgReplayGhost) == 0)
                {
                   var gct:ColorTransform = (cfgColorMode == 1)
                      ? edgePalette(ghH.ci != null ? ghH.ci : 0)
@@ -2205,6 +2228,54 @@ package
          // 4. 敌人/物品/场景/攻击体重演（位置+动画帧+生成音效）
          // 5. 粒子特效照常（枪口火焰等）
          try { world.loc.gg.step(); } catch (e:*) { }
+         // 玩家动画驱动（v1.73）：回放中按键清空 → control() 置 dx=0 → 玩家
+         // animate() 恒走 stay 待机帧（回放中玩家视觉僵死）。按历史轨迹量化 dx
+         // 喂 animate()：|dx|>4 进入移动子分支（walk/run/trot——该子分支在
+         // stay 外块内部，stay=true 不阻塞）；maxSpeed 公开可写——<5 走档、
+         // 用 runForever 强开跑档；档位迟滞防抖；待机档 dx=0 回 stay 帧。
+         // maxSpeed/runForever 为瞬时值（下一帧 control 重算），动画后恢复。
+         try
+         {
+            var cP2:Object = history[Math.min(replayIdx - 1, history.length - 1)];
+            var nP2:Object = history[Math.min(replayIdx, history.length - 1)];
+            if (cP2 != null && nP2 != null)
+            {
+               var pdxR:Number = (nP2.x - cP2.x) * cfgReplaySpeed;
+               var pspdR:Number = pdxR >= 0 ? pdxR : -pdxR;
+               var pCatR:int = pspdR < 1.5 ? 1 : (pspdR < 8 ? 2 : 3);
+               var pPrevC:int = playerAnimCat;
+               if (pPrevC != 0)
+               {
+                  if (pPrevC == 3 && pCatR == 2 && pspdR > 5) { pCatR = 3; }
+                  else if (pPrevC == 2 && pCatR == 1 && pspdR > 2.5) { pCatR = 2; }
+                  else if (pPrevC == 1 && pCatR == 2 && pspdR < 3) { pCatR = 1; }
+                  else if (pPrevC == 2 && pCatR == 3 && pspdR < 10) { pCatR = 2; }
+               }
+               playerAnimCat = pCatR;
+               var savedMS:Number = 0;
+               var savedRF:int = 0;
+               try
+               {
+                  savedMS = world.gg.maxSpeed;
+                  savedRF = world.gg.runForever;
+                  if (pCatR == 1)
+                  {
+                     world.gg.dx = 0;
+                  }
+                  else
+                  {
+                     world.gg.dx = (pdxR >= 0 ? 1 : -1) * (pCatR == 2 ? 6 : 14);
+                     world.gg.maxSpeed = pCatR == 2 ? 4 : 20;
+                     if (pCatR == 3) { world.gg.runForever = 1; }
+                  }
+                  world.gg.animate();
+                  world.gg.maxSpeed = savedMS;
+                  world.gg.runForever = savedRF;
+               }
+               catch (e:*) { }
+            }
+         }
+         catch (e:*) { }
          var cwNow:* = world.gg.currentWeapon;
          var execCnt:int = 0;   // 实际执行的开火数（attack() 返回 true）
          if (cwNow != null && fireCnt > 0)
@@ -2651,7 +2722,7 @@ package
             spr.addChild(bit);
             bit.blendMode = cfgGhostBlend == 0 ? "add" : "normal";
             ghostLayer.addChild(spr);
-            ghosts.push({ s: spr, t: 12, life: 12, b: bmp });  // 回放残影：短寿命拖尾（12 帧）
+            ghosts.push({ s: spr, t: Math.max(1, cfgReplayGhostLife), life: Math.max(1, cfgReplayGhostLife), b: bmp });  // 回放残影：寿命可配置（replayghostlife）
          }
          catch (e:*) { log("[DIAG] spawnGhostAt ERROR: " + e); }
       }
@@ -2682,7 +2753,8 @@ package
             else
             {
                g.t--;
-               g.s.alpha = g.t / (g.life != null && g.life > 0 ? g.life : 30);
+               // 回放残影淡出：基准透明度 = ghostalpha（默认 60%），随寿命线性衰减
+               g.s.alpha = (g.t / (g.life != null && g.life > 0 ? g.life : 30)) * Math.max(0.05, Math.min(1, cfgGhostAlpha / 100));
                if (g.t <= 0)
                {
                   if (g.s.parent != null) g.s.parent.removeChild(g.s);
@@ -2839,8 +2911,8 @@ package
          // ===== 选项页模组设置面板（主菜单/游戏内 Options 页）=====
          if (optPanelOn)
          {
-            if (e.keyCode == Keyboard.UP) { optSel = (optSel + 5 - 1) % 5; return; }
-            if (e.keyCode == Keyboard.DOWN) { optSel = (optSel + 1) % 5; return; }
+            if (e.keyCode == Keyboard.UP) { optSel = (optSel + 7 - 1) % 7; return; }
+            if (e.keyCode == Keyboard.DOWN) { optSel = (optSel + 1) % 7; return; }
             if (e.keyCode == Keyboard.LEFT) { optAdj(-1); return; }
             if (e.keyCode == Keyboard.RIGHT) { optAdj(1); return; }
             if (e.keyCode == Keyboard.ENTER) { saveConfigFile(); return; }
