@@ -69,6 +69,7 @@ package
       private var replayBodyTick:int = 0;      // 回放段攻击体状态诊断计数
       private var replayAnimTick:int = 0;      // 回放段动画像素哈希诊断计数
       private var replayFireTick:int = 0;      // 回放段开火诊断计数
+      private var replayGhostDisp:int = 0;    // 回放残影显示帧计数
       private var sandyAtkTick:int = 0;        // 时停段攻击状态诊断计数
       private var sandyEnemyTick:int = 0;      // 时停段敌人移动诊断计数
       private var mouseAtkDown:Boolean = false;   // 鼠标攻击键按住状态
@@ -90,9 +91,6 @@ package
       private var replayAnimCat:Dictionary = new Dictionary();  // 回放动画档位迟滞（防 walk/run 抖动）
       private var lastGhostX:Number = 0;   // 上一残影位置（叠加防护：最小位移门槛）
       private var lastGhostY:Number = 0;
-      private var capDict:Dictionary = new Dictionary();   // 小马类视觉捕获：单位→{frames,ox,oy}
-      private var capBmpDisps:Dictionary = new Dictionary(); // 单位→显示用 Bitmap
-      private var capScale:Number = 0.5;     // 捕获缩放（省内存）
       private var panelOpen:Boolean = false;
       private var optPanelOn:Boolean = false;      // 选项页模组设置面板
       private var optSel:int = 0;                  // 0=生效时间 1=冷却 2=残影不透明度 3=残影频率
@@ -196,13 +194,6 @@ package
          return idx;
       }
 
-      // 小马类单位判定（视觉捕获对象——aiState internal 无法驱动其动画状态）
-      private function isPonyCap(qn:String):Boolean
-      {
-         return qn.indexOf("Raider") >= 0 || qn.indexOf("Slaver") >= 0 || qn.indexOf("Zebra") >= 0
-            || qn.indexOf("Merc") >= 0 || qn.indexOf("UnitPon") >= 0 || qn.indexOf("Alicorn") >= 0;
-      }
-
       // 残影配色分发：colormode=1 边缘行者（速度映射绿蓝紫）；否则彩虹循环
       private function ghostColor(spd:Number):ColorTransform
       {
@@ -261,7 +252,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.69 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.70 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -753,50 +744,6 @@ package
                         }
                      }
                      catch (e:*) { }
-                     // 小马类视觉捕获（走路动画僵死根治）：aiState 是 internal
-                     // 无法驱动其动画状态——时停中每 8 帧抓一帧渲染视觉，
-                     // 回放中显示抓帧位图（像素级保真）
-                     if (isUnit && isPonyCap(qnR) && frameN % 8 == 0 && oR.vis != null)
-                     {
-                        try
-                        {
-                           var capO:Object = capDict[oR];
-                           if (capO == null)
-                           {
-                              capO = { frames: [], ox: 0, oy: 0 };
-                              capDict[oR] = capO;
-                           }
-                           if (capO.frames.length < 30)
-                           {
-                              var vw2:Number = oR.vis.width;
-                              var vh2:Number = oR.vis.height;
-                              if (vw2 > 4 && vh2 > 4)
-                              {
-                                 var bRect2:Rectangle = oR.vis.getBounds(oR.vis);
-                                 capO.ox = bRect2.left * capScale;
-                                 capO.oy = bRect2.top * capScale;
-                                 var capBmp:BitmapData = new BitmapData(int(vw2 * capScale), int(vh2 * capScale), true, 0);
-                                 var capM:Matrix = new Matrix();
-                                 capM.scale(capScale, capScale);
-                                 capM.translate(-bRect2.left * capScale, -bRect2.top * capScale);
-                                 // 脱离父容器绘制（消除相机缩放），同帧恢复
-                                 var sp3:Object = oR.vis.parent;
-                                 var si3:int = -1;
-                                 if (sp3 != null)
-                                 {
-                                    try { si3 = sp3.getChildIndex(oR.vis); sp3.removeChild(oR.vis); } catch (e:*) { }
-                                 }
-                                 capBmp.draw(oR.vis as IBitmapDrawable, capM, null, null, null, true);
-                                 if (sp3 != null)
-                                 {
-                                    try { sp3.addChildAt(oR.vis, si3); } catch (e:*) { }
-                                 }
-                                 capO.frames.push(capBmp);
-                              }
-                           }
-                        }
-                        catch (e:*) { }
-                     }
                      var arrR:Array = replayObjs[oR];
                      if (arrR == null)
                      {
@@ -932,47 +879,13 @@ package
                      }
                   }
                   catch (e:*) { }
-                  // 小马类单位：显示抓帧位图（回放动画像素级保真——aiState internal
-                  // 无法驱动其动画状态机，抓帧是唯一可靠路径）；死亡（sost>=2）时
-                  // 恢复真实视觉播放死亡动画
-                  var capO2:Object = capDict[oR];
-                  if (capO2 != null && capO2.frames != null && capO2.frames.length > 0 && oR.sost < 2)
+                  // 动画驱动（核心修复）：根据历史位移设置 dx/dy/stay 并调 animate()——
+                  // 游戏自身动画管线计算 animState（walk/run/jump/stay）并渲染。
+                  // 怪物的 anims（BlitAnim）是 internal 读不到，驱动公开的 animate()
+                  // 是唯一路径（读 vis.osn.body 帧对怪物永远 -1，故不依赖帧记录）
+                  try
                   {
-                     try
-                     {
-                        oR.vis.visible = false;
-                        var fi2:int = int(idxR / 8);
-                        if (fi2 >= capO2.frames.length) { fi2 = capO2.frames.length - 1; }
-                        var frm2:BitmapData = capO2.frames[fi2];
-                        var disp2:Bitmap = capBmpDisps[oR] as Bitmap;
-                        if (disp2 == null)
-                        {
-                           disp2 = new Bitmap(frm2, "auto", true);
-                           capBmpDisps[oR] = disp2;
-                           world.visual.addChild(disp2);
-                        }
-                        else if (disp2.bitmapData != frm2)
-                        {
-                           disp2.bitmapData = frm2;
-                        }
-                        disp2.visible = true;
-                        disp2.x = stR.x + capO2.ox;
-                        disp2.y = stR.y + capO2.oy;
-                     }
-                     catch (e:*) { }
-                  }
-                  else
-                  {
-                     try { if (oR.vis != null) { oR.vis.visible = true; } } catch (e:*) { }
-                     var dispX:Bitmap = capBmpDisps[oR] as Bitmap;
-                     if (dispX != null) { dispX.visible = false; }
-                     // 动画驱动（核心修复）：根据历史位移设置 dx/dy/stay 并调 animate()——
-                     // 游戏自身动画管线计算 animState（walk/run/jump/stay）并渲染。
-                     // 怪物的 anims（BlitAnim）是 internal 读不到，驱动公开的 animate()
-                     // 是唯一路径（读 vis.osn.body 帧对怪物永远 -1，故不依赖帧记录）
-                     try
-                     {
-                        if (oR["setPos"] != null && oR["animate"] != null)
+                     if (oR["setPos"] != null && oR["animate"] != null)
                      {
                         var nxtR2:Object = arrR[Math.min(idxR + 1, arrR.length - 1)];
                         var mvx:Number = (nxtR2.x - stR.x) * cfgReplaySpeed;
@@ -1032,10 +945,9 @@ package
                         catch (e:*) { }
                         oR.dy = 0;
                         oR.animate();
-                        }
                      }
-                     catch (e:*) { }
                   }
+                  catch (e:*) { }
                   // 生成音效（精确帧：攻击体生成事件在对应历史帧重播）
                   if (idxR < arrR.length)
                   {
@@ -1105,6 +1017,25 @@ package
             {
                try { kP.dx = 0; kP.dy = 0; kP.stay = true; } catch (e:*) { }
             }
+            // 1b. 念力投掷的箱子：钉住 t_throw 防过期——Box 碰撞在 t_throw>0 时
+            // 只打晕（neujaz=12）、过期后 udarBox 结算伤害（时停中不当场结算）；
+            // 时停结束不恢复，箱子在回放结束后继续飞行自然结算撞击伤害
+            try
+            {
+               var objsT:Array = locS.objs;
+               if (objsT != null)
+               {
+                  for each (var oT:Object in objsT)
+                  {
+                     try
+                     {
+                        if (oT != null && oT.isThrow == true) { oT.t_throw = 5; }
+                     }
+                     catch (e:*) { }
+                  }
+               }
+            }
+            catch (e:*) { }
             // 2. 玩家攻击体清零 + 原始伤害捕获（必须在 loc.step 前——玩家刚手动
             //    step 完，本帧新生成的子弹尚未结算）
             var oS:Object = locS.firstObj;
@@ -1709,7 +1640,7 @@ package
             rainbowIdx = 0;
             fxTicks = 0;
             clearAllGhosts();   // 防上一轮残留的无限残影
-            clearCaps();         // 防上一轮残留的视觉捕获
+
             lastGhostX = world.gg.X;
             lastGhostY = world.gg.Y;
             if (ghostLayer == null)
@@ -2136,18 +2067,26 @@ package
                prevTA = -1;
             }
             if (h.hold != null) { prevHold = h.hold; } else { prevHold = -1; }
-            // 残影抽稀：每 cfgReplayGhost 个历史帧生成 1 个（每帧最多 1 个）
-            if (cfgReplayGhost < 1) cfgReplayGhost = 1;
-            if (ghostIdx % cfgReplayGhost == 0)
-            {
-               // 回放残影配色：按回放速度（历史相邻帧位移×回放倍率）映射
-               var gSpd:Number = Math.sqrt((h.x - prevGx) * (h.x - prevGx) + (h.y - prevGy) * (h.y - prevGy)) * cfgReplaySpeed;
-               spawnGhostAt(h.x, h.y, h.s, h.r, h.v, ghostColor(gSpd));
-            }
             prevGx = h.x;
             prevGy = h.y;
             replayIdx++;
          }
+         // 回放残影：按显示帧计数生成（原 ghostIdx % replayghost 与 5 帧步进
+         // 互质导致 lcm 别名——残影只在少数时段生成）；每 4 显示帧 1 个
+         //（约 20 历史帧），寿命由残影系统自身（45 帧淡出）提供
+         try
+         {
+            if (replayIdx > 0)
+            {
+               var ghH:Object = history[Math.min(replayIdx - 1, history.length - 1)];
+               if (++replayGhostDisp % 4 == 0)
+               {
+                  var ghSpd:Number = Math.sqrt((ghH.x - prevGx) * (ghH.x - prevGx) + (ghH.y - prevGy) * (ghH.y - prevGy)) * cfgReplaySpeed;
+                  spawnGhostAt(ghH.x, ghH.y, ghH.s, ghH.r, ghH.v, ghostColor(ghSpd));
+               }
+            }
+         }
+         catch (e:*) { }
          // ===== 攻击重演（v1.62）：按历史记录的真实开火次数精确驱动 =====
          // 旧的 -=5 冷却加速有量化误差（周期向显示帧取整）→ 部分 rapid 值下
          // 回放攻击数 < 时停攻击数（吞攻击）。现按时停记录的 tA 上升沿精确计数，
@@ -2380,8 +2319,7 @@ package
             world.ctr.keyMagic = false;
          }
          catch (e:*) { }
-         // 清空场景重演记录与视觉捕获
-         clearCaps();
+         // 清空场景重演记录
          replayObjs = new Dictionary();
          replayAnimCat = new Dictionary();
          replayObjArr = [];
@@ -2572,33 +2510,6 @@ package
             ghosts.push({ s: spr, t: 45, life: 45, b: bmp });  // 回放残影：寿命 45 帧
          }
          catch (e:*) { log("[DIAG] spawnGhostAt ERROR: " + e); }
-      }
-
-      // ===== 清除小马类视觉捕获（回放结束/新时停开始时调用）=====
-      private function clearCaps():void
-      {
-         for (var cu:Object in capDict)
-         {
-            try { if (cu != null && cu.vis != null) { cu.vis.visible = true; } } catch (e:*) { }
-            var co:Object = capDict[cu];
-            if (co != null && co.frames != null)
-            {
-               for each (var bm:BitmapData in co.frames)
-               {
-                  try { bm.dispose(); } catch (e:*) { }
-               }
-            }
-         }
-         for (var du:Object in capBmpDisps)
-         {
-            var ddx:Bitmap = capBmpDisps[du] as Bitmap;
-            if (ddx != null)
-            {
-               try { if (ddx.parent != null) ddx.parent.removeChild(ddx); } catch (e:*) { }
-            }
-         }
-         capDict = new Dictionary();
-         capBmpDisps = new Dictionary();
       }
 
       // ===== 清除全部残影（时停结束/新时停开始时调用——时停残影无限寿命）=====
