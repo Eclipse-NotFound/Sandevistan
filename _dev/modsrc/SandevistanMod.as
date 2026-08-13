@@ -206,7 +206,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.61 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.62 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -1596,7 +1596,8 @@ package
                            ax: world.celX, ay: world.celY,
                            w: world.gg.currentWeapon != null ? world.gg.currentWeapon.id : "",
                            wx: world.gg.currentWeapon != null ? world.gg.currentWeapon.X : 0,
-                           wy: world.gg.currentWeapon != null ? world.gg.currentWeapon.Y : 0 });
+                           wy: world.gg.currentWeapon != null ? world.gg.currentWeapon.Y : 0,
+                           tA: world.gg.currentWeapon != null ? world.gg.currentWeapon.t_attack : 0 });
             // 记录重演状态（场景级录像：敌人/物品/攻击体每帧位置+动画帧+生成音效）
             recordReplayObjects();
             // 时停攻击状态诊断（每 30 帧）：观察时停中攻击意图与武器状态
@@ -1775,6 +1776,8 @@ package
          var punchOn:Boolean = false;
          var grenOn:Boolean = false;
          var magOn:Boolean = false;
+         var prevTA:int = -1;
+         var fireCnt:int = 0;   // 窗口内真实开火次数（tA 上升沿 = 攻击初始化）
          var prevWid:String = replayWpn != null ? replayWpn.id : "";   // 当前回放武器 id（用于重演切换）
          for (var i:int = 0; i < n; i++)
          {
@@ -1839,6 +1842,16 @@ package
             if (h.p == true) punchOn = true;
             if (h.g == true) grenOn = true;
             if (h.m == true) magOn = true;
+            // 真实开火计数：t_attack 上升沿 = 攻击初始化（时停中每帧记录武器冷却）
+            if (h.tA != null)
+            {
+               if (prevTA >= 0 && h.tA > prevTA) { fireCnt++; }
+               prevTA = h.tA;
+            }
+            else
+            {
+               prevTA = -1;
+            }
             // 残影抽稀：每 cfgReplayGhost 个历史帧生成 1 个（每帧最多 1 个）
             if (cfgReplayGhost < 1) cfgReplayGhost = 1;
             if (ghostIdx % cfgReplayGhost == 0)
@@ -1848,99 +1861,85 @@ package
             }
             replayIdx++;
          }
-         // 回放时攻击加速重演：有攻击的帧加速推进武器冷却（远快于正常攻速）
-         // 注意：近战攻击体在冷却递减到 bindMove 窗口（t_attack ∈ [rapid_act/2,
-         // rapid_act*5/6]，如 [5,8]）才推进结算——加速过猛（清 0 或 -=5）会让窗口
-         // 只剩 1 帧甚至跳过，攻击体无结算机会（挥动画有但无伤害）——近战用 -=3
-         // （窗口 2 帧），枪械用 -=5（attack() 内立即射击不受窗口影响）
-         if (atkOn || punchOn || grenOn || magOn)
-         {
-            try
-            {
-               var cw3:* = world.gg.currentWeapon;
-               if (cw3 != null)
-               {
-                  var qn3:String = flash.utils.getQualifiedClassName(cw3);
-                  var melee3:Boolean = qn3 == "fe.weapon::WClub" || qn3 == "fe.weapon::WPunch" || qn3 == "fe.weapon::WKick";
-                  if (melee3)
-                  {
-                     // 允许攻速：rapid 11 → 2（匹配快速连点频率，不吞攻击）
-                     if (savedRapids[cw3.id] == null) { savedRapids[cw3.id] = cw3.rapid; }
-                     cw3.rapid = 2;
-                     // 关键：WClub.shoot 会设 t_auto=3（近战特有的 3 帧攻击冷却），
-                     // attack() 在 t_auto>0 时直接 return——不清掉则 rapid=2 被拖成
-                     // 实际每 4 帧一刀（吞攻击的元凶）
-                     cw3.t_auto = 0;
-                     // t_attack 自然走（rapid=2 → 每 2 帧一刀，动画正常）
-                     // 攻击体结算兜底：rapid=2 后 bindMove 窗口（tA∈[5,8]）被跳过，
-                     // 攻击体的 run 碰撞在模组手动推进下不可靠（大步只测终点、
-                     // 贴脸敌人被跳过等实测均 miss）——改为**直接结算**：
-                     // 攻击体位置放玩家前方挥击点，对范围内敌人直接调 udarBullet
-                     // （完整伤害/击退结算）+ popadalo（命中反馈），完全绕开碰撞
-                     if (cw3.b != null && cw3.b.off == false)
-                     {
-                        var angB:Number = Math.atan2(world.celY - world.gg.Y, world.celX - world.gg.X);
-                        cw3.b.X = world.gg.X + Math.cos(angB) * 60;
-                        cw3.b.Y = world.gg.Y + Math.sin(angB) * 60 - 10;
-                        try
-                        {
-                           var unitsArr:Object = world.loc.units;
-                           for each (var uu:Object in unitsArr)
-                           {
-                              if (cw3.b.off) break;
-                              if (uu == world.gg) continue;
-                              if (uu.sost == 4 || uu.disabled || uu.trigDis) continue;
-                              if (uu.loc != world.loc) continue;
-                              try { if (uu.fraction == world.gg.fraction) continue; } catch (e:*) { }
-                              var ddxB:Number = uu.X - cw3.b.X;
-                              var ddyB:Number = uu.Y - cw3.b.Y;
-                              if (ddxB * ddxB + ddyB * ddyB < 80 * 80)
-                              {
-                                 var hitResB:int = uu.udarBullet(cw3.b);
-                                 if (hitResB >= 0) { cw3.b.popadalo(hitResB); }
-                                 cw3.b.off = true;
-                                 break;
-                              }
-                           }
-                        }
-                        catch (e:*) { }
-                     }
-                     // 击退缩放：回放攻击频率约 5 倍 → 每次命中击退缩到 1/5，
-                     // 总击退位移 ≈ 正常游戏（避免敌人被连续击退甩飞）
-                     try
-                     {
-                        if (cw3.b != null)
-                        {
-                           if (savedOtbros < 0) { savedOtbros = cw3.b.otbros; }
-                           cw3.b.otbros = savedOtbros / 5;
-                        }
-                     }
-                     catch (e:*) { }
-                  }
-                  else
-                  {
-                     cw3.t_attack -= 5;
-                     if (cw3.t_attack < 0) { cw3.t_attack = 0; }
-                  }
-                  cw3.t_reload = 0;
-               }
-            }
-            catch (e:*) { }
-         }
+         // ===== 攻击重演（v1.62）：按历史记录的真实开火次数精确驱动 =====
+         // 旧的 -=5 冷却加速有量化误差（周期向显示帧取整）→ 部分 rapid 值下
+         // 回放攻击数 < 时停攻击数（吞攻击）。现按时停记录的 tA 上升沿精确计数，
+         // 逐发手动驱动 weapon.attack()+step()，开火次数与时停完全一致。
          try
          {
-            world.ctr.keyAttack = atkOn;
+            // 攻击键不再喂回 keyAttack（开火由 fireCnt 精确驱动，喂回会双发）
+            world.ctr.keyAttack = false;
             world.ctr.keyPunch = punchOn;
             world.ctr.keyGrenad = grenOn;
             world.ctr.keyMagic = magOn;
          }
          catch (e:*) { }
          // 世界冻结（onPause=true）下的手动驱动：
-         // 1. 玩家手动 step（消费喂回的键 → 攻击/动画）
-         // 2. 玩家攻击体手动 step（全速飞行+碰撞结算）
-         // 3. 敌人/物品/场景/攻击体重演（位置+动画帧+生成音效）
-         // 4. 粒子特效照常（枪口火焰等）
+         // 1. 玩家手动 step（消费喂回的键 → 移动/拳击/投掷/魔法）
+         // 2. 攻击逐发重演（fireCnt 驱动 attack+step——枪械/近战）
+         // 3. 玩家攻击体手动 step（全速飞行+碰撞结算）
+         // 4. 敌人/物品/场景/攻击体重演（位置+动画帧+生成音效）
+         // 5. 粒子特效照常（枪口火焰等）
          try { world.loc.gg.step(); } catch (e:*) { }
+         var cwNow:* = world.gg.currentWeapon;
+         if (cwNow != null && fireCnt > 0)
+         {
+            var qnNow:String = flash.utils.getQualifiedClassName(cwNow);
+            var meleeNow:Boolean = qnNow == "fe.weapon::WClub" || qnNow == "fe.weapon::WPunch" || qnNow == "fe.weapon::WKick";
+            for (var fi:int = 0; fi < fireCnt; fi++)
+            {
+               try
+               {
+                  cwNow.t_attack = 0;
+                  cwNow.t_auto = 0;
+                  cwNow.t_reload = 0;
+                  cwNow.attack();     // 初始化（t_attack=rapid）
+                  cwNow.step();       // 武器步进（shoot 在 t_attack==rapid 触发）
+                  // 连发武器（dkol>0）：初始化后持续步进完成整个连发
+                  try
+                  {
+                     if (cwNow.dkol != null && cwNow.dkol > 0 && cwNow.t_attack > 0)
+                     {
+                        while (cwNow.t_attack > 0) { cwNow.step(); }
+                     }
+                  }
+                  catch (e:*) { }
+               }
+               catch (e:*) { }
+               if (meleeNow)
+               {
+                  // 近战直接结算（bindMove 窗口被跳过——逐发结算命中）
+                  try
+                  {
+                     if (cwNow.b != null && cwNow.b.off == false)
+                     {
+                        var angB:Number = Math.atan2(world.celY - world.gg.Y, world.celX - world.gg.X);
+                        cwNow.b.X = world.gg.X + Math.cos(angB) * 60;
+                        cwNow.b.Y = world.gg.Y + Math.sin(angB) * 60 - 10;
+                        var unitsArr:Object = world.loc.units;
+                        for each (var uu:Object in unitsArr)
+                        {
+                           if (cwNow.b.off) break;
+                           if (uu == world.gg) continue;
+                           if (uu.sost == 4 || uu.disabled || uu.trigDis) continue;
+                           if (uu.loc != world.loc) continue;
+                           try { if (uu.fraction == world.gg.fraction) continue; } catch (e:*) { }
+                           var ddxB:Number = uu.X - cwNow.b.X;
+                           var ddyB:Number = uu.Y - cwNow.b.Y;
+                           if (ddxB * ddxB + ddyB * ddyB < 80 * 80)
+                           {
+                              var hitResB:int = uu.udarBullet(cwNow.b);
+                              if (hitResB >= 0) { cwNow.b.popadalo(hitResB); }
+                              cwNow.b.off = true;
+                              break;
+                           }
+                        }
+                     }
+                  }
+                  catch (e:*) { }
+               }
+            }
+         }
          stepPlayerBullets();
          replayObjects();
          if (cfgFxRun) { try { stepParticles(world.loc); } catch (e:*) { } }
