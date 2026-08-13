@@ -1,7 +1,17 @@
 ==========================================================
-  斯安维斯坦模组 (Sandevistan Mod) v1.59
+  斯安维斯坦模组 (Sandevistan Mod) v1.60
   for Fallout Equestria: REMAINS
 ==========================================================
+
+【v1.60 更新内容】（预判死亡纳入护甲/穿甲 + 回放动画诊断）
+  · 预判死亡伤害估算升级（按游戏 damage() 公式的期望值）：
+      - 类型易伤（vulner[tipDamage]）× 期望暴击（critCh × critDamMult）
+      - 护甲减伤：DR = (skin + armor_qual×armor + shitArmor) × armorMult
+        − pier（穿甲）——护甲-穿甲克制对纳入判定
+      - 全局易伤倍率（allVulnerMult）
+    （替代原 0.7 粗因子，死亡预告更贴近回放真实结果）
+  · 回放动画诊断（rAnim）：每 30 帧采样重演单位的视觉像素哈希
+    （+sost/stay/dx/hp）——判定"僵死"是渲染冻结还是动画状态问题
 
 【v1.59 更新内容】（回放敌人僵死 + 下穿平台两项修复）
   · 回放敌人动画"僵死"根治（两个来源）：
@@ -303,7 +313,7 @@
   2. 双击运行 安装.bat（自动备份原版到 backup\ 并安装补丁）
   3. 从 Steam 正常启动游戏
   4. 进入游戏后按 \ 键触发
-  注：左上角会显示"SandevistanMod v1.59 已加载"标记
+  注：左上角会显示"SandevistanMod v1.60 已加载"标记
      （可在 config.txt 中设置 showmark=0 隐藏）
 
 【修改设置】

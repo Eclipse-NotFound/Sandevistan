@@ -67,6 +67,7 @@ package
       private var replayDiagTick:int = 0;      // 回放段诊断计数
       private var replayAtkTick:int = 0;       // 回放段攻击链路诊断计数
       private var replayBodyTick:int = 0;      // 回放段攻击体状态诊断计数
+      private var replayAnimTick:int = 0;      // 回放段动画像素哈希诊断计数
       private var sandyAtkTick:int = 0;        // 时停段攻击状态诊断计数
       private var sandyEnemyTick:int = 0;      // 时停段敌人移动诊断计数
       private var mouseAtkDown:Boolean = false;   // 鼠标攻击键按住状态
@@ -205,7 +206,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.59 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.60 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -1000,14 +1001,45 @@ package
          catch (e:*) { }
       }
 
+      // ===== 期望伤害估算（预判死亡用）：按游戏 damage() 公式的期望值——
+      // 类型易伤 × 期望暴击 − 护甲减伤（(skin + armor_qual×armor + shitArmor)×
+      // armorMult − pier 穿甲）× 全局易伤。替代 0.7 粗因子，纳入护甲/穿甲克制对。
+      private function expectedDam(body:Object, enemy:Object, dmg:Number):Number
+      {
+         var ed:Number = dmg;
+         try
+         {
+            // 1) 伤害类型易伤
+            if (enemy.vulner != null && body.tipDamage != null && body.tipDamage < enemy.vulner.length)
+            {
+               ed *= enemy.vulner[body.tipDamage];
+            }
+            // 2) 期望暴击（critCh 概率 × critDamMult）
+            if (body.critCh != null && body.critCh > 0)
+            {
+               ed *= 1 + body.critCh * (body.critDamMult - 1);
+            }
+            // 3) 护甲减伤 − 穿甲（期望值；isrnd(armor_qual) 期望 = armor_qual）
+            var dr:Number = enemy.skin != null ? enemy.skin : 0;
+            if (enemy.armor_qual > 0) { dr += enemy.armor_qual * (enemy.armor != null ? enemy.armor : 0); }
+            if (enemy.shithp > 0) { dr += enemy.shitArmor != null ? enemy.shitArmor : 0; }
+            dr = dr * (body.armorMult != null ? body.armorMult : 1) - (body.pier != null ? body.pier : 0);
+            if (dr > 0) { ed -= dr; }
+            // 4) 全局易伤倍率
+            if (enemy.allVulnerMult != null) { ed *= enemy.allVulnerMult; }
+            if (ed < 0) { ed = 0; }
+         }
+         catch (e:*) { }
+         return ed;
+      }
+
       // ===== 预判伤害记入：优先用攻击体 parr（真实碰撞命中的单位——时停中碰撞
       // 仍发生，只是伤害被清零）；parr 为空时（近战捕获早于 bindMove 窗口）退回
-      // 位置盒检测。伤害 × 0.7 补偿 udarBullet 的随机伤害系数(0.7-1.0)与闪避/精度。
+      // 位置盒检测。伤害按游戏公式期望值估算（含护甲/穿甲）。
       private function creditHit(body:Object, dmg:Number):void
       {
          try
          {
-            var factor:Number = 0.7;
             // 1) 精确路径：真实碰撞证据 parr（public）
             try
             {
@@ -1025,7 +1057,7 @@ package
                         if (u2.sost != 1) continue;
                         if (u2.fraction == world.gg.fraction) continue;
                         if (predDam[u2] == null) { predDam[u2] = 0; }
-                        predDam[u2] += dmg * factor;
+                        predDam[u2] += expectedDam(body, u2, dmg);
                         credArr.push(u2);
                         checkPredDeath(u2);
                      }
@@ -1051,7 +1083,7 @@ package
                   if (bx >= u.X1 && bx <= u.X2 && by >= u.Y1 && by <= u.Y2)
                   {
                      if (predDam[u] == null) { predDam[u] = 0; }
-                     predDam[u] += dmg * factor;
+                     predDam[u] += expectedDam(body, u, dmg);
                      hitCred[body] = u;
                      checkPredDeath(u);
                      return;
@@ -1838,6 +1870,43 @@ package
          stepPlayerBullets();
          replayObjects();
          if (cfgFxRun) { try { stepParticles(world.loc); } catch (e:*) { } }
+         // 回放动画诊断（每 30 帧）：采样前 2 个重演单位的视觉像素哈希——
+         // 哈希随帧变化=动画在播放；恒不变=渲染冻结（僵死根因判定）
+         if (++replayAnimTick % 30 == 0)
+         {
+            try
+            {
+               var nA:int = 0;
+               for each (var oA:Object in replayObjArr)
+               {
+                  try
+                  {
+                     if (oA == null || oA["setPos"] == null || oA.vis == null) continue;
+                     var hsh:String = "-";
+                     try
+                     {
+                        var bdA:* = oA.vis.bitmapData;
+                        if (bdA != null)
+                        {
+                           hsh = bdA.getPixel32(int(bdA.width / 2), int(bdA.height / 2)).toString(16)
+                               + "/" + bdA.getPixel32(int(bdA.width / 3), int(bdA.height / 3)).toString(16);
+                        }
+                        else if (oA.vis.currentFrame != null)
+                        {
+                           hsh = "f" + oA.vis.currentFrame;
+                        }
+                     }
+                     catch (e:*) { }
+                     log("[DIAG] rAnim: cls=" + flash.utils.getQualifiedClassName(oA)
+                         + " sost=" + oA.sost + " stay=" + oA.stay + " dx=" + oA.dx
+                         + " hp=" + oA.hp + " hash=" + hsh);
+                     if (++nA >= 2) break;
+                  }
+                  catch (e:*) { }
+               }
+            }
+            catch (e:*) { }
+         }
          // 回放攻击体状态诊断（每 3 帧）：攻击体位置/伤害/off 状态（定位近战结算问题）
          if (++replayBodyTick % 3 == 0)
          {
