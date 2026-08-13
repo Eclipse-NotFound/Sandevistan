@@ -80,6 +80,11 @@ package
       private var replayObjArr:Array = [];        // 重演对象引用列表
       private var seenPos:Dictionary = new Dictionary();    // 场景对象移动检测快照
       private var sndClass:Class = null;          // fe.Snd（重演音效播放）
+      // 预判死亡（时停中统计玩家攻击本应造成的伤害，≥血量则放死亡动画，不真杀）
+      private var predDam:Dictionary = new Dictionary();   // 敌人 → 预判累计伤害
+      private var origDam:Dictionary = new Dictionary();   // 攻击体 → 原始伤害（清零前捕获）
+      private var hitCred:Dictionary = new Dictionary();   // 攻击体 → 已记入的敌人（去重）
+      private var predDead:Dictionary = new Dictionary();  // 敌人 → true（时停中放死亡动画）
       private var panelOpen:Boolean = false;
       private var optPanelOn:Boolean = false;      // 选项页模组设置面板
       private var optSel:int = 0;                  // 0=生效时间 1=冷却
@@ -199,7 +204,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.54 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.55 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -856,16 +861,28 @@ package
                   else if (slowPartClass != null && oS is slowPartClass) { /* 粒子跳过（stepParticles） */ }
                   else
                   {
+                     // 预判死亡：已判死的敌人固定不动（sost=3 的死亡姿态下 animate 播
+                     // die 动画；control 早退停止行动——每步前再压住 dx/dy 防控制未防护的单位）
+                     if (predDead[oS])
+                     {
+                        try { oS.dx = 0; oS.dy = 0; oS.stay = true; } catch (e:*) { }
+                        oS.step();
+                        continue;
+                     }
                      // 玩家攻击体伤害清零必须在 step **之前**（step 内 run 碰撞会结算）。
                      // 只对攻击体（fe.weapon::）访问 owner——动态属性访问对其他对象
                      // 可能抛异常（会被 catch 吞掉导致对象被跳过 step → 敌人固定不动）
                      var qnS:String = flash.utils.getQualifiedClassName(oS);
+                     var isPBul:Boolean = false;
                      if (qnS.indexOf("fe.weapon::") == 0)
                      {
                         try
                         {
                            if (oS["owner"] == world.gg)
                            {
+                              isPBul = true;
+                              // 预判伤害：首次见到时捕获原始伤害（清零后不可恢复）
+                              if (origDam[oS] == null && oS.damage > 0) { origDam[oS] = oS.damage; }
                               oS.damage = 0;
                               oS.damageExpl = 0;
                            }
@@ -873,6 +890,11 @@ package
                         catch (e:*) { }
                      }
                      oS.step();
+                     // 预判伤害：攻击体移动后检测命中（位置盒判定，去重）
+                     if (isPBul && hitCred[oS] == null && origDam[oS] != null && origDam[oS] > 0)
+                     {
+                        creditHit(oS, origDam[oS]);
+                     }
                   }
                }
                catch (e:*) { }
@@ -892,10 +914,90 @@ package
             if (cwM == null || cwM.b == null) return;
             var qnM:String = flash.utils.getQualifiedClassName(cwM);
             if (qnM != "fe.weapon::WClub" && qnM != "fe.weapon::WPunch" && qnM != "fe.weapon::WKick") return;
+            // 预判伤害：每次挥击（shoot 重设 damage）在清零前捕获并记入命中敌人
+            var dmgM:Number = cwM.b.damage;
+            if (dmgM > 0)
+            {
+               creditHit(cwM.b, dmgM);
+            }
             cwM.b.damage = 0;
             cwM.b.damageExpl = 0;
          }
          catch (e:*) { }
+      }
+
+      // ===== 预判伤害记入：攻击体位置盒检测命中敌人（同阵营跳过），累计并判定死亡 =====
+      private function creditHit(body:Object, dmg:Number):void
+      {
+         try
+         {
+            if (hitCred[body] != null) return;
+            var unitsU:Object = world.loc != null ? world.loc.units : null;
+            if (unitsU == null) return;
+            var bx:Number = body.X;
+            var by:Number = body.Y;
+            for each (var u:Object in unitsU)
+            {
+               if (u == world.gg) continue;
+               try
+               {
+                  if (u.sost != 1) continue;
+                  if (u.fraction == world.gg.fraction) continue;
+                  if (bx >= u.X1 && bx <= u.X2 && by >= u.Y1 && by <= u.Y2)
+                  {
+                     if (predDam[u] == null) { predDam[u] = 0; }
+                     predDam[u] += dmg;
+                     hitCred[body] = u;
+                     checkPredDeath(u);
+                     return;
+                  }
+               }
+               catch (e:*) { }
+            }
+         }
+         catch (e:*) { }
+      }
+
+      // ===== 预判死亡判定：累计伤害 ≥ 血量 → sost=3 死亡姿态（慢速死亡动画+停止行动）=====
+      // 不真杀（不调 die()）：回放中才真实结算死亡——时停只是"预告"
+      private function checkPredDeath(enemy:Object):void
+      {
+         try
+         {
+            if (enemy == null || predDead[enemy]) return;
+            if (enemy.sost != 1) return;
+            var pd:Number = predDam[enemy] != null ? predDam[enemy] : 0;
+            if (pd >= enemy.hp)
+            {
+               predDead[enemy] = true;
+               enemy.sost = 3;   // 死亡姿态：control 早退（Monstrik 检查 sost==3）+
+                                 // animate 播 die 动画；不走 timerDie（internal 无法访问）
+               log("[SandyMod] 预判死亡: " + flash.utils.getQualifiedClassName(enemy)
+                   + " predDam=" + pd + " hp=" + enemy.hp);
+            }
+         }
+         catch (e:*) { }
+      }
+
+      // ===== 时停结束：预判死亡的敌人恢复存活（回放中真实结算死亡）=====
+      private function restorePredDead():void
+      {
+         try
+         {
+            for (var k:Object in predDead)
+            {
+               try
+               {
+                  if (k != null && k.sost == 3) { k.sost = 1; }
+               }
+               catch (e:*) { }
+            }
+         }
+         catch (e:*) { }
+         predDam = new Dictionary();
+         origDam = new Dictionary();
+         hitCred = new Dictionary();
+         predDead = new Dictionary();
       }
 
       // ===== 快照时停结束时的武器/弹药状态（回放结束后恢复，保证回放零净消耗）=====
@@ -1172,6 +1274,8 @@ package
       {
          if (!sandyActive) return;
          sandyActive = false;
+         // 预判死亡的敌人恢复存活（回放中真实结算死亡——时停的死亡动画只是预告）
+         restorePredDead();
          // 清除时停期间玩家发射的冻结子弹（回放重演攻击，避免双倍火力）
          clearFrozenBullets();
          // 快照时停结束状态（回放结束后恢复：弹夹剩余=时停结束时，背包弹药不被回放消耗）
