@@ -91,6 +91,10 @@ package
       private var replayAnimCat:Dictionary = new Dictionary();  // 回放动画档位迟滞（防 walk/run 抖动）
       private var endSnapWpnHp:Number = -1;  // 时停结束时武器耐久（回放结束恢复——防双倍损耗）
       private var endSnapMana:Number = -1;   // 时停结束时魔法值（回放结束恢复——防双倍消耗）
+      private var thrownDamWall:Dictionary = new Dictionary();  // 时停中被投掷单位 → 原始 damWall（回放结束恢复——撞墙伤害延后结算）
+      private var recPrevHold:Number = -1;  // 开火记录：上一帧同武器弹夹（帧间下降=子弹真实生成）
+      private var recPrevTA:int = -1;       // 开火记录：上一帧 t_attack（上升沿=攻击初始化）
+      private var recPrevWid:String = "";   // 开火记录：上一帧武器 id（换武器重置基线）
       private var lastGhostX:Number = 0;   // 上一残影位置（叠加防护：最小位移门槛）
       private var lastGhostY:Number = 0;
       private var panelOpen:Boolean = false;
@@ -255,7 +259,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.71 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.72 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -909,7 +913,15 @@ package
                         // enemyAct 门）。
                         var qnR2:String = flash.utils.getQualifiedClassName(oR);
                         var isHostile:Boolean = qnR2.indexOf("NPC") < 0 && oR["currentWeapon"] != null;
-                        if (isHostile)
+                        // 被念力投掷的单位：只重钉位置（不 step）——step 会物理移动
+                        // 单位并可能撞墙触发 damageWall（伤害应延后到回放结束后
+                        // 自然结算）；飞行姿态定格在时停末帧，飞行轨迹按记录重演
+                        var isThrownU:Boolean = false;
+                        try { isThrownU = oR.t_throw > 0; } catch (e:*) { }
+                        if (isThrownU)
+                        {
+                        }
+                        else if (isHostile)
                         {
                            try
                            {
@@ -1065,7 +1077,20 @@ package
                   {
                      try
                      {
-                        if (uT != null && uT != world.gg && uT.t_throw > 0) { uT.t_throw = 50; }
+                        if (uT != null && uT != world.gg && uT.t_throw > 0)
+                        {
+                           // 钉住投掷状态（飞行延续）+ 清零 damWall——撞墙伤害
+                           // （damageWall 在 t_throw>0 且 |速度|>damWallSpeed 时当场
+                           // 结算，钉 t_throw 反而让条件恒真）必须清零才真正延后。
+                           // 原值回放结束恢复，伤害在回放结束后自然结算。
+                           uT.t_throw = 50;
+                           try
+                           {
+                              if (thrownDamWall[uT] == null) { thrownDamWall[uT] = uT.damWall; }
+                              uT.damWall = 0;
+                           }
+                           catch (e:*) { }
+                        }
                      }
                      catch (e:*) { }
                   }
@@ -1676,6 +1701,9 @@ package
             seenPos = new Dictionary();
             rainbowIdx = 0;
             fxTicks = 0;
+            recPrevHold = -1;   // 开火记录基线重置
+            recPrevTA = -1;
+            recPrevWid = "";
             clearAllGhosts();   // 防上一轮残留的无限残影
 
             lastGhostX = world.gg.X;
@@ -1806,6 +1834,46 @@ package
             // 否则小攻速武器（rapid 1-2）的开火帧记录值与上一帧相同，上升沿检测不到）
             var tAManual:int = world.gg.currentWeapon != null ? world.gg.currentWeapon.t_attack : 0;
             var holdManual:Number = world.gg.currentWeapon != null ? world.gg.currentWeapon.hold : -1;
+            // 真实开火逐帧记录（v1.72）：同武器相邻帧弹夹下降=子弹真实生成
+            // （shoot() 内 hold-=rashod）；t_attack 上升沿兜底（近战/无弹药武器/
+            // recyc 不耗弹）。换武器帧 t_attack>0 视为该帧开火（卸下时 setNull
+            // 清零 t_attack，切换后为正=本帧初始化）。每帧 0/1 发记录进历史，
+            // 回放直接累加——根除窗口边缘检测导致的吞攻击。
+            var cwRec:* = world.gg.currentWeapon;
+            var widRec:String = cwRec != null ? cwRec.id : "";
+            var dHRec:int = 0;
+            var tAEdgeRec:Boolean = false;
+            if (cwRec != null)
+            {
+               if (widRec == recPrevWid)
+               {
+                  if (recPrevHold >= 0 && holdManual >= 0 && recPrevHold > holdManual)
+                  {
+                     dHRec = recPrevHold - holdManual;
+                  }
+                  if (recPrevTA >= 0 && tAManual > recPrevTA) { tAEdgeRec = true; }
+               }
+               else if (tAManual > 0 && recPrevWid != "")
+               {
+                  // 换武器帧即开火：新武器 t_attack>0（卸下时 setNull 清零）=
+                  // 本帧初始化。recPrevWid!="" 排除时停首帧（进入时停前残留
+                  // 的冷却不能算本帧开火）
+                  tAEdgeRec = true;
+               }
+               recPrevWid = widRec;
+               recPrevHold = holdManual;
+               recPrevTA = tAManual;
+            }
+            else
+            {
+               recPrevWid = "";
+               recPrevHold = -1;
+               recPrevTA = -1;
+            }
+            var rashodRec:int = 1;
+            try { if (cwRec != null && cwRec.rashod != null) { rashodRec = cwRec.rashod; } } catch (e:*) { }
+            if (rashodRec < 1) { rashodRec = 1; }
+            var fcRec:int = (dHRec >= rashodRec || tAEdgeRec) ? 1 : 0;
 
             slowTick++;
             var isThr:Boolean = (slowTick % cfgSlowFactor == 0);
@@ -1822,7 +1890,7 @@ package
                            w: world.gg.currentWeapon != null ? world.gg.currentWeapon.id : "",
                            wx: world.gg.currentWeapon != null ? world.gg.currentWeapon.X : 0,
                            wy: world.gg.currentWeapon != null ? world.gg.currentWeapon.Y : 0,
-                           tA: tAManual, hold: holdManual,
+                           tA: tAManual, hold: holdManual, fc: fcRec,
                            tx: world.gg.teleObj != null ? world.gg.teleObj.X : 0,
                            ty: world.gg.teleObj != null ? world.gg.teleObj.Y : 0,
                            ci: speedToEdgeIdx(Math.abs(gg.dx) + Math.abs(gg.dy)) });
@@ -2003,9 +2071,7 @@ package
          var punchOn:Boolean = false;
          var grenOn:Boolean = false;
          var magOn:Boolean = false;
-         var prevTA:int = -1;
-         var prevHold:Number = -1;
-         var fireCnt:int = 0;   // 窗口内真实开火次数（tA 上升沿/弹匣下降沿 = 攻击初始化）
+         var fireCnt:int = 0;   // 窗口内真实开火次数（时停记录逐帧累加）
          var lastAimX:Number = 0;   // 窗口末帧瞄准点（开火前武器重新瞄准用）
          var lastAimY:Number = 0;
          var prevGx:Number = 0;   // 上一历史帧位置（残影速度/配色用）
@@ -2026,8 +2092,6 @@ package
                switchToWeapon(tgtW);
                replayWpn = tgtW;
                prevWid = h.w;
-               prevTA = -1;      // 换武器重置开火检测基线（t_attack/hold 被 setNull 清零）
-               prevHold = -1;
             }
             // 驱动玩家沿历史路径移动（真回放：玩家本体重演）
             try
@@ -2095,23 +2159,10 @@ package
             if (h.p == true) punchOn = true;
             if (h.g == true) grenOn = true;
             if (h.m == true) magOn = true;
-            // 真实开火计数：
-            // 1) tA 上升沿 = 攻击初始化（时停中每帧记录武器冷却）
-            // 2) 小攻速武器（rapid 1-2）开火帧 tA 与上一帧相同——弹匣下降沿兜底
-            if (h.tA != null)
-            {
-               if (prevTA >= 0)
-               {
-                  if (h.tA > prevTA) { fireCnt++; }
-                  else if (h.tA == prevTA && h.hold != null && prevHold >= 0 && h.hold < prevHold) { fireCnt++; }
-               }
-               prevTA = h.tA;
-            }
-            else
-            {
-               prevTA = -1;
-            }
-            if (h.hold != null) { prevHold = h.hold; } else { prevHold = -1; }
+            // 真实开火计数（v1.72）：直接累加时停期间逐帧记录的开火数——
+            // 记录时以相邻帧弹夹下降（子弹真实生成）判定，回放不再做窗口
+            // 边缘检测（旧上升沿/下降沿在窗口首帧必丢边——吞攻击根源之一）
+            if (h.fc != null && h.fc > 0) { fireCnt += h.fc; }
             prevGx = h.x;
             prevGy = h.y;
             replayIdx++;
@@ -2158,6 +2209,13 @@ package
          var execCnt:int = 0;   // 实际执行的开火数（attack() 返回 true）
          if (cwNow != null && fireCnt > 0)
          {
+            // 回放不重掷损坏/卡壳骰子（v1.72）：weaponAttack 按 hp 推算 breaking，
+            // 半耐久武器在回放中会随机卡壳/哑火吞攻击（时停中已打出的子弹
+            // 回放必须同样打出）；hp<=0 时 attack() 直接拒开。逐发把 hp 抬满
+            // （breaking=0）+清卡壳标记；耐久 endReplay 由快照恢复，循环后
+            // 恢复原状态。
+            var savedHpF:* = cwNow.hp;
+            var savedJamF:* = cwNow.jammed;
             var qnNow:String = flash.utils.getQualifiedClassName(cwNow);
             var meleeNow:Boolean = qnNow == "fe.weapon::WClub" || qnNow == "fe.weapon::WPunch" || qnNow == "fe.weapon::WKick";
             for (var fi:int = 0; fi < fireCnt; fi++)
@@ -2181,6 +2239,12 @@ package
                   cwNow.t_attack = 0;
                   cwNow.t_auto = 0;
                   cwNow.t_reload = 0;
+                  try
+                  {
+                     cwNow.hp = cwNow.maxhp;      // breaking=0（weaponAttack 按 hp 推算）
+                     cwNow.jammed = false;        // 卡壳标记不清会阻断开火
+                  }
+                  catch (e:*) { }
                   // 蓄力武器（prep>0）：强制充满蓄力——单次 attack() 只加 2 点
                   // t_prep，不满 prep 不会开火（跳跃时蓄力武器吞攻击的来源之一）
                   try
@@ -2234,6 +2298,13 @@ package
                   catch (e:*) { }
                }
             }
+            // 恢复武器耐久/卡壳状态（endReplay 另有快照恢复兜底）
+            try
+            {
+               cwNow.hp = savedHpF;
+               cwNow.jammed = savedJamF;
+            }
+            catch (e:*) { }
          }
          // 开火诊断（每 15 帧）：fireCnt=检测到应开火数 exec=实际执行数
          // 玩家 stay（跳跃状态）——定位跳跃相关吞攻击
@@ -2404,6 +2475,17 @@ package
             catch (e:*) { }
             endSnapWpnHp = -1;
             endSnapMana = -1;
+            // 恢复被投掷单位的 damWall（时停中清零以延后撞墙伤害——回放结束后
+            // 世界恢复，飞行单位撞墙自然结算）
+            try
+            {
+               for (var kT:Object in thrownDamWall)
+               {
+                  try { kT.damWall = thrownDamWall[kT]; } catch (e:*) { }
+               }
+               thrownDamWall = new Dictionary();
+            }
+            catch (e:*) { }
             replayWpn = null;
          }
          catch (e:*) { log("[SandyMod] endReplay restore error: " + e); }
