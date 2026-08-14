@@ -98,6 +98,7 @@ package
       private var recPrevWid:String = "";   // 开火记录：上一帧武器 id（换武器重置基线）
       private var recDiagCnt:int = 0;        // 录像对象诊断计数（每轮时停重置）
       private var recDoorCnt:int = 0;        // 门对象诊断计数（每轮时停重置）
+      private var doorPrevDop:Dictionary = new Dictionary();  // 门重演：上一帧 dop（防重复 setVisState 音效）
       private var lastGhostX:Number = 0;   // 上一残影位置（叠加防护：最小位移门槛）
       private var lastGhostY:Number = 0;
       private var panelOpen:Boolean = false;
@@ -281,7 +282,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.85 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.86 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -1050,6 +1051,23 @@ package
                      }
                   }
                   catch (e:*) { }
+                  // 门视觉重演（v1.86）：按记录 dop 变化调 setVisState——
+                  // 门的可见形象是 Box 自己的 vis（open/close 帧），不是瓦片
+                  // 淡出；dop 变化=开合事件（doorPrevDop 防重复调用重播音效）
+                  try
+                  {
+                     if (oR["setPos"] == null && stR.dop != null && stR.dop >= 0
+                         && oR["setVisState"] != null && oR.door != null && oR.door > 0)
+                     {
+                        var prevDop:Number = doorPrevDop[oR] != null ? doorPrevDop[oR] : -1;
+                        if (prevDop != stR.dop)
+                        {
+                           doorPrevDop[oR] = stR.dop;
+                           oR.setVisState(stR.dop < 0.5 ? "open" : "close");
+                        }
+                     }
+                  }
+                  catch (e:*) { }
                   // 门瓦片不透明度重演（v1.82/1.84）：门开合=门框瓦片 opac 淡出——
                   // 按记录恢复 opac + t_visi + visi（渲染路径三处全设，确保可见）
                   try
@@ -1188,11 +1206,6 @@ package
                                     }
                                  }
                                  catch (e:*) { }
-                                 // v1.85：保存单位速度（被投掷敌人的惯性——AI 步会
-                                 // 覆写 dx/dy，步后恢复 → 回放结束后继续沿投掷方向
-                                 // 飞行；非投掷单位时停末速度≈0，无副作用）
-                                 var sdxT:Number = oR.dx != null ? oR.dx : 0;
-                                 var sdyT:Number = oR.dy != null ? oR.dy : 0;
                                  oR.step();
                               }
                               catch (e:*) { }
@@ -1243,9 +1256,6 @@ package
                                  }
                               }
                               catch (e:*) { }
-                              // 恢复单位速度（v1.85：被投掷敌人的惯性保留到
-                              // 回放结束后——继续沿投掷方向飞行）
-                              try { oR.dx = sdxT; oR.dy = sdyT; } catch (e:*) { }
                               // v1.85：攻击体复现已移除——攻击体由追踪器（seenAtk）
                               // 按引用逐帧录像并在回放中重钉（真实轨迹/方向/时机）；
                               // 事件复现会造成双发且方向不忠实。
@@ -1530,9 +1540,30 @@ package
                         if (oT != null && oT.isThrow == true)
                         {
                            oT.t_throw = 5;
-                           // 投掷箱按引用录像（v1.85：绕开链扫描之谜——
-                           // 箱子的飞行轨迹回放重演）
-                           try { registerAtk(oT); } catch (e:*) { }
+                           // 投掷箱由追踪器接管录像（v1.86）：move 检测的录像
+                           // 受链扫描之谜影响不可靠——直接建/补追踪器数组，
+                           // 逐帧按引用记录，飞行轨迹回放重演
+                           try
+                           {
+                              if (seenAtk[oT] == null)
+                              {
+                                 seenAtk[oT] = true;
+                                 var arrTB:Array = replayObjs[oT];
+                                 if (arrTB == null)
+                                 {
+                                    arrTB = [];
+                                    replayObjs[oT] = arrTB;
+                                    replayObjArr.push(oT);
+                                 }
+                                 var fN2:int = cfgDuration - sandyLeft;
+                                 while (arrTB.length < fN2 + 1)
+                                 {
+                                    arrTB.push({ x: oT.X, y: oT.Y, f: -1, s: "", wx: 0, wy: 0, twx: 0, twy: 0, vv: true, sto: 1, wrot: -99 });
+                                 }
+                                 log("[DIAG] recBox: X=" + oT.X + " Y=" + oT.Y + " frameN=" + fN2);
+                              }
+                           }
+                           catch (e:*) { }
                         }
                      }
                      catch (e:*) { }
@@ -2338,12 +2369,33 @@ package
             enemyAtks = new Dictionary();       // 敌人攻击事件记录重置
             gSnapKol = -1;
             seenAtk = new Dictionary();         // 攻击体追踪器重置
+            doorPrevDop = new Dictionary();
             projHp = new Dictionary();
             recDiagCnt = 0;
             recDoorCnt = 0;
-            // 时停开始时已在飞的玩家攻击体（手雷/导弹等）快照——不清除，
-            // 回放中继续飞行并正常结算（时停中伤害被清零，结束恢复）
+            // 时停开始时已在飞的攻击体：玩家方的快照（不清除——回放中继续
+            // 飞行并正常结算）；敌人方的直接登记录像（时停前已发射的攻击
+            // 不漏录——天角兽启动时停前已打出的闪电/蓄力完成后的攻击重演）
             preExistB = new Dictionary();
+            try
+            {
+               var oP2:Object = world.loc != null ? world.loc.firstObj : null;
+               var gP2:int = 0;
+               while (oP2 != null)
+               {
+                  try
+                  {
+                     if (oP2["owner"] != world.gg && flash.utils.getQualifiedClassName(oP2).indexOf("fe.weapon::") == 0)
+                     {
+                        registerAtk(oP2);
+                     }
+                  }
+                  catch (e:*) { }
+                  oP2 = oP2.nobj;
+                  if (++gP2 > 20000) break;
+               }
+            }
+            catch (e:*) { }
             try
             {
                var oP:Object = world.loc != null ? world.loc.firstObj : null;
@@ -2857,6 +2909,7 @@ package
          var grenOn:Boolean = false;
          var magOn:Boolean = false;
          var fireCnt:int = 0;   // 窗口内真实开火次数（时停记录逐帧累加）
+         var firePts:Array = [];   // 开火帧的武器位置/瞄准点（v1.86：子弹按开火帧精确复现）
          var lastAimX:Number = 0;   // 窗口末帧瞄准点（开火前武器重新瞄准用）
          var lastAimY:Number = 0;
          var prevGx:Number = 0;   // 上一历史帧位置（残影速度/配色用）
@@ -2946,8 +2999,15 @@ package
             if (h.m == true) magOn = true;
             // 真实开火计数（v1.72）：直接累加时停期间逐帧记录的开火数——
             // 记录时以相邻帧弹夹下降（子弹真实生成）判定，回放不再做窗口
-            // 边缘检测（旧上升沿/下降沿在窗口首帧必丢边——吞攻击根源之一）
-            if (h.fc != null && h.fc > 0) { fireCnt += h.fc; }
+            // 边缘检测（旧上升沿/下降沿在窗口首帧必丢边——吞攻击根源之一）。
+            // v1.86：开火帧的武器位置与瞄准点逐帧记录（子弹按开火帧精确
+            // 复现——窗口末位置/瞄准会让子弹与重演的投掷物等实体产生
+            // 整窗口偏差："回放中子弹离手雷偏差大"的根源）
+            if (h.fc != null && h.fc > 0)
+            {
+               fireCnt += h.fc;
+               firePts.push({ x: h.wx, y: h.wy, ax: h.ax != null ? h.ax : 0, ay: h.ay != null ? h.ay : 0 });
+            }
             prevGx = h.x;
             prevGy = h.y;
             replayIdx++;
@@ -3056,16 +3116,29 @@ package
             {
                try
                {
-                  // 开火前武器重新瞄准/就位（枪械）：gg.step 后武器的位置/旋转
-                  // 可能被 setWeaponPos/actions 重算——跳跃场景下子弹会从偏离
-                  // 记录位置发射导致"有攻击无判定"。近战由直接结算处理不需要。
+                  // 开火前武器重新瞄准/就位（枪械）：v1.86 按**开火帧**记录的
+                  // 武器位置与瞄准点精确复现（firePts）——跳跃/窗口偏移不再
+                  // 使子弹偏离；无记录时退回窗口末瞄准。近战不需要。
                   if (!meleeNow)
                   {
                      try
                      {
-                        cwNow.X = world.gg.weaponX;
-                        cwNow.Y = world.gg.weaponY;
-                        cwNow.rot = Math.atan2(lastAimY - world.gg.Y, lastAimX - world.gg.X);
+                        var fp:Object = firePts.length > 0 ? firePts.shift() : null;
+                        if (fp != null)
+                        {
+                           cwNow.X = fp.x;
+                           cwNow.Y = fp.y;
+                           world.celX = fp.ax;
+                           world.celY = fp.ay;
+                        }
+                        else
+                        {
+                           cwNow.X = world.gg.weaponX;
+                           cwNow.Y = world.gg.weaponY;
+                           world.celX = lastAimX;
+                           world.celY = lastAimY;
+                        }
+                        cwNow.rot = Math.atan2(world.celY - cwNow.Y, world.celX - cwNow.X);
                         cwNow.ready = true;
                      }
                      catch (e:*) { }
@@ -3405,6 +3478,21 @@ package
                {
                   try { kT.damWall = thrownDamWall[kT]; } catch (e:*) { }
                }
+               // v1.86：被投掷敌人的惯性恢复——用节流步前速度快照的
+               // 末次值（时停末仍在飞行的单位），回放结束后继续沿投掷方向飞行
+               try
+               {
+                  for (var kPV:Object in thrownPreV)
+                  {
+                     try
+                     {
+                        kPV.dx = thrownPreV[kPV].dx;
+                        kPV.dy = thrownPreV[kPV].dy;
+                     }
+                     catch (e:*) { }
+                  }
+               }
+               catch (e:*) { }
                thrownDamWall = new Dictionary();
                thrownImpacts = new Dictionary();
                thrownPreV = new Dictionary();
