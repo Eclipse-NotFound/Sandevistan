@@ -4263,6 +4263,30 @@ package
             reattached = new Dictionary();
          }
          catch (e:*) { }
+         // v1.106：回放结束时清空全部残留粒子——回放末段爆炸的粒子寿命
+         // 尚未耗尽（v1.105 日志实证：idx=200 时仍有 22 个粒子存活，回放
+         // 210 结束），火光尾焰溢出到回放结束之后（"火光一直留着，回放
+         // 结束后才消失"=鬼影）。清空后火光随回放一起结束；回放结束后的
+         // 世界正常运行时环境粒子自然重生。
+         try
+         {
+            var PartC6:Class = ApplicationDomain.currentDomain.getDefinition("fe.graph.Part") as Class;
+            if (PartC6 != null)
+            {
+               var oP6:Object = world.loc.firstObj;
+               var gP6:int = 0;
+               var nP6:int = 0;
+               while (oP6 != null)
+               {
+                  var nxP6:Object = oP6.nobj;
+                  try { if (oP6 is PartC6) { oP6.setNull(); nP6++; } } catch (e:*) { }
+                  oP6 = nxP6;
+                  if (++gP6 > 20000) break;
+               }
+               log("[DIAG] partsKillEnd: n=" + nP6);
+            }
+         }
+         catch (e:*) { }
          // v1.98：恢复回放中惰性化的重执行爆炸体——仍存活在飞的（录像原体
          // 时停末未爆/未配对孪生体）回放结束后继续自然飞行/爆炸；已被 boom
          // 终止或已 babah/出链的不恢复（防第二次爆炸）。
