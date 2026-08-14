@@ -180,6 +180,7 @@ package
       private var twinSavExpl:Dictionary = new Dictionary(); // v1.98：回放重执行爆炸体的原始 damageExpl（endReplay 对存活体恢复）
       private var twinDiagCnt:int = 0;                     // v1.98：孪生体惰性化诊断计数
       private var partDiagOnce:Boolean = false;            // v1.98：时停粒子视觉类型诊断（每轮一次）
+      private var recPaired:Dictionary = new Dictionary(); // v1.99：已配对录像体去重（防同一录像体被多个孪生体配对）
       private var reattached:Dictionary = new Dictionary(); // 回放中重挂过 vis 的对象（结束摘除，防残留画面）
       private function addEnemyAtk(u:Object, ev:Object):void
       {
@@ -1597,8 +1598,20 @@ package
                            {
                               kB.damageExpl = kB.weap.damageExpl;
                            }
+                           // v1.99：爆炸位置按记录精确重演——录像死亡帧比爆炸帧
+                           // 晚一步（爆炸后身体再移一步才被移除），回放重钉
+                           // 滞后一步 → 爆炸偏移 30-60px。projBoom 的 x/y 为
+                           // 时停爆炸瞬间位置。
+                           try { kB.X = bm.x; kB.Y = bm.y; } catch (e:*) { }
+                           try { if (kB.vis != null) { kB.vis.x = bm.x; kB.vis.y = bm.y; } } catch (e:*) { }
                            kB.isExpl = false;
                            kB.explosion();
+                           // v1.99：集束武器（explKol>1，如野火核弹）explosion() 后
+                           // expl_t 排定后续连爆——回放世界冻结不步进，回放结束后
+                           // 世界恢复才逐帧 explRun 喷出剩余连爆（"两次爆炸动画"
+                           // 根因之一；时停中录像体爆炸后下一世界步即移除、无连爆，
+                           // 回放只应重演一次）。清零即只爆一次。
+                           try { kB.expl_t = 0; } catch (e:*) { }
                            // v1.92：引爆即杀（回放结束后不再残留续飞）
                            try { kB.liv = 0; } catch (e:*) { }
                            // v1.94：隐藏残体精灵（游戏爆炸流程同款——防爆炸
@@ -1611,6 +1624,47 @@ package
                                   + " f=" + bm.f + " X=" + kB.X + " Y=" + kB.Y
                                   + " dmgExpl=" + (kB.damageExpl != null ? kB.damageExpl : -1));
                            }
+                           // v1.99：未配对孪生体就近终止——配对失败（开火帧与注册帧
+                           // ±1 失配）的惰性化孪生体未被 reExecPin 钉住/终止，回放中
+                           // 飞过爆炸点继续飞行（"导弹仍继续飞行"），endReplay 恢复
+                           // 爆炸能力后回放结束再爆（"两次爆炸动画"）。boom 触发时
+                           // 对爆炸位置附近的惰性化孪生体一并终止（其录像原体爆炸
+                           // 已由 boom 重演，孪生体无需续飞）。先收集后终止——
+                           // 迭代中删除字典键不安全。
+                           try
+                           {
+                              var killT:Array = [];
+                              for (var kTW:Object in twinSavExpl)
+                              {
+                                 try
+                                 {
+                                    if (kTW == null || kTW.in_chain != true) continue;
+                                    var ddxT:Number = kTW.X - bm.x;
+                                    var ddyT:Number = kTW.Y - bm.y;
+                                    if (ddxT * ddxT + ddyT * ddyT <= 200 * 200) { killT.push(kTW); }
+                                 }
+                                 catch (e:*) { }
+                              }
+                              for each (var vK:Object in killT)
+                              {
+                                 try { vK.isExpl = true; } catch (e:*) { }
+                                 try { vK.liv = 0; } catch (e:*) { }
+                                 try { if (vK.vis != null) { vK.vis.visible = false; } } catch (e:*) { }
+                                 try { delete reExecPin[vK]; } catch (e:*) { }
+                                 try { delete twinSavExpl[vK]; } catch (e:*) { }
+                                 try
+                                 {
+                                    if (twinDiagCnt < 12)
+                                    {
+                                       twinDiagCnt++;
+                                       log("[DIAG] twinKill: cls=" + flash.utils.getQualifiedClassName(vK)
+                                           + " X=" + vK.X + " Y=" + vK.Y + " boomF=" + bm.f);
+                                    }
+                                 }
+                                 catch (e:*) { }
+                              }
+                           }
+                           catch (e:*) { }
                         }
                         catch (e:*) { }
                         delete projBoom[kB];
@@ -2703,6 +2757,7 @@ package
             twinSavExpl = new Dictionary();     // v1.98：孪生体惰性化记录重置
             twinDiagCnt = 0;
             partDiagOnce = false;               // v1.98：粒子视觉类型诊断重置
+            recPaired = new Dictionary();       // v1.99：配对去重重置
             reattached = new Dictionary();
             doorPrevDop = new Dictionary();
             projHp = new Dictionary();
@@ -2829,6 +2884,48 @@ package
          try
          {
             for (var ffP:int = 0; ffP < 60; ffP++) { stepParticles(world.loc); mcStepParts(world.loc, true); }
+         }
+         catch (e:*) { }
+         // v1.99：时停爆炸残粒清除——FF 60 步杀不净大寿命爆炸粒子（liv 可达
+         // 100+，时停 1/5 速下到结束时仍在中途），回放中在爆炸位置继续播放
+         // =鬼影（MC 型停在中间帧冻结、Blit 型继续播放）。按爆炸记录位置
+         // （projBoom x/y）清除半径内残留粒子；远离爆炸点的环境粒子保留。
+         try
+         {
+            var PartCls:Class = ApplicationDomain.currentDomain.getDefinition("fe.graph.Part") as Class;
+            if (PartCls != null)
+            {
+               for (var kB3:Object in projBoom)
+               {
+                  try
+                  {
+                     var bm3:Object = projBoom[kB3];
+                     if (bm3 == null) continue;
+                     var oP3:Object = world.loc.firstObj;
+                     var gP3:int = 0;
+                     while (oP3 != null)
+                     {
+                        var nxP3:Object = oP3.nobj;
+                        try
+                        {
+                           if (oP3 is PartCls)
+                           {
+                              var ddx3:Number = oP3.X - bm3.x;
+                              var ddy3:Number = oP3.Y - bm3.y;
+                              if (ddx3 * ddx3 + ddy3 * ddy3 <= 360 * 360)
+                              {
+                                 try { oP3.setNull(); } catch (e:*) { }
+                              }
+                           }
+                        }
+                        catch (e:*) { }
+                        oP3 = nxP3;
+                        if (++gP3 > 20000) break;
+                     }
+                  }
+                  catch (e:*) { }
+               }
+            }
          }
          catch (e:*) { }
          // 追踪器数组长度诊断（v1.88）：len=1 说明追加失败（对象"未重演"定位）
@@ -3037,6 +3134,7 @@ package
                            w: world.gg.currentWeapon != null ? world.gg.currentWeapon.id : "",
                            wx: world.gg.currentWeapon != null ? world.gg.currentWeapon.X : 0,
                            wy: world.gg.currentWeapon != null ? world.gg.currentWeapon.Y : 0,
+                           wrot: world.gg.currentWeapon != null ? world.gg.currentWeapon.rot : 0,
                            tA: tAManual, hold: holdManual, fc: fcRec,
                            tx: world.gg.teleObj != null ? world.gg.teleObj.X : 0,
                            ty: world.gg.teleObj != null ? world.gg.teleObj.Y : 0,
@@ -3445,7 +3543,7 @@ package
             if (h.fc != null && h.fc > 0)
             {
                fireCnt += h.fc;
-               firePts.push({ f: replayIdx, x: h.wx, y: h.wy, ax: h.ax != null ? h.ax : 0, ay: h.ay != null ? h.ay : 0 });
+               firePts.push({ f: replayIdx, x: h.wx, y: h.wy, rot: h.wrot, ax: h.ax != null ? h.ax : 0, ay: h.ay != null ? h.ay : 0 });
             }
             prevGx = h.x;
             prevGy = h.y;
@@ -3581,7 +3679,17 @@ package
                            world.celX = lastAimX;
                            world.celY = lastAimY;
                         }
-                        cwNow.rot = Math.atan2(world.celY - cwNow.Y, world.celX - cwNow.X);
+                        // v1.99：按开火帧记录的实际武器 rot 复现——shoot() 的子弹
+                        // 方向取 `this.rot`（Weapon.as:1495，含 drot 渐转中的实际
+                        // 角度），旧实现强制 rot=瞄准角：武器旋转中开火时，时停中
+                        // 子弹沿实际角度（如 2 点）飞行、回放沿瞄准角（4 点）飞行
+                        // 的偏移根因。无记录退回瞄准角。
+                        try
+                        {
+                           if (fp != null && fp.rot != null) { cwNow.rot = fp.rot; }
+                           else { cwNow.rot = Math.atan2(world.celY - cwNow.Y, world.celX - cwNow.X); }
+                        }
+                        catch (e:*) { }
                         cwNow.ready = true;
                         // v1.90：v1.88 预推进移除——与 stepPlayerBullets + 世界重钉
                         // 双重计入，子弹超前最多 1 个世界步（~200px，用户实测
@@ -3636,9 +3744,25 @@ package
                                  {
                                     if (arrT2[fi2].vv == true) { spawnF = fi2; break; }
                                  }
-                                 if (spawnF == fp.f)
+                                 if (spawnF >= fp.f - 1 && spawnF <= fp.f + 1 && recPaired[kT2] == null)
                                  {
+                                    // v1.99：±1 容差——节流帧第二遍步开火时注册帧与
+                                    // 开火帧相差 1（日志实证 spawnF=80 vs fp.f=81），
+                                    // 严格相等导致配对失败→孪生体不钉不终止→导弹
+                                    // 飞过爆炸点继续飞/回放后再爆。已配对的录像体
+                                    // 不再参与配对（连发时防同一录像体被多次配对）。
+                                    recPaired[kT2] = true;
                                     reExecPin[nb2] = kT2;
+                                    try
+                                    {
+                                       if (twinDiagCnt < 12)
+                                       {
+                                          twinDiagCnt++;
+                                          log("[DIAG] pairOk: spawnF=" + spawnF + " fpF=" + fp.f
+                                              + " cls=" + flash.utils.getQualifiedClassName(nb2));
+                                       }
+                                    }
+                                    catch (e:*) { }
                                     break;
                                  }
                               }
