@@ -97,6 +97,7 @@ package
       private var recPrevTA:int = -1;       // 开火记录：上一帧 t_attack（上升沿=攻击初始化）
       private var recPrevWid:String = "";   // 开火记录：上一帧武器 id（换武器重置基线）
       private var recDiagCnt:int = 0;        // 录像对象诊断计数（每轮时停重置）
+      private var recDoorCnt:int = 0;        // 门对象诊断计数（每轮时停重置）
       private var lastGhostX:Number = 0;   // 上一残影位置（叠加防护：最小位移门槛）
       private var lastGhostY:Number = 0;
       private var panelOpen:Boolean = false;
@@ -170,6 +171,7 @@ package
       private var cfgProjHp:Number = 30;        // 投掷物血量
       private var cfgProjArmor:Number = 0;      // 投掷物护甲（预留接口：伤害先减护甲）
       private var projHp:Dictionary = new Dictionary();  // 投掷物 → 当前血量
+      private var seenAtk:Dictionary = new Dictionary(); // 攻击体追踪器（v1.85：按引用录像，绕开链扫描之谜）
       private function addEnemyAtk(u:Object, ev:Object):void
       {
          var arr:Array = enemyAtks[u];
@@ -279,7 +281,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.84 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.85 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -765,6 +767,30 @@ package
          catch (e:*) { }
       }
 
+      // ===== 攻击体追踪器（v1.85）：攻击体按引用录像，绕开"链扫描录不到
+      // 攻击体"之谜（nPb 诊断证明对象在链中、录像却恒 0——按引用持有对象
+      // 逐帧记录，不依赖链扫描）。玩家步后/节流步后调用登记新生成的攻击体。
+      private function registerAtk(oA:Object):void
+      {
+         try
+         {
+            if (oA == null || seenAtk[oA] != null || replayObjs[oA] != null) return;
+            seenAtk[oA] = true;
+            var arr:Array = [];
+            replayObjs[oA] = arr;
+            replayObjArr.push(oA);
+            var frameN:int = cfgDuration - sandyLeft;
+            var sndA:String = "";
+            try { if (oA.weap != null && oA.weap.sndShoot != null) { sndA = oA.weap.sndShoot; } } catch (e:*) { }
+            for (var f:int = 0; f <= frameN; f++)
+            {
+               arr.push({ x: oA.X, y: oA.Y, f: -1, s: (f == frameN ? sndA : ""), wx: 0, wy: 0, twx: 0, twy: 0, vv: true, sto: 1, wrot: -99 });
+            }
+            log("[DIAG] recAtk: cls=" + flash.utils.getQualifiedClassName(oA) + " X=" + oA.X + " Y=" + oA.Y + " frameN=" + frameN);
+         }
+         catch (e:*) { }
+      }
+
       // ===== 时停中记录重演状态（场景级录像：每帧位置+动画帧+生成音效）=====
       // 单位/攻击体必记录；场景对象移动检测（静态对象不记录，省存储）
       private function recordReplayObjects():void
@@ -783,6 +809,7 @@ package
                {
                   if (oR == world.gg) { /* 玩家跳过（历史记录） */ }
                   else if (slowPartClass != null && oR is slowPartClass) { /* 粒子跳过 */ }
+                  else if (seenAtk[oR] != null) { /* 攻击体由追踪器记录（v1.85） */ }
                   else
                   {
                   var qnR:String = flash.utils.getQualifiedClassName(oR);
@@ -914,6 +941,17 @@ package
                         }
                         catch (e:*) { }
                         var sp2:Object = seenPos[oB2];
+                        // 门诊断（v1.85）：首个门对象的状态（定位门不重演之谜）
+                        try
+                        {
+                           if (recDoorCnt < 3 && oB2.door != null && oB2.door > 0)
+                           {
+                              recDoorCnt++;
+                              log("[DIAG] recDoor: X=" + oB2.X + " vf=" + vfB + " dop=" + dopB
+                                  + " seen=" + (sp2 != null ? 1 : 0));
+                           }
+                        }
+                        catch (e:*) { }
                         if (sp2 == null)
                         {
                            seenPos[oB2] = { x: oB2.X, y: oB2.Y, vf: vfB, dop: dopB };
@@ -933,6 +971,32 @@ package
                      }
                      catch (e:*) { }
                   }
+               }
+            }
+            catch (e:*) { }
+            // 攻击体追踪器追加（v1.85）：按引用逐帧记录（绕开链扫描之谜）。
+            // 子弹在链中=存活继续录；投掷箱 isThrow 期间持续录；死亡后停止
+            // （数组止于死亡位置；死亡对象的 vis 已被摘除→回放中不可见）。
+            try
+            {
+               for (var kA:Object in seenAtk)
+               {
+                  try
+                  {
+                     var aliveA:Boolean = false;
+                     try { aliveA = kA.in_chain == true || kA["isThrow"] == true; } catch (e:*) { }
+                     if (!aliveA)
+                     {
+                        delete seenAtk[kA];
+                        continue;
+                     }
+                     var arrA:Array = replayObjs[kA];
+                     if (arrA != null)
+                     {
+                        arrA.push({ x: kA.X, y: kA.Y, f: -1, s: "", wx: 0, wy: 0, twx: 0, twy: 0, vv: true, sto: 1, wrot: -99 });
+                     }
+                  }
+                  catch (e:*) { }
                }
             }
             catch (e:*) { }
@@ -1094,18 +1158,22 @@ package
                                     oR["celUnit"] = world.gg;
                                  }
                                  catch (e:*) { }
-                                 // v1.82/v1.84：封锁实时开火——部分单位（天角兽等）的
+                                 // v1.82/v1.85：封锁实时开火——部分单位（天角兽等）的
                                  // 攻击条件不含 enemyAct>=3 门（只有 findCel 需
                                  // >1），enemyAct=2 下仍会开火 → 回放出现时停中
                                  // 没有的额外攻击。预步把全部武器槽 t_attack 置 1
                                  // （attack() 初始化要求 t_attack<=0 → 该步无法
-                                 // 开火）；prep 武器同时清 t_prep——时停末未完成的
-                                 // 蓄力不带入回放（否则回放继续蓄力并免费开火的
-                                 // 额外攻击来源）。步后复现事件显式清 0 再 attack，
-                                 // 不受影响。
+                                 // 开火）；prep 武器同时清 t_prep。**逐槽 try/catch**：
+                                 // 天角兽 psyWeapon 是 internal——bracket 访问抛异常
+                                 // 会让整条数组构造失败、守卫全部失效（v1.84 闪电/
+                                 // 精神攻击额外攻击仍存在的根源）。
                                  try
                                  {
-                                    var wSlots:Array = [oR["currentWeapon"], oR["throwWeapon"], oR["magicWeapon"], oR["psyWeapon"]];
+                                    var wSlots:Array = [];
+                                    try { wSlots.push(oR["currentWeapon"]); } catch (e:*) { }
+                                    try { wSlots.push(oR["throwWeapon"]); } catch (e:*) { }
+                                    try { wSlots.push(oR["magicWeapon"]); } catch (e:*) { }
+                                    try { wSlots.push(oR["psyWeapon"]); } catch (e:*) { }
                                     for each (var wG:Object in wSlots)
                                     {
                                        try
@@ -1120,6 +1188,11 @@ package
                                     }
                                  }
                                  catch (e:*) { }
+                                 // v1.85：保存单位速度（被投掷敌人的惯性——AI 步会
+                                 // 覆写 dx/dy，步后恢复 → 回放结束后继续沿投掷方向
+                                 // 飞行；非投掷单位时停末速度≈0，无副作用）
+                                 var sdxT:Number = oR.dx != null ? oR.dx : 0;
+                                 var sdyT:Number = oR.dy != null ? oR.dy : 0;
                                  oR.step();
                               }
                               catch (e:*) { }
@@ -1170,64 +1243,12 @@ package
                                  }
                               }
                               catch (e:*) { }
-                              // 按记录事件复现攻击（v1.81）：事件帧到达时，设
-                              // cel=记录瞄准点（世界坐标）、清冷却/蓄力，调
-                              // attack()+step() → 子弹按记录方向生成（枪弹/导弹
-                              // navod/手雷/魔法全覆盖）——时机与方向忠实重演；
-                              // 玩家回放期间不承受 AI 实时攻击（enemyAct=2）。
-                              try
-                              {
-                                 var eArr:Array = enemyAtks[oR];
-                                 if (eArr != null && eArr.length > 0)
-                                 {
-                                    for (var ei:int = eArr.length - 1; ei >= 0; ei--)
-                                    {
-                                       var ev:Object = eArr[ei];
-                                       if (ev.frame <= idxR)
-                                       {
-                                          try
-                                          {
-                                             var wA:* = ev.w == 0 ? oR["currentWeapon"] : (ev.w == 1 ? oR["throwWeapon"] : oR["magicWeapon"]);
-                                             if (wA != null && wA.attack != null)
-                                             {
-                                                oR.celX = ev.cx;
-                                                oR.celY = ev.cy;
-                                                try { oR["celUnit"] = world.gg; } catch (e:*) { }
-                                                wA.t_attack = 0;
-                                                wA.t_auto = 0;
-                                                wA.t_reload = 0;
-                                                // v1.84：弹尽/卡壳不拒开——时停中已打出的
-                                                // 攻击回放必须打出（hold 拉到满、清卡壳标记）
-                                                try
-                                                {
-                                                   if (wA.holder != null && wA.holder > 0) { wA.hold = wA.holder; }
-                                                   wA.jammed = false;
-                                                }
-                                                catch (e:*) { }
-                                                try { if (wA.prep != null && wA.prep > 0) { wA.t_prep = wA.prep; } } catch (e:*) { }
-                                                wA.attack();
-                                                try { wA.step(); } catch (e:*) { }
-                                                // 连发武器整段打完（预步守卫会截断连发）
-                                                try
-                                                {
-                                                   if (wA.dkol != null && wA.dkol > 0 && wA.t_attack > 0)
-                                                   {
-                                                      while (wA.t_attack > 0) { wA.step(); }
-                                                   }
-                                                }
-                                                catch (e:*) { }
-                                                // v1.84：复现后清蓄力——否则 AI 后续 attack()
-                                                // 因 t_prep 已满而"免费"补射（额外攻击来源）
-                                                try { if (wA.prep != null && wA.prep > 0) { wA.t_prep = 0; } } catch (e:*) { }
-                                             }
-                                          }
-                                          catch (e:*) { }
-                                          eArr.splice(ei, 1);
-                                       }
-                                    }
-                                 }
-                              }
-                              catch (e:*) { }
+                              // 恢复单位速度（v1.85：被投掷敌人的惯性保留到
+                              // 回放结束后——继续沿投掷方向飞行）
+                              try { oR.dx = sdxT; oR.dy = sdyT; } catch (e:*) { }
+                              // v1.85：攻击体复现已移除——攻击体由追踪器（seenAtk）
+                              // 按引用逐帧录像并在回放中重钉（真实轨迹/方向/时机）；
+                              // 事件复现会造成双发且方向不忠实。
                            }
                            catch (e:*) { }
                         }
@@ -1361,6 +1382,21 @@ package
          {
             var projs:Array = [];
             var objs:Array = [];
+            // 投掷物列表（v1.85）：优先从攻击体追踪器取（按引用——
+            // 绕开链扫描之谜；链扫描作为补充兜底）
+            for (var kP2:Object in seenAtk)
+            {
+               try
+               {
+                  var qnP2:String = flash.utils.getQualifiedClassName(kP2);
+                  if ((qnP2 == "fe.weapon::PhisBullet" || qnP2 == "fe.weapon::SmartBullet")
+                      && kP2.explRadius != null && kP2.explRadius > 0 && kP2.isExpl != true)
+                  {
+                     projs.push(kP2);
+                  }
+               }
+               catch (e:*) { }
+            }
             var o:Object = locP.firstObj;
             var g:int = 0;
             while (o != null)
@@ -1370,7 +1406,7 @@ package
                   var qn:String = flash.utils.getQualifiedClassName(o);
                   if (qn == "fe.weapon::PhisBullet" || qn == "fe.weapon::SmartBullet")
                   {
-                     try { if (o.explRadius != null && o.explRadius > 0 && o.isExpl != true) { projs.push(o); } } catch (e:*) { }
+                     try { if (o.explRadius != null && o.explRadius > 0 && o.isExpl != true) { if (projs.indexOf(o) < 0) { projs.push(o); } } } catch (e:*) { }
                   }
                   else if (qn.indexOf("fe.weapon::") == 0)
                   {
@@ -1491,7 +1527,13 @@ package
                   {
                      try
                      {
-                        if (oT != null && oT.isThrow == true) { oT.t_throw = 5; }
+                        if (oT != null && oT.isThrow == true)
+                        {
+                           oT.t_throw = 5;
+                           // 投掷箱按引用录像（v1.85：绕开链扫描之谜——
+                           // 箱子的飞行轨迹回放重演）
+                           try { registerAtk(oT); } catch (e:*) { }
+                        }
                      }
                      catch (e:*) { }
                   }
@@ -1697,6 +1739,28 @@ package
             // 3d. 投掷物可击落检测（v1.83）：子弹命中手雷/导弹/榴弹——
             // 血量归零直接爆炸（时停中仅视觉）
             stepProjHits(locS, true);
+            // 3e. 敌人攻击体追踪登记（v1.85）：节流步后扫描（敌人子弹在
+            // loc.step 内生成——按引用录像，回放重演真实轨迹）
+            try
+            {
+               var oNE:Object = locS.firstObj;
+               var gNE:int = 0;
+               while (oNE != null)
+               {
+                  try
+                  {
+                     if (oNE["owner"] != world.gg && seenAtk[oNE] == null
+                         && flash.utils.getQualifiedClassName(oNE).indexOf("fe.weapon::") == 0)
+                     {
+                        registerAtk(oNE);
+                     }
+                  }
+                  catch (e:*) { }
+                  oNE = oNE.nobj;
+                  if (++gNE > 20000) break;
+               }
+            }
+            catch (e:*) { }
             // 4. 攻击体移动后的命中检测（预判伤害记入）
             oS = locS.firstObj;
             gS = 0;
@@ -2273,6 +2337,10 @@ package
             thrownDamWall = new Dictionary();
             enemyAtks = new Dictionary();       // 敌人攻击事件记录重置
             gSnapKol = -1;
+            seenAtk = new Dictionary();         // 攻击体追踪器重置
+            projHp = new Dictionary();
+            recDiagCnt = 0;
+            recDoorCnt = 0;
             // 时停开始时已在飞的玩家攻击体（手雷/导弹等）快照——不清除，
             // 回放中继续飞行并正常结算（时停中伤害被清零，结束恢复）
             preExistB = new Dictionary();
@@ -2515,7 +2583,28 @@ package
             try { if (cwRec != null && cwRec.rashod != null) { rashodRec = cwRec.rashod; } } catch (e:*) { }
             if (rashodRec < 1) { rashodRec = 1; }
             var fcRec:int = (dHRec >= rashodRec || tAEdgeRec) ? 1 : 0;
-
+            // 攻击体追踪登记（v1.85）：玩家步后立即扫描登记新生成的攻击体
+            // （按引用录像，绕开链扫描之谜）
+            try
+            {
+               var oNA:Object = loc.firstObj;
+               var gNA:int = 0;
+               while (oNA != null)
+               {
+                  try
+                  {
+                     if (oNA["owner"] == world.gg && seenAtk[oNA] == null
+                         && flash.utils.getQualifiedClassName(oNA).indexOf("fe.weapon::") == 0)
+                     {
+                        registerAtk(oNA);
+                     }
+                  }
+                  catch (e:*) { }
+                  oNA = oNA.nobj;
+                  if (++gNA > 20000) break;
+               }
+            }
+            catch (e:*) { }
             slowTick++;
             var isThr:Boolean = (slowTick % cfgSlowFactor == 0);
             if (isThr)
