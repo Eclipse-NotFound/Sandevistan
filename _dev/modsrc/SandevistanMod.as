@@ -1035,8 +1035,12 @@ package
                         {
                            if (kA.isExpl == true && projBoom[kA] == null)
                            {
+                              // v1.93：普通 Bullet 带爆炸半径（野火核弹/榴弹——
+                              // 时停前已在飞的爆炸死亡也记录，回放重演爆炸）
                               var qnA2:String = flash.utils.getQualifiedClassName(kA);
-                              if (qnA2 == "fe.weapon::PhisBullet" || qnA2 == "fe.weapon::SmartBullet")
+                              var isBoomB:Boolean = qnA2 == "fe.weapon::PhisBullet" || qnA2 == "fe.weapon::SmartBullet"
+                                  || (qnA2 == "fe.weapon::Bullet" && kA.explRadius != null && kA.explRadius > 0);
+                              if (isBoomB)
                               {
                                  projBoom[kA] = { f: cfgDuration - sandyLeft, x: kA.X, y: kA.Y };
                               }
@@ -1096,7 +1100,13 @@ package
                      {
                         var isThrownB:Boolean = false;
                         try { isThrownB = oR.weap != null && oR.weap == world.gg["throwWeapon"]; } catch (e:*) { }
-                        if (oR["owner"] == world.gg && oR.in_chain != true && !isThrownB)
+                        // v1.93：仅隐藏"时停中生成"的清除体（补帧 arrR[0].vv=false）
+                        // ——其由回放重执行生成新体渲染；时停前已在飞的攻击体
+                        // （含时停中爆炸死亡的核弹/导弹/榴弹）保持重演——
+                        // 重执行不覆盖它们，录像体是唯一实体
+                        var spawnedInS:Boolean = false;
+                        try { spawnedInS = arrR.length > 0 && arrR[0].vv == false; } catch (e:*) { }
+                        if (oR["owner"] == world.gg && oR.in_chain != true && !isThrownB && spawnedInS)
                         {
                            try { if (oR.vis != null) { oR.vis.visible = false; } } catch (e:*) { }
                            continue;
@@ -1514,18 +1524,40 @@ package
                      if (bm == null) { delete projBoom[kB]; continue; }
                      if (replayIdx >= bm.f)
                      {
+                        // v1.93：时停中生成、由回放重执行生成新体的玩家攻击体
+                        // （枪械类投掷物：核弹/榴弹/火箭）——跳过录像体爆炸
+                        // （新体在回放中自然飞行/被重演子弹击落爆炸），否则
+                        // 与重执行体重叠成"一个引爆+一个正常飞行"
+                        var isReExecB:Boolean = false;
                         try
                         {
-                           if (kB.damageExpl != null && kB.damageExpl <= 0 && kB.weap != null && kB.weap.damageExpl != null)
+                           if (kB["owner"] == world.gg)
                            {
-                              kB.damageExpl = kB.weap.damageExpl;
+                              var isTwB:Boolean = false;
+                              try { isTwB = kB.weap != null && kB.weap == world.gg["throwWeapon"]; } catch (e:*) { }
+                              if (!isTwB)
+                              {
+                                 var arrB:Array = replayObjs[kB];
+                                 if (arrB != null && arrB.length > 0 && arrB[0].vv == false) { isReExecB = true; }
+                              }
                            }
-                           kB.isExpl = false;
-                           kB.explosion();
-                           // v1.92：引爆即杀（回放结束后不再残留续飞）
-                           try { kB.liv = 0; } catch (e:*) { }
                         }
                         catch (e:*) { }
+                        if (!isReExecB)
+                        {
+                           try
+                           {
+                              if (kB.damageExpl != null && kB.damageExpl <= 0 && kB.weap != null && kB.weap.damageExpl != null)
+                              {
+                                 kB.damageExpl = kB.weap.damageExpl;
+                              }
+                              kB.isExpl = false;
+                              kB.explosion();
+                              // v1.92：引爆即杀（回放结束后不再残留续飞）
+                              try { kB.liv = 0; } catch (e:*) { }
+                           }
+                           catch (e:*) { }
+                        }
                         delete projBoom[kB];
                      }
                   }
