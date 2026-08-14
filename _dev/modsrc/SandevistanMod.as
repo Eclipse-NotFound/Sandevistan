@@ -35,7 +35,7 @@ package
    {
       // ---------- 配置（默认值，被 SandevistanMod/config.txt 覆盖） ----------
       private var cfgHotkey:int = Keyboard.BACKSLASH;   // 默认 \
-      private var cfgDuration:int = 120;                // 生效帧数（30fps -> 4 秒）
+      private var cfgDuration:int = 210;                // 生效帧数（30fps -> 7 秒）
       private var cfgCooldown:int = 0;                  // 冷却帧数（默认 0 = 无冷却，便于调试）
       private var cfgReplaySpeed:Number = 5;            // 回放速度倍率（回放时世界冻结，无渲染压力）
       private var cfgGhostEvery:int = 5;                // 每 N 帧生成一个残影（时停期，默认 5）
@@ -98,6 +98,7 @@ package
       private var recPrevWid:String = "";   // 开火记录：上一帧武器 id（换武器重置基线）
       private var recDiagCnt:int = 0;        // 录像对象诊断计数（每轮时停重置）
       private var recDoorCnt:int = 0;        // 门对象诊断计数（每轮时停重置）
+      private var rFixCnt:int = 0;           // 回放重钉诊断计数（每轮回放重置）
       private var doorPrevDop:Dictionary = new Dictionary();  // 门重演：上一帧 dop（防重复 setVisState 音效）
       private var lastGhostX:Number = 0;   // 上一残影位置（叠加防护：最小位移门槛）
       private var lastGhostY:Number = 0;
@@ -283,7 +284,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.88 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.89 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -463,6 +464,18 @@ package
          {
             --cooldownLeft;
          }
+
+         // v1.89：投掷物击落**独立化**——常规游戏（无时停/回放）中每帧
+         // 也执行判定：射击手雷/导弹/榴弹至血量归零随时引爆（projhits
+         // 开关控制；时停/回放中各自的判定在 stepSandy/stepReplay 内）
+         try
+         {
+            if (!sandyActive && !replaying && cfgProjHits && world != null && world.loc != null)
+            {
+               stepProjHits(world.loc, false);
+            }
+         }
+         catch (e:*) { }
 
          updateHud();
          updateGhosts();
@@ -1027,6 +1040,18 @@ package
                   // 位置（setPos 更新碰撞边界——玩家子弹命中重演位置敌人正常结算）
                   if (oR["setPos"] != null) { oR.setPos(stR.x, stR.y); }
                   else { oR.X = stR.x; oR.Y = stR.y; }
+                  // 重钉诊断（v1.89）：首个非单位对象——验证重钉是否应用
+                  try
+                  {
+                     if (rFixCnt < 2 && oR["setPos"] == null)
+                     {
+                        rFixCnt++;
+                        log("[DIAG] rFix: cls=" + flash.utils.getQualifiedClassName(oR)
+                            + " stX=" + stR.x + " stY=" + stR.y + " X=" + oR.X + " Y=" + oR.Y
+                            + " visX=" + (oR.vis != null ? oR.vis.x : -1) + " visPar=" + (oR.vis != null && oR.vis.parent != null ? 1 : 0));
+                     }
+                  }
+                  catch (e:*) { }
                   // 视觉同步（setPos 不更新 vis——否则敌人视觉固定在时停结束位置）
                   try
                   {
@@ -2441,6 +2466,7 @@ package
             rainbowIdx = 0;
             fxTicks = 0;
             replayDiagOnce = false;   // 回放开始诊断每轮重置
+            rFixCnt = 0;               // 回放重钉诊断计数重置
             recDiagCnt = 0;            // 录像对象诊断计数重置
             playerAnimCat = 0;   // 回放玩家动画档位迟滞重置
             recPrevHold = -1;   // 开火记录基线重置
