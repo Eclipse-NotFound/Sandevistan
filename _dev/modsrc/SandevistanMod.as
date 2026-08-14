@@ -173,6 +173,7 @@ package
       private var cfgProjArmor:Number = 0;      // 投掷物护甲（预留接口：伤害先减护甲）
       private var projHp:Dictionary = new Dictionary();  // 投掷物 → 当前血量
       private var seenAtk:Dictionary = new Dictionary(); // 攻击体追踪器（v1.85：按引用录像，绕开链扫描之谜）
+      private var reattached:Dictionary = new Dictionary(); // 回放中重挂过 vis 的对象（结束摘除，防残留画面）
       private function addEnemyAtk(u:Object, ev:Object):void
       {
          var arr:Array = enemyAtks[u];
@@ -282,7 +283,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.86 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.87 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -1031,6 +1032,24 @@ package
                   {
                      if (oR["setVisPos"] != null) { oR.setVisPos(); }
                      else if (oR.vis != null) { oR.vis.x = stR.x; oR.vis.y = stR.y; }
+                  }
+                  catch (e:*) { }
+                  // 攻击体/投掷物视觉重挂（v1.87）：时停中死亡或移除的对象
+                  // （子弹命中玩家、手雷爆炸、箱子撞毁）其 vis 被 remVisual
+                  // 从显示层摘除——回放重钉位置也**不可见**（手雷/导弹/天角兽
+                  // 攻击/投掷箱"不重演"的根因）。按原图层重挂后逐帧重演飞行
+                  // 轨迹；单位（有 setPos）不走此路径（其 vis 未摘除）。
+                  try
+                  {
+                     if (oR["setPos"] == null && oR.vis != null && oR.vis.parent == null && oR.sloy != null)
+                     {
+                        var gVis2:Object = world["grafon"];
+                        if (gVis2 != null && gVis2.visObjs != null && gVis2.visObjs[oR.sloy] != null)
+                        {
+                           gVis2.visObjs[oR.sloy].addChild(oR.vis);
+                           reattached[oR] = true;
+                        }
+                     }
                   }
                   catch (e:*) { }
                   // 视觉可见性重演（v1.76）：按记录强制 vis.visible——尸鬼钻地
@@ -2369,6 +2388,7 @@ package
             enemyAtks = new Dictionary();       // 敌人攻击事件记录重置
             gSnapKol = -1;
             seenAtk = new Dictionary();         // 攻击体追踪器重置
+            reattached = new Dictionary();
             doorPrevDop = new Dictionary();
             projHp = new Dictionary();
             recDiagCnt = 0;
@@ -3401,6 +3421,17 @@ package
                }
                catch (e:*) { }
             }
+         }
+         catch (e:*) { }
+         // v1.87：摘除回放中重挂过的 vis（时停中已死亡对象的视觉——
+         // 不摘除会在回放结束后残留成静止画面）
+         try
+         {
+            for (var kRA:Object in reattached)
+            {
+               try { if (kRA.vis != null && kRA.vis.parent != null) { kRA.vis.parent.removeChild(kRA.vis); } } catch (e:*) { }
+            }
+            reattached = new Dictionary();
          }
          catch (e:*) { }
          // 清空场景重演记录
