@@ -175,6 +175,8 @@ package
       private var projHp:Dictionary = new Dictionary();  // 投掷物 → 当前血量
       private var seenAtk:Dictionary = new Dictionary(); // 攻击体追踪器（v1.85：按引用录像，绕开链扫描之谜）
       private var projBoom:Dictionary = new Dictionary(); // v1.91：时停中引爆的投掷物 → {f,x,y}（回放对应帧真实爆炸）
+      private var reExecPin:Dictionary = new Dictionary(); // v1.94：重执行爆弹体 → 录像孪生体（回放钉到录像轨迹）
+      private var boomDiagCnt:int = 0;                     // v1.94：boom 触发诊断计数
       private var reattached:Dictionary = new Dictionary(); // 回放中重挂过 vis 的对象（结束摘除，防残留画面）
       private function addEnemyAtk(u:Object, ev:Object):void
       {
@@ -1053,7 +1055,12 @@ package
                      var arrA:Array = replayObjs[kA];
                      if (arrA != null)
                      {
-                        arrA.push({ x: kA.X, y: kA.Y, f: -1, s: "", wx: 0, wy: 0, twx: 0, twy: 0, vv: true, sto: 1, wrot: -99 });
+                        // v1.94：已引爆体补帧 vv=false——回放中爆炸发生后
+                        // 精灵立即隐藏（不再"爆炸动画与飞行精灵重叠"的
+                        // 异常引爆动画）
+                        var vvA:Boolean = true;
+                        try { vvA = !(kA.isExpl == true); } catch (e:*) { }
+                        arrA.push({ x: kA.X, y: kA.Y, f: -1, s: "", wx: 0, wy: 0, twx: 0, twy: 0, vv: vvA, sto: 1, wrot: -99 });
                      }
                   }
                   catch (e:*) { }
@@ -1555,6 +1562,16 @@ package
                               kB.explosion();
                               // v1.92：引爆即杀（回放结束后不再残留续飞）
                               try { kB.liv = 0; } catch (e:*) { }
+                              // v1.94：隐藏残体精灵（游戏爆炸流程同款——防爆炸
+                              // 动画与飞行精灵重叠的"异常引爆动画"）
+                              try { if (kB.vis != null) { kB.vis.visible = false; } } catch (e:*) { }
+                              if (boomDiagCnt < 4)
+                              {
+                                 boomDiagCnt++;
+                                 log("[DIAG] boom: cls=" + flash.utils.getQualifiedClassName(kB)
+                                     + " f=" + bm.f + " X=" + kB.X + " Y=" + kB.Y
+                                     + " dmgExpl=" + (kB.damageExpl != null ? kB.damageExpl : -1));
+                              }
                            }
                            catch (e:*) { }
                         }
@@ -2611,6 +2628,8 @@ package
             gSnapKol = -1;
             seenAtk = new Dictionary();         // 攻击体追踪器重置
             projBoom = new Dictionary();        // v1.91：时停引爆记录重置
+            reExecPin = new Dictionary();       // v1.94：重执行孪生钉重置
+            boomDiagCnt = 0;                    // v1.94：boom 诊断计数重置
             reattached = new Dictionary();
             doorPrevDop = new Dictionary();
             projHp = new Dictionary();
@@ -3433,6 +3452,44 @@ package
                   catch (e:*) { }
                   if (cwNow.attack() == true) { execCnt++; }
                   cwNow.step();       // 武器步进（shoot 在 t_attack==rapid 触发）
+                  // v1.94：爆弹体孪生发现——重执行生成的爆弹（核弹/榴弹/
+                  // 火箭）与录像原体配对：回放中把重执行体钉到录像轨迹
+                  // （重演子弹与重执行体按原几何相遇→命中引爆，窗口量化
+                  // 误差消除）。孪生=玩家方、时停中生成（补帧 vv=false）、
+                  // 首个 vv=true 索引==本开火帧 fp.f。
+                  try
+                  {
+                     if (!meleeNow && fp != null && fp.f != null)
+                     {
+                        var nb2:* = cwNow.b;
+                        if (nb2 != null && nb2.explRadius != null && nb2.explRadius > 0 && reExecPin[nb2] == null)
+                        {
+                           for (var kT2:Object in seenAtk)
+                           {
+                              try
+                              {
+                                 if (kT2 == null || kT2 == nb2) continue;
+                                 if (kT2["owner"] != world.gg) continue;
+                                 var arrT2:Array = replayObjs[kT2];
+                                 if (arrT2 == null || arrT2.length <= 1) continue;
+                                 if (arrT2[0].vv != false) continue;
+                                 var spawnF:int = -1;
+                                 for (var fi2:int = 1; fi2 < arrT2.length; fi2++)
+                                 {
+                                    if (arrT2[fi2].vv == true) { spawnF = fi2; break; }
+                                 }
+                                 if (spawnF == fp.f)
+                                 {
+                                    reExecPin[nb2] = kT2;
+                                    break;
+                                 }
+                              }
+                              catch (e:*) { }
+                           }
+                        }
+                     }
+                  }
+                  catch (e:*) { }
                   // 连发武器（dkol>0）：初始化后持续步进完成整个连发
                   try
                   {
@@ -3501,6 +3558,29 @@ package
          stepPlayerBullets();
          stepUnrecordedAtk();
          replayObjects();
+         // v1.94：重执行爆弹体钉到录像轨迹——消除窗口量化误差，
+         // 重演子弹与重执行体按时停原几何相遇命中引爆
+         try
+         {
+            for (var kRP:Object in reExecPin)
+            {
+               try
+               {
+                  if (kRP == null) { delete reExecPin[kRP]; continue; }
+                  try { if (kRP.in_chain != true || kRP.isExpl == true) { delete reExecPin[kRP]; continue; } } catch (e:*) { }
+                  var twinRP:Object = reExecPin[kRP];
+                  var arrRP:Array = replayObjs[twinRP];
+                  if (arrRP == null || arrRP.length == 0) { delete reExecPin[kRP]; continue; }
+                  var stRP:Object = arrRP[Math.min(replayIdx, arrRP.length - 1)];
+                  if (stRP == null) continue;
+                  kRP.X = stRP.x;
+                  kRP.Y = stRP.y;
+                  try { if (kRP.vis != null) { kRP.vis.x = stRP.x; kRP.vis.y = stRP.y; } } catch (e:*) { }
+               }
+               catch (e:*) { }
+            }
+         }
+         catch (e:*) { }
          // 投掷物可击落检测（v1.83）：回放中重演的子弹命中重演的
          // 投掷物 → 真实爆炸结算（时停中的引爆只是视觉预告）
          stepProjHits(world.loc, false);
