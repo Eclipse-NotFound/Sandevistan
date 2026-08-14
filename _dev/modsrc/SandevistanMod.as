@@ -1522,6 +1522,8 @@ package
                            }
                            kB.isExpl = false;
                            kB.explosion();
+                           // v1.92：引爆即杀（回放结束后不再残留续飞）
+                           try { kB.liv = 0; } catch (e:*) { }
                         }
                         catch (e:*) { }
                         delete projBoom[kB];
@@ -1543,7 +1545,10 @@ package
                try
                {
                   var qnP2:String = flash.utils.getQualifiedClassName(kP2);
-                  if ((qnP2 == "fe.weapon::PhisBullet" || qnP2 == "fe.weapon::SmartBullet")
+                  // v1.92：可击落投掷物扩到普通 Bullet——榴弹发射器/野火核弹
+                  // 发射器 tip=3 走 Weapon→Bullet（非 PhisBullet/SmartBullet），
+                  // 带爆炸半径；天角兽闪电 expl=0 仍排除
+                  if ((qnP2 == "fe.weapon::PhisBullet" || qnP2 == "fe.weapon::SmartBullet" || qnP2 == "fe.weapon::Bullet")
                       && kP2.explRadius != null && kP2.explRadius > 0 && kP2.isExpl != true)
                   {
                      projs.push(kP2);
@@ -1558,9 +1563,25 @@ package
                try
                {
                   var qn:String = flash.utils.getQualifiedClassName(o);
-                  if (qn == "fe.weapon::PhisBullet" || qn == "fe.weapon::SmartBullet")
+                  if (qn == "fe.weapon::PhisBullet" || qn == "fe.weapon::SmartBullet" || qn == "fe.weapon::Bullet")
                   {
-                     try { if (o.explRadius != null && o.explRadius > 0 && o.isExpl != true) { if (projs.indexOf(o) < 0) { projs.push(o); } } } catch (e:*) { }
+                     // v1.92：普通 Bullet 带爆炸半径（榴弹/野火核弹/等离子等
+                     // 爆炸弹）纳入可击落；无爆炸半径（枪弹/天角兽闪电）
+                     // 照常入 objs
+                     var isProjQ:Boolean = false;
+                     try { isProjQ = o.explRadius != null && o.explRadius > 0 && o.isExpl != true; } catch (e:*) { }
+                     if (isProjQ)
+                     {
+                        if (projs.indexOf(o) < 0) { projs.push(o); }
+                     }
+                     else
+                     {
+                        // v1.90：近战攻击体（vel=0 静止在手上）不参与击落判定——
+                        // 否则手雷飞过近战范围会被"拳击"引爆并把攻击体 remObj
+                        // 出链（破坏近战）
+                        try { if (o.vel != null && o.vel < 1) { o = o.nobj; continue; } } catch (e:*) { }
+                        objs.push(o);
+                     }
                   }
                   else if (qn.indexOf("fe.weapon::") == 0)
                   {
@@ -1587,6 +1608,8 @@ package
                {
                   try
                   {
+                     if (b == p) continue;   // v1.92：自测防护——爆弹类子弹同时
+                                             // 出现在 projs/objs 两表
                      // v1.91：同源不再一刀切跳过（"射击自己的手雷不引爆"根因）
                      // ——改为出生护手：同源且投掷物距其 owner <200px（刚出手/
                      // 枪口附近）不判定，防止投掷+连射在自己面前引爆；飞出后
@@ -1606,28 +1629,37 @@ package
                         }
                         catch (e:*) { }
                      }
-                     // 线段碰撞（v1.84）：子弹高速（~200px/步）会直接跳过
-                     // 28px 判定半径——按"上一步位置→当前位置"线段到投掷物
-                     // 的距离判定，途中擦过也算命中
+                     // v1.92 相对速度扫掠碰撞：子弹与投掷物本步**同时**移动
+                     // （各一世界步）——高速相向时旧的"子弹段 vs 投掷物末端"
+                     // 会漏判（交叉错过）；投掷物比子弹快时单段测永远追不上
+                     // （"弹药飞行状态提前/射击延后"的真因——玩家子弹与导弹
+                     // 同速，单测末端差一整个扫掠段）。物理最近点：
+                     // R(t)=O+t·RV（O=起步点相对差，RV=相对速度），
+                     // t∈[0,1] 钳制，|R(t*)|≤28 即命中（端点自然覆盖）。
                      var sx:Number = b.X - (b.dx != null ? b.dx : 0);
                      var sy:Number = b.Y - (b.dy != null ? b.dy : 0);
-                     var ex:Number = b.X;
-                     var ey:Number = b.Y;
-                     var segdx:Number = ex - sx;
-                     var segdy:Number = ey - sy;
-                     var segLen2:Number = segdx * segdx + segdy * segdy;
-                     var tHit:Number = 0;
-                     if (segLen2 > 0.0001)
+                     var pdx:Number = p.dx != null ? p.dx : 0;
+                     var pdy:Number = p.dy != null ? p.dy : 0;
+                     var hitOK:Boolean = false;
+                     var ddx0:Number = sx - (p.X - pdx);
+                     var ddy0:Number = sy - (p.Y - pdy);
+                     if (ddx0 * ddx0 + ddy0 * ddy0 <= 28 * 28) { hitOK = true; }
+                     if (!hitOK)
                      {
-                        tHit = ((p.X - sx) * segdx + (p.Y - sy) * segdy) / segLen2;
-                        if (tHit < 0) { tHit = 0; }
-                        if (tHit > 1) { tHit = 1; }
+                        var rvx:Number = (b.dx != null ? b.dx : 0) - pdx;
+                        var rvy:Number = (b.dy != null ? b.dy : 0) - pdy;
+                        var rv2:Number = rvx * rvx + rvy * rvy;
+                        if (rv2 > 0.0001)
+                        {
+                           var tS:Number = -(ddx0 * rvx + ddy0 * rvy) / rv2;
+                           if (tS < 0) { tS = 0; }
+                           if (tS > 1) { tS = 1; }
+                           var cxR:Number = ddx0 + rvx * tS;
+                           var cyR:Number = ddy0 + rvy * tS;
+                           if (cxR * cxR + cyR * cyR <= 28 * 28) { hitOK = true; }
+                        }
                      }
-                     var clx:Number = sx + segdx * tHit;
-                     var cly:Number = sy + segdy * tHit;
-                     var dxp:Number = p.X - clx;
-                     var dyp:Number = p.Y - cly;
-                     if (dxp * dxp + dyp * dyp > 28 * 28) continue;
+                     if (!hitOK) continue;
                      var dmg:Number = b.damage != null ? b.damage : 0;
                      // 时停中玩家子弹伤害被清零——用捕获的原始伤害
                      if (dmg <= 0 && b.owner == world.gg && origDam[b] != null) { dmg = origDam[b]; }
@@ -1655,16 +1687,22 @@ package
                            p.destroy = svDest;
                         }
                         catch (e:*) { }
+                        // v1.92：引爆即杀（liv=0 → 下一世界步 vse→remObj）——
+                        // 否则对象继续沿轨迹飞行（时停中+回放中"爆炸后鬼影"）
+                        try { p.liv = 0; } catch (e:*) { }
                         // v1.91：记录引爆帧——回放中该帧真实爆炸
                         if (projBoom[p] == null)
                         {
                            projBoom[p] = { f: cfgDuration - sandyLeft, x: p.X, y: p.Y };
                         }
                      }
-                        else
-                        {
-                           try { p.explosion(); } catch (e:*) { }
-                        }
+                     else
+                     {
+                        try { p.explosion(); } catch (e:*) { }
+                        // v1.92：引爆即杀——explosion() 不移除对象（babah 不置位、
+                        // liv 尚余），否则常规游戏中爆炸后鬼影继续沿轨迹飞行
+                        try { p.liv = 0; } catch (e:*) { }
+                     }
                      }
                      else
                      {
