@@ -1539,50 +1539,33 @@ package
                      if (bm == null) { delete projBoom[kB]; continue; }
                      if (replayIdx >= bm.f)
                      {
-                        // v1.93：时停中生成、由回放重执行生成新体的玩家攻击体
-                        // （枪械类投掷物：核弹/榴弹/火箭）——跳过录像体爆炸
-                        // （新体在回放中自然飞行/被重演子弹击落爆炸），否则
-                        // 与重执行体重叠成"一个引爆+一个正常飞行"
-                        var isReExecB:Boolean = false;
+                        // v1.96：全部引爆统一走 boom 重演（日志证明位置与时停
+                        // 完全一致）——不再跳过重执行体（v1.93 跳过导致
+                        // "回放未击中/晚于时停引爆"）；重执行孪生体由
+                        // reExecPin 循环在其录像死亡帧终止（隐藏+禁爆），
+                        // 不会与 boom 重叠成两份
                         try
                         {
-                           if (kB["owner"] == world.gg)
+                           if (kB.damageExpl != null && kB.damageExpl <= 0 && kB.weap != null && kB.weap.damageExpl != null)
                            {
-                              var isTwB:Boolean = false;
-                              try { isTwB = kB.weap != null && kB.weap == world.gg["throwWeapon"]; } catch (e:*) { }
-                              if (!isTwB)
-                              {
-                                 var arrB:Array = replayObjs[kB];
-                                 if (arrB != null && arrB.length > 0 && arrB[0].vv == false) { isReExecB = true; }
-                              }
+                              kB.damageExpl = kB.weap.damageExpl;
+                           }
+                           kB.isExpl = false;
+                           kB.explosion();
+                           // v1.92：引爆即杀（回放结束后不再残留续飞）
+                           try { kB.liv = 0; } catch (e:*) { }
+                           // v1.94：隐藏残体精灵（游戏爆炸流程同款——防爆炸
+                           // 动画与飞行精灵重叠的"异常引爆动画"）
+                           try { if (kB.vis != null) { kB.vis.visible = false; } } catch (e:*) { }
+                           if (boomDiagCnt < 4)
+                           {
+                              boomDiagCnt++;
+                              log("[DIAG] boom: cls=" + flash.utils.getQualifiedClassName(kB)
+                                  + " f=" + bm.f + " X=" + kB.X + " Y=" + kB.Y
+                                  + " dmgExpl=" + (kB.damageExpl != null ? kB.damageExpl : -1));
                            }
                         }
                         catch (e:*) { }
-                        if (!isReExecB)
-                        {
-                           try
-                           {
-                              if (kB.damageExpl != null && kB.damageExpl <= 0 && kB.weap != null && kB.weap.damageExpl != null)
-                              {
-                                 kB.damageExpl = kB.weap.damageExpl;
-                              }
-                              kB.isExpl = false;
-                              kB.explosion();
-                              // v1.92：引爆即杀（回放结束后不再残留续飞）
-                              try { kB.liv = 0; } catch (e:*) { }
-                              // v1.94：隐藏残体精灵（游戏爆炸流程同款——防爆炸
-                              // 动画与飞行精灵重叠的"异常引爆动画"）
-                              try { if (kB.vis != null) { kB.vis.visible = false; } } catch (e:*) { }
-                              if (boomDiagCnt < 4)
-                              {
-                                 boomDiagCnt++;
-                                 log("[DIAG] boom: cls=" + flash.utils.getQualifiedClassName(kB)
-                                     + " f=" + bm.f + " X=" + kB.X + " Y=" + kB.Y
-                                     + " dmgExpl=" + (kB.damageExpl != null ? kB.damageExpl : -1));
-                              }
-                           }
-                           catch (e:*) { }
-                        }
                         delete projBoom[kB];
                      }
                   }
@@ -3596,6 +3579,17 @@ package
                   if (arrRP == null || arrRP.length == 0) { delete reExecPin[kRP]; continue; }
                   var stRP:Object = arrRP[Math.min(replayIdx, arrRP.length - 1)];
                   if (stRP == null) continue;
+                  // v1.96：录像孪生体已爆炸（vv=false 死亡标记）→ 终止重执行体
+                  // （隐藏 + 禁爆 + 杀）——爆炸由 boom 按录像帧如实重演，
+                  // 不再由孪生体后续自然爆炸产生"晚于时停"的第二爆/定格残影
+                  if (stRP.vv == false)
+                  {
+                     try { kRP.isExpl = true; } catch (e:*) { }
+                     try { kRP.liv = 0; } catch (e:*) { }
+                     try { if (kRP.vis != null) { kRP.vis.visible = false; } } catch (e:*) { }
+                     delete reExecPin[kRP];
+                     continue;
+                  }
                   kRP.X = stRP.x;
                   kRP.Y = stRP.y;
                   try { if (kRP.vis != null) { kRP.vis.x = stRP.x; kRP.vis.y = stRP.y; } } catch (e:*) { }
