@@ -1675,12 +1675,14 @@ package
                            // v1.94：隐藏残体精灵（游戏爆炸流程同款——防爆炸
                            // 动画与飞行精灵重叠的"异常引爆动画"）
                            try { if (kB.vis != null) { kB.vis.visible = false; } } catch (e:*) { }
-                           if (boomDiagCnt < 4)
+                           if (boomDiagCnt < 30)
                            {
                               boomDiagCnt++;
                               log("[DIAG] boom: cls=" + flash.utils.getQualifiedClassName(kB)
                                   + " f=" + bm.f + " X=" + kB.X + " Y=" + kB.Y
-                                  + " dmgExpl=" + (kB.damageExpl != null ? kB.damageExpl : -1));
+                                  + " dmgExpl=" + (kB.damageExpl != null ? kB.damageExpl : -1)
+                                  + " explKol=" + (kB.explKol != null ? kB.explKol : -1)
+                                  + " replIdx=" + replayIdx);
                            }
                            // v1.99：未配对孪生体就近终止——配对失败（开火帧与注册帧
                            // ±1 失配）的惰性化孪生体未被 reExecPin 钉住/终止，回放中
@@ -1716,7 +1718,10 @@ package
                                     {
                                        twinDiagCnt++;
                                        log("[DIAG] twinKill: cls=" + flash.utils.getQualifiedClassName(vK)
-                                           + " X=" + vK.X + " Y=" + vK.Y + " boomF=" + bm.f);
+                                           + " X=" + vK.X + " Y=" + vK.Y + " boomF=" + bm.f
+                                           + " isExpl=" + (vK.isExpl != null ? vK.isExpl : -1)
+                                           + " liv=" + (vK.liv != null ? vK.liv : -1)
+                                           + " babah=" + (vK.babah != null ? vK.babah : -1));
                                     }
                                  }
                                  catch (e:*) { }
@@ -4022,6 +4027,11 @@ package
          }
          catch (e:*) { }
          if (cfgFxRun) { try { stepParticles(world.loc); } catch (e:*) { } }
+         // v1.102：回放中同样对 MC 型爆炸粒子 stop+逐帧推进——boom 生成的
+         // 爆炸 MC 按舞台帧率播放，动画短于粒子寿命时循环重播（回放中
+         // "两个冲击波"候选根因；时停中 v1.98 同款修复已确认有效）。
+         // 推进速率 1 帧/显示帧=正常速度不变，仅防循环。
+         try { mcStepParts(world.loc, true); } catch (e:*) { }
          // 回放动画诊断（每 30 帧）：采样前 2 个重演单位的视觉像素哈希——
          // 哈希随帧变化=动画在播放；恒不变=渲染冻结（僵死根因判定）
          if (++replayAnimTick % 30 == 0)
