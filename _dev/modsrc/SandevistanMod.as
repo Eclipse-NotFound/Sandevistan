@@ -177,6 +177,9 @@ package
       private var projBoom:Dictionary = new Dictionary(); // v1.91：时停中引爆的投掷物 → {f,x,y}（回放对应帧真实爆炸）
       private var reExecPin:Dictionary = new Dictionary(); // v1.94：重执行爆弹体 → 录像孪生体（回放钉到录像轨迹）
       private var boomDiagCnt:int = 0;                     // v1.94：boom 触发诊断计数
+      private var twinSavExpl:Dictionary = new Dictionary(); // v1.98：回放重执行爆炸体的原始 damageExpl（endReplay 对存活体恢复）
+      private var twinDiagCnt:int = 0;                     // v1.98：孪生体惰性化诊断计数
+      private var partDiagOnce:Boolean = false;            // v1.98：时停粒子视觉类型诊断（每轮一次）
       private var reattached:Dictionary = new Dictionary(); // 回放中重挂过 vis 的对象（结束摘除，防残留画面）
       private function addEnemyAtk(u:Object, ev:Object):void
       {
@@ -1458,6 +1461,37 @@ package
                            if (stB3 != null && stB3.vv == false) { oB = nxB; continue; }
                         }
                      }
+                     // v1.98：回放重执行的爆炸体（回放中新生成、不在录像中）
+                     // 一律惰性化——爆炸（视觉+伤害）全由 boom 按录像帧重演，
+                     // 孪生体只负责飞行轨迹视觉。v1.97 双倍伤害根因：回放重演
+                     // 子弹命中**未配对**孪生体触发真实爆炸（日志 replayHit
+                     // idx=80 与 boom f=74 同轮回放双爆，dmgExpl=800 双份）+
+                     // 配对孪生体导火索耗尽/命中与 boom 的竞态。isExpl=true
+                     // 使游戏 explosion() 直接早退（Bullet.as:668 守卫），且
+                     // projs 可击落表按 isExpl!=true 过滤——重演子弹不再引爆
+                     // 孪生体；endReplay 对仍存活在飞的孪生体恢复爆炸能力
+                     // （录像原体时停末仍在飞的场景，回放结束后自然续飞爆炸）。
+                     // 时停前在飞攻击体（preExistB）已在录像中，不入此分支。
+                     try
+                     {
+                        if (oB.explRadius != null && oB.explRadius > 0 && oB.isExpl != true && twinSavExpl[oB] == null)
+                        {
+                           twinSavExpl[oB] = (oB.damageExpl != null ? oB.damageExpl : 0);
+                           oB.isExpl = true;
+                           oB.damageExpl = 0;
+                           try
+                           {
+                              if (twinDiagCnt < 8)
+                              {
+                                 twinDiagCnt++;
+                                 log("[DIAG] twinInert: cls=" + flash.utils.getQualifiedClassName(oB)
+                                     + " X=" + oB.X + " Y=" + oB.Y + " idx=" + replayIdx);
+                              }
+                           }
+                           catch (e:*) { }
+                        }
+                     }
+                     catch (e:*) { }
                      oB.step();
                   }
                }
@@ -2666,6 +2700,9 @@ package
             projBoom = new Dictionary();        // v1.91：时停引爆记录重置
             reExecPin = new Dictionary();       // v1.94：重执行孪生钉重置
             boomDiagCnt = 0;                    // v1.94：boom 诊断计数重置
+            twinSavExpl = new Dictionary();     // v1.98：孪生体惰性化记录重置
+            twinDiagCnt = 0;
+            partDiagOnce = false;               // v1.98：粒子视觉类型诊断重置
             reattached = new Dictionary();
             doorPrevDop = new Dictionary();
             projHp = new Dictionary();
@@ -2791,7 +2828,7 @@ package
          // 开始时爆炸动画鬼影"根因）。快速步进至全部自然完结。
          try
          {
-            for (var ffP:int = 0; ffP < 60; ffP++) { stepParticles(world.loc); }
+            for (var ffP:int = 0; ffP < 60; ffP++) { stepParticles(world.loc); mcStepParts(world.loc, true); }
          }
          catch (e:*) { }
          // 追踪器数组长度诊断（v1.88）：len=1 说明追加失败（对象"未重演"定位）
@@ -2988,6 +3025,9 @@ package
             {
                slowStepWorld();   // 真实 loc.step()：世界 1/N 速步进（含交互检测）
             }
+            // v1.98：MC 型粒子每显示帧 stop、节流帧（世界步帧）nextFrame 推 1 帧
+            // ——爆炸动画 1/N 慢速播放且不循环（修复"时停中爆炸动画多次加载"）
+            mcStepParts(loc, isThr);
 
             var gg:Object = loc.gg;
             // 记录攻击键状态与瞄准方向（回放时攻击指向时停期间的发射方向）
@@ -3134,6 +3174,80 @@ package
             obj = nxt;
             if (++guard > 20000) break;
          }
+      }
+
+      // ===== 时停中 MovieClip 型粒子慢放（v1.98）=====
+      // 游戏 Part 视觉分两类：Blit 型（blitData!=null，blitFrame 随 step 推进
+      // ——已随世界 1/N 慢速）与 MovieClip 型（vClass，initVis 后 gotoAndPlay：
+      // 播放头按**舞台帧率**推进，与时停慢速无关）。爆炸动画几十帧数秒播完，
+      // 而粒子寿命 liv 以世界步计被拉长 5 倍——MC 播完即循环重播 = 用户所见
+      // "时停中爆炸动画多次加载"。修复：每显示帧 stop()（防按舞台帧率播放），
+      // 节流帧（世界步帧）手动 nextFrame() 推 1 帧——爆炸动画 1/N 慢速播放，
+      // 播完停在末帧不循环。
+      private function mcStepParts(loc:Object, advance:Boolean):void
+      {
+         try
+         {
+            var PartClass:Class = ApplicationDomain.currentDomain.getDefinition("fe.graph.Part") as Class;
+            if (PartClass == null) return;
+            var objP:Object = loc.firstObj;
+            var guardP:int = 0;
+            var mcN:int = 0;
+            var blN:int = 0;
+            var clsS:String = "";
+            while (objP != null)
+            {
+               var nxtP:Object = objP.nobj;
+               try
+               {
+                  if (objP is PartClass && objP.vis != null)
+                  {
+                     var isAnimP:* = objP.isAnim;
+                     if (isAnimP != null && isAnimP > 0)
+                     {
+                        if (objP.blitData == null)
+                        {
+                           // MovieClip 型：stop + 世界步帧手动推进（不循环）
+                           mcN++;
+                           if (mcN <= 3)
+                           {
+                              try { clsS += (clsS != "" ? "," : "") + flash.utils.getQualifiedClassName(objP.vis); } catch (e:*) { }
+                           }
+                           try { objP.vis.stop(); } catch (e:*) { }
+                           if (advance)
+                           {
+                              try
+                              {
+                                 var otkP:* = objP.otklad;
+                                 if ((otkP == null || otkP <= 0) && objP.vis.visible == true
+                                     && objP.vis.currentFrame < objP.vis.totalFrames)
+                                 {
+                                    objP.vis.nextFrame();
+                                 }
+                              }
+                              catch (e:*) { }
+                           }
+                        }
+                        else
+                        {
+                           blN++;   // Blit 型：随 step 慢速，不处理
+                        }
+                     }
+                  }
+               }
+               catch (e:*) { }
+               objP = nxtP;
+               if (++guardP > 20000) break;
+            }
+            // 诊断（每轮时停一次，首个出现动画粒子的帧）：确认爆炸粒子视觉
+            // 类型分布（MC/Blit）+ MC 类名样本——定位"多次加载"的 Part 类型
+            if (!partDiagOnce && (mcN > 0 || blN > 0))
+            {
+               partDiagOnce = true;
+               log("[DIAG] parts: mc=" + mcN + " blit=" + blN + " mcCls=" + clsS);
+            }
+         }
+         catch (e:*) { }
       }
 
       // ==================== 回放 ====================
@@ -3625,6 +3739,9 @@ package
                      try { kRP.isExpl = true; } catch (e:*) { }
                      try { kRP.liv = 0; } catch (e:*) { }
                      try { if (kRP.vis != null) { kRP.vis.visible = false; } } catch (e:*) { }
+                     // v1.98：已由 boom 替代演出——不得在 endReplay 恢复爆炸能力
+                     // （否则 liv=0 的终止体回放结束后再爆一次）
+                     try { delete twinSavExpl[kRP]; } catch (e:*) { }
                      delete reExecPin[kRP];
                      continue;
                   }
@@ -3819,6 +3936,26 @@ package
                try { if (kRA.vis != null && kRA.vis.parent != null) { kRA.vis.parent.removeChild(kRA.vis); } } catch (e:*) { }
             }
             reattached = new Dictionary();
+         }
+         catch (e:*) { }
+         // v1.98：恢复回放中惰性化的重执行爆炸体——仍存活在飞的（录像原体
+         // 时停末未爆/未配对孪生体）回放结束后继续自然飞行/爆炸；已被 boom
+         // 终止或已 babah/出链的不恢复（防第二次爆炸）。
+         try
+         {
+            for (var kTE:Object in twinSavExpl)
+            {
+               try
+               {
+                  if (kTE != null && kTE.in_chain == true && kTE.liv > 0 && kTE.babah != true)
+                  {
+                     kTE.isExpl = false;
+                     kTE.damageExpl = twinSavExpl[kTE];
+                  }
+               }
+               catch (e:*) { }
+               try { delete twinSavExpl[kTE]; } catch (e:*) { }
+            }
          }
          catch (e:*) { }
          // 清空场景重演记录

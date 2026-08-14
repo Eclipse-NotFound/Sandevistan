@@ -16,6 +16,7 @@ package
    import flash.display.Sprite;
    import flash.events.Event;
    import flash.events.KeyboardEvent;
+   import flash.events.MouseEvent;
    import flash.filesystem.File;
    import flash.filesystem.FileMode;
    import flash.filesystem.FileStream;
@@ -28,15 +29,16 @@ package
    import flash.ui.Keyboard;
    import flash.utils.getTimer;
    import flash.utils.describeType;
+   import flash.utils.Dictionary;
 
    public class SandevistanMod extends Sprite
    {
       // ---------- 配置（默认值，被 SandevistanMod/config.txt 覆盖） ----------
       private var cfgHotkey:int = Keyboard.BACKSLASH;   // 默认 \
-      private var cfgDuration:int = 240;                // 生效帧数（30fps -> 8 秒）
-      private var cfgCooldown:int = 1200;               // 冷却帧数（40 秒）
-      private var cfgReplaySpeed:Number = 5;            // 回放速度倍率
-      private var cfgGhostEvery:int = 3;                // 每 N 帧生成一个残影
+      private var cfgDuration:int = 210;                // 生效帧数（30fps -> 7 秒）
+      private var cfgCooldown:int = 0;                  // 冷却帧数（默认 0 = 无冷却，便于调试）
+      private var cfgReplaySpeed:Number = 5;            // 回放速度倍率（回放时世界冻结，无渲染压力）
+      private var cfgGhostEvery:int = 5;                // 每 N 帧生成一个残影（时停期，默认 5）
       private var cfgFxRun:Boolean = true;              // 时停期间粒子特效是否继续
 
       // ---------- 运行时状态 ----------
@@ -54,15 +56,68 @@ package
       private var history:Array = [];                   // 记录玩家路径 {x,y,s,r,v}
       private var replaying:Boolean = false;
       private var replayIdx:int = 0;
+      private var savedGod:Boolean = false;             // 回放期间无敌
+      private var savedGgCtrl:Boolean = true;           // 回放前控制状态
+      private var startWeapon:Object = null;               // 时停开始时的武器（回放开始切回它）
+      private var endWeapon:Object = null;                 // 时停结束时的武器（回放结束切回它）
+      private var replayWpn:Object = null;                 // 回放期间钉住的武器（防游戏切换动画乱切）
+      private var sandyEndSnap:Object = null;              // 时停结束快照（全武器弹夹+背包弹药，回放结束恢复）
       private var fxTicks:int = 0;
       private var diagTick:int = 0;
+      private var replayDiagTick:int = 0;      // 回放段诊断计数
+      private var replayDiagOnce:Boolean = false;  // 回放开始诊断（每轮回放一次）
+      private var replayAtkTick:int = 0;       // 回放段攻击链路诊断计数
+      private var replayBodyTick:int = 0;      // 回放段攻击体状态诊断计数
+      private var replayAnimTick:int = 0;      // 回放段动画像素哈希诊断计数
+      private var replayFireTick:int = 0;      // 回放段开火诊断计数
+      private var replayGhostDisp:int = 0;    // 回放残影显示帧计数
+      private var sandyAtkTick:int = 0;        // 时停段攻击状态诊断计数
+      private var sandyEnemyTick:int = 0;      // 时停段敌人移动诊断计数
+      private var mouseAtkDown:Boolean = false;   // 鼠标攻击键按住状态
+      private var mouseAtkPulse:Boolean = false;  // 鼠标攻击键按下脉冲（同帧 DOWN+UP 不丢）
+      private var savedOtbros:Number = -1;        // 回放近战击退原始值（缩放到 1/5 抵消加速）
+      private var savedRapids:Object = {};        // 回放中改过的武器 rapid 原始值（结束恢复）
+      private var cfgSlowFactor:Number = 5;       // 时停慢速倍率（1/N 速，config slowfactor）
+      private var slowTick:int = 0;               // 节流计数器（每 slowfactor 帧 step 1 次）
+      private var slowPartClass:Class = null;     // 粒子类（节流 step 跳过，特效单独处理）
+      private var replayObjs:Dictionary = new Dictionary();  // 重演对象 → 每帧状态数组 {x,y,f,s}
+      private var replayObjArr:Array = [];        // 重演对象引用列表
+      private var seenPos:Dictionary = new Dictionary();    // 场景对象移动检测快照
+      private var sndClass:Class = null;          // fe.Snd（重演音效播放）
+      // 预判死亡（时停中统计玩家攻击本应造成的伤害，≥血量则放死亡动画，不真杀）
+      private var predDam:Dictionary = new Dictionary();   // 敌人 → 预判累计伤害
+      private var origDam:Dictionary = new Dictionary();   // 攻击体 → 原始伤害（清零前捕获）
+      private var hitCred:Dictionary = new Dictionary();   // 攻击体 → 已记入的敌人（去重）
+      private var predDead:Dictionary = new Dictionary();  // 敌人 → true（时停中放死亡动画）
+      private var replayAnimCat:Dictionary = new Dictionary();  // 回放动画档位迟滞（防 walk/run 抖动）
+      private var endSnapWpnHp:Number = -1;  // 时停结束时武器耐久（回放结束恢复——防双倍损耗）
+      private var endSnapMana:Number = -1;   // 时停结束时魔法值（回放结束恢复——防双倍消耗）
+      private var thrownDamWall:Dictionary = new Dictionary();  // 时停中被投掷单位 → 原始 damWall（回放结束恢复——撞墙伤害延后结算）
+      private var recPrevHold:Number = -1;  // 开火记录：上一帧同武器弹夹（帧间下降=子弹真实生成）
+      private var recPrevTA:int = -1;       // 开火记录：上一帧 t_attack（上升沿=攻击初始化）
+      private var recPrevWid:String = "";   // 开火记录：上一帧武器 id（换武器重置基线）
+      private var recDiagCnt:int = 0;        // 录像对象诊断计数（每轮时停重置）
+      private var recDoorCnt:int = 0;        // 门对象诊断计数（每轮时停重置）
+      private var rFixCnt:int = 0;           // 回放重钉诊断计数（每轮回放重置）
+      private var doorPrevDop:Dictionary = new Dictionary();  // 门重演：上一帧 dop（防重复 setVisState 音效）
+      private var lastGhostX:Number = 0;   // 上一残影位置（叠加防护：最小位移门槛）
+      private var lastGhostY:Number = 0;
       private var panelOpen:Boolean = false;
+      private var optPanelOn:Boolean = false;      // 选项页模组设置面板
+      private var optSel:int = 0;                  // 0=生效 1=冷却 2=残影不透明度 3=残影频率 4=渐变门槛 5=回放残影间隔 6=回放残影寿命 7=投掷物可击落
+      private var optTf:TextField = null;
+      private var optBg:Sprite = null;
       private var lastGgControl:Boolean = true;
       private var savedInter:Object = null;
       private var keyPressTime:Array = [];      // 按键按下时间戳（防 UP 丢失卡键）
       private var keyMap:Object = {};            // 键码 -> 键布尔名（解析自游戏 keyXML）
       private var keyMapBuilt:Boolean = false;
       private var imeWarnT:int = 0;                 // 输入法警告剩余帧数
+      private var keyDownSeen:Array = new Array(256); // 最近按键按下记录（时间戳）
+      private var ime229Count:int = 0;                // 短时间内 229 事件计数
+      private var ime229Time:int = 0;
+      private var imeMissCount:int = 0;                // UP无DOWN 计数（2秒窗口）
+      private var imeMissTime:int = 0;
 
       // 解析游戏默认键位表（keyXML 是 public），建立键码->布尔名映射
       private function buildKeyMap():void
@@ -102,7 +157,36 @@ package
       private var cfgShowMark:Boolean = true;            // 启动时显示模组已加载标记
       private var cfgPanelKey:int = Keyboard.F9;         // 参数面板热键
       private var cfgGhostBlend:int = 1;                  // 残影混合: 1=normal柔和 0=add发光
-      private var cfgGhostAlpha:int = 25;                 // 残影不透明度（百分比）
+      private var cfgGhostAlpha:int = 70;                 // 残影不透明度（百分比，默认 70）
+      private var cfgReplayGhost:int = 1;                 // 回放残影生成间隔（每 N 个显示帧 1 个）
+      private var cfgReplayGhostLife:int = 4;             // 回放残影寿命（显示帧，短寿命=拖尾）
+      private var cfgColorMode:int = 0;                   // 残影配色: 0=彩虹 1=边缘行者绿蓝紫
+      private var cfgEdgeThresh:Number = 15;             // 边缘行者渐变门槛（速度≥此值全绿）
+      private var playerAnimCat:int = 0;                  // 回放玩家动画档位迟滞（1=待机 2=走 3=跑）
+      private var thrownImpacts:Dictionary = new Dictionary();  // 被投掷单位 → {frame, dam} 首次撞击（回放该帧结算伤害）
+      private var thrownPreV:Dictionary = new Dictionary();     // 被投掷单位 → {dx, dy} 节流步前速度（撞击检测）
+      private var thrownUnits:Dictionary = new Dictionary();    // 时停中被投掷过的单位（回放全程只重钉不 step）
+      private var enemyAtks:Dictionary = new Dictionary();      // 敌对单位 → [{frame, w, cx, cy}] 时停记录的开火事件（回放复现）
+      private var preExistB:Dictionary = new Dictionary();       // 时停开始时已在飞的玩家攻击体（不清除，回放继续飞行）
+      private var gSnapKol:Number = -1;   // 时停结束时手雷库存（回放结束恢复——重演抛掷不二次消耗）
+      private var cfgProjHits:Boolean = true;   // 投掷物可被击落（手雷/导弹/榴弹受击至 0 爆炸）
+      private var cfgProjHp:Number = 30;        // 投掷物血量
+      private var cfgProjArmor:Number = 0;      // 投掷物护甲（预留接口：伤害先减护甲）
+      private var projHp:Dictionary = new Dictionary();  // 投掷物 → 当前血量
+      private var seenAtk:Dictionary = new Dictionary(); // 攻击体追踪器（v1.85：按引用录像，绕开链扫描之谜）
+      private var projBoom:Dictionary = new Dictionary(); // v1.91：时停中引爆的投掷物 → {f,x,y}（回放对应帧真实爆炸）
+      private var reExecPin:Dictionary = new Dictionary(); // v1.94：重执行爆弹体 → 录像孪生体（回放钉到录像轨迹）
+      private var boomDiagCnt:int = 0;                     // v1.94：boom 触发诊断计数
+      private var twinSavExpl:Dictionary = new Dictionary(); // v1.98：回放重执行爆炸体的原始 damageExpl（endReplay 对存活体恢复）
+      private var twinDiagCnt:int = 0;                     // v1.98：孪生体惰性化诊断计数
+      private var partDiagOnce:Boolean = false;            // v1.98：时停粒子视觉类型诊断（每轮一次）
+      private var reattached:Dictionary = new Dictionary(); // 回放中重挂过 vis 的对象（结束摘除，防残留画面）
+      private function addEnemyAtk(u:Object, ev:Object):void
+      {
+         var arr:Array = enemyAtks[u];
+         if (arr == null) { arr = []; enemyAtks[u] = arr; }
+         arr.push(ev);
+      }
       private var testStage:int = 0;                     // 0=等待world 1=开始新游戏 2=等待进游戏 3=启动sandy 4=结束sandy
       private var testTicks:int = 0;
 
@@ -117,6 +201,47 @@ package
          ];
          var c:Array = cols[idx % cols.length];
          return new ColorTransform(c[0], c[1], c[2], a, c[3], c[4], c[5], 0);
+      }
+
+      // 边缘行者绿-蓝-紫渐变（索引 0=绿 ... 7=紫红）
+      private function edgePalette(idx:int):ColorTransform
+      {
+         var a:Number = Math.max(0.05, Math.min(1, cfgGhostAlpha / 100));
+         var cols:Array = [
+            [1.2, 2.3, 1.1, 0, 110, 20],  // 绿（加亮——快速跑动时明显绿色）
+            [0.9, 1.9, 1.5, 0, 70, 90],   // 青绿
+            [0.7, 1.6, 1.9, 0, 45, 120],  // 青
+            [0.6, 1.2, 2.0, 0, 0, 150],   // 蓝青
+            [0.7, 0.9, 2.0, 0, 0, 175],   // 蓝
+            [0.9, 0.6, 2.0, 20, 0, 195],  // 蓝紫
+            [1.2, 0.4, 1.9, 50, 0, 195],  // 紫
+            [1.4, 0.3, 1.5, 70, 0, 175]   // 紫红
+         ];
+         var c:Array = cols[Math.max(0, Math.min(7, idx))];
+         return new ColorTransform(c[0], c[1], c[2], a, c[3], c[4], c[5], 0);
+      }
+
+      // 速度→渐变索引：非线性——速度 ≥10 全绿；10→0 才渐变（幂曲线加速向蓝紫）
+      private function speedToEdgeIdx(spd:Number):int
+      {
+         var t:Number = spd / (cfgEdgeThresh > 0 ? cfgEdgeThresh : 10);
+         if (t >= 1) { return 0; }
+         var idx:int = Math.round(7 * Math.pow(1 - t, 1.4));
+         if (idx < 0) { idx = 0; }
+         if (idx > 7) { idx = 7; }
+         return idx;
+      }
+
+      // 残影配色分发：colormode=1 边缘行者（速度映射绿蓝紫）；否则彩虹循环
+      private function ghostColor(spd:Number):ColorTransform
+      {
+         if (cfgColorMode == 1)
+         {
+            return edgePalette(speedToEdgeIdx(spd));
+         }
+         var ct:ColorTransform = palette(rainbowIdx);
+         rainbowIdx++;
+         return ct;
       }
 
       public function SandevistanMod()
@@ -141,6 +266,10 @@ package
             main.stage.addEventListener(KeyboardEvent.KEY_DOWN, inst.onKey);
             main.stage.addEventListener(KeyboardEvent.KEY_UP, inst.onKeyUp);
             main.stage.addEventListener(Event.DEACTIVATE, inst.onDeactivateClear);
+            // 鼠标左键按住状态（时停中近战拦截后，历史记录真实攻击意图用）
+            main.stage.addEventListener(MouseEvent.MOUSE_DOWN, inst.onMouseDown);
+            main.stage.addEventListener(MouseEvent.MOUSE_UP, inst.onMouseUp);
+
          }
          inst.log("[SandyMod] hooks registered");
          if (inst.cfgShowMark)
@@ -161,7 +290,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.0 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.89 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -231,6 +360,14 @@ package
                   else if (k == "diaglog") cfgDiagLog = v.toLowerCase() == "1" || v.toLowerCase() == "true";
                   else if (k == "ghostblend") cfgGhostBlend = parseInt(v);
                   else if (k == "ghostalpha") cfgGhostAlpha = parseInt(v);
+                  else if (k == "replayghost") cfgReplayGhost = parseInt(v);
+                  else if (k == "replayghostlife") cfgReplayGhostLife = parseInt(v);
+                  else if (k == "projhits") cfgProjHits = v.toLowerCase() == "1" || v.toLowerCase() == "true";
+                  else if (k == "projhp") cfgProjHp = parseInt(v);
+                  else if (k == "projarmor") cfgProjArmor = parseInt(v);
+                  else if (k == "slowfactor") cfgSlowFactor = parseFloat(v);
+                  else if (k == "colormode") cfgColorMode = parseInt(v);
+                  else if (k == "edgethresh") cfgEdgeThresh = parseFloat(v);
                }
             }
          }
@@ -239,6 +376,17 @@ package
          if (cfgDuration > 3600) cfgDuration = 3600;
          if (cfgCooldown < 0) cfgCooldown = 0;
          if (cfgReplaySpeed < 1) cfgReplaySpeed = 1;
+         if (cfgSlowFactor < 1) cfgSlowFactor = 1;
+         if (cfgSlowFactor > 20) cfgSlowFactor = 20;
+         if (cfgGhostEvery < 1) cfgGhostEvery = 1;
+         if (cfgGhostAlpha < 5) cfgGhostAlpha = 5;
+         if (cfgGhostAlpha > 100) cfgGhostAlpha = 100;
+         if (cfgReplayGhost < 1) cfgReplayGhost = 1;
+         if (cfgReplayGhostLife < 1) cfgReplayGhostLife = 1;
+         if (cfgProjHp < 1) cfgProjHp = 1;
+         if (cfgProjHp > 1000) cfgProjHp = 1000;
+         if (cfgProjArmor < 0) cfgProjArmor = 0;
+         if (cfgProjArmor > 500) cfgProjArmor = 500;
          trace("[SandyMod] config hotkey=" + cfgHotkey + " dur=" + cfgDuration + " cd=" + cfgCooldown);
       }
 
@@ -302,6 +450,8 @@ package
             buildKeyMap();
          }
 
+         checkOptPanel();
+
          if (panelOpen)
          {
             renderPanel();
@@ -320,6 +470,18 @@ package
          {
             --cooldownLeft;
          }
+
+         // v1.89：投掷物击落**独立化**——常规游戏（无时停/回放）中每帧
+         // 也执行判定：射击手雷/导弹/榴弹至血量归零随时引爆（projhits
+         // 开关控制；时停/回放中各自的判定在 stepSandy/stepReplay 内）
+         try
+         {
+            if (!sandyActive && !replaying && cfgProjHits && world != null && world.loc != null)
+            {
+               stepProjHits(world.loc, false);
+            }
+         }
+         catch (e:*) { }
 
          updateHud();
          updateGhosts();
@@ -439,6 +601,1918 @@ package
          catch (e:*) { log("[TEST] error: " + e); }
       }
 
+      // ==================== 选项页模组设置 ====================
+      private function checkOptPanel():void
+      {
+         var on:Boolean = false;
+         try
+         {
+            if (world != null && world.pip != null && world.pip.active && world.pip.currentPage != null)
+            {
+               var qn:String = flash.utils.getQualifiedClassName(world.pip.currentPage);
+               if (qn == "fe.inter::PipPageOpt")
+               {
+                  on = true;
+               }
+            }
+         }
+         catch (e:*) { }
+         if (on != optPanelOn)
+         {
+            optPanelOn = on;
+            if (on)
+            {
+               showOptPanel();
+            }
+            else
+            {
+               hideOptPanel();
+            }
+         }
+         if (on)
+         {
+            renderOptPanel();
+         }
+      }
+
+      private function showOptPanel():void
+      {
+         try
+         {
+            if (world == null || world.main == null) return;
+            if (optTf == null)
+            {
+               optTf = new TextField();
+               var tf:TextFormat = new TextFormat();
+               tf.font = "Consolas";
+               tf.size = 15;
+               tf.color = 0x00FF99;
+               tf.letterSpacing = 1;
+               optTf.defaultTextFormat = tf;
+               optTf.selectable = false;
+               optTf.mouseEnabled = false;
+               optBg = new Sprite();
+               world.main.addChild(optBg);
+               world.main.addChild(optTf);
+            }
+            optTf.visible = true;
+            optBg.visible = true;
+            optSel = 0;
+         }
+         catch (e:*) { }
+      }
+
+      private function hideOptPanel():void
+      {
+         try
+         {
+            if (optTf != null) optTf.visible = false;
+            if (optBg != null) optBg.visible = false;
+         }
+         catch (e:*) { }
+      }
+
+      private function optAdj(dir:int):void
+      {
+         if (optSel == 0)
+         {
+            cfgDuration = Math.max(30, Math.min(3600, cfgDuration + dir * 30));
+         }
+         else if (optSel == 1)
+         {
+            cfgCooldown = Math.max(0, Math.min(3600, cfgCooldown + dir * 30));
+         }
+         else if (optSel == 2)
+         {
+            // 残影不透明度（5-100%，步进 5%）
+            cfgGhostAlpha = Math.max(5, Math.min(100, cfgGhostAlpha + dir * 5));
+         }
+         else if (optSel == 3)
+         {
+            // 残影生成频率（帧间隔，1-30）
+            cfgGhostEvery = Math.max(1, Math.min(30, cfgGhostEvery + dir));
+         }
+         else if (optSel == 4)
+         {
+            // 渐变门槛（速度阈值，1-30，步进 1——允许奇数）
+            cfgEdgeThresh = Math.max(1, Math.min(30, cfgEdgeThresh + dir));
+         }
+         else if (optSel == 5)
+         {
+            // 回放残影生成间隔（显示帧，1-30）
+            cfgReplayGhost = Math.max(1, Math.min(30, cfgReplayGhost + dir));
+         }
+         else if (optSel == 6)
+         {
+            // 回放残影寿命（显示帧，1-60）
+            cfgReplayGhostLife = Math.max(1, Math.min(60, cfgReplayGhostLife + dir));
+         }
+         else
+         {
+            // 投掷物可击落开关（手雷/导弹/榴弹受击至 0 爆炸）
+            cfgProjHits = !cfgProjHits;
+         }
+      }
+
+      private function renderOptPanel():void
+      {
+         try
+         {
+            if (optTf == null) return;
+            var lines:Array = [];
+            lines.push("-- SandevistanMod --");
+            lines.push((optSel == 0 ? "> " : "  ") + "生效时间   " + (cfgDuration / 30).toFixed(1) + "s");
+            lines.push((optSel == 1 ? "> " : "  ") + "冷却       " + (cfgCooldown / 30).toFixed(1) + "s");
+            lines.push((optSel == 2 ? "> " : "  ") + "残影不透明度 " + cfgGhostAlpha + "%");
+            lines.push((optSel == 3 ? "> " : "  ") + "残影频率    " + cfgGhostEvery + "帧");
+            lines.push((optSel == 4 ? "> " : "  ") + "渐变门槛    " + cfgEdgeThresh);
+            lines.push((optSel == 5 ? "> " : "  ") + "回放残影间隔 " + cfgReplayGhost + "帧");
+            lines.push((optSel == 6 ? "> " : "  ") + "回放残影寿命 " + cfgReplayGhostLife + "帧");
+            lines.push((optSel == 7 ? "> " : "  ") + "投掷物可击落 " + (cfgProjHits ? "开" : "关"));
+            lines.push("");
+            lines.push("上下选择 左右调值 Enter保存");
+            optTf.text = lines.join(String.fromCharCode(10));
+            var sw:Number = 1280;
+            try { sw = world.swfStage.stageWidth; } catch (e:*) { }
+            optTf.x = sw - 300;
+            optTf.y = 120;
+            optTf.width = 260;
+            optTf.height = 290;
+            optBg.graphics.clear();
+            optBg.graphics.lineStyle(1, 0x00FF99, 0.8);
+            optBg.graphics.beginFill(0x002211, 0.75);
+            optBg.graphics.drawRect(optTf.x - 10, optTf.y - 10, optTf.width + 20, optTf.height + 20);
+            optBg.graphics.endFill();
+         }
+         catch (e:*) { }
+      }
+
+      // ===== 清除时停期间玩家发射的冻结子弹（回放重演避免双倍火力）=====
+      private function clearFrozenBullets():void
+      {
+         try
+         {
+            var loc:Object = world.loc;
+            if (loc == null) return;
+            var obj:Object = loc.firstObj;
+            var guard:int = 0;
+            var nFe:int = 0;      // 攻击体对象总数（fe.weapon::*）
+            var nRem:int = 0;     // 实际清除数
+            var nSkip:int = 0;    // 未清除数（owner 不是玩家，或异常）
+            while (obj != null)
+            {
+               var nxt:Object = obj.nobj;
+               try
+               {
+                  var qn:String = flash.utils.getQualifiedClassName(obj);
+                  if (qn.indexOf("fe.weapon::") == 0)
+                  {
+                     nFe++;
+                     // v1.91：投掷武器（G 键手雷）抛出的投掷物保留——回放
+                     // 不重执行抛掷（keyGrenad 不回喂），录像体=唯一实体，
+                     // 按记录重演轨迹，回放结束后继续自然飞行/爆炸。其余
+                     // 玩家攻击体（子弹/魔法/枪械投掷物）由回放重执行生成
+                     // 新体，冻结原体清除（防双倍火力）。
+                     var isThrownP:Boolean = false;
+                     try { isThrownP = obj.weap != null && obj.weap == world.gg["throwWeapon"]; } catch (e:*) { }
+                     if (obj.owner == world.gg && preExistB[obj] == null && !isThrownP)
+                     {
+                        loc.remObj(obj);
+                        nRem++;
+                     }
+                     else
+                     {
+                        nSkip++;
+                     }
+                  }
+               }
+               catch (e:*) { }
+               obj = nxt;
+               if (++guard > 20000) break;
+            }
+            log("[DIAG] clearFrozenBullets: feWeapon=" + nFe + " removed=" + nRem + " skip=" + nSkip);
+         }
+         catch (e:*) { }
+      }
+
+      // ===== 攻击体追踪器（v1.85）：攻击体按引用录像，绕开"链扫描录不到
+      // 攻击体"之谜（nPb 诊断证明对象在链中、录像却恒 0——按引用持有对象
+      // 逐帧记录，不依赖链扫描）。玩家步后/节流步后调用登记新生成的攻击体。
+      private function registerAtk(oA:Object):void
+      {
+         try
+         {
+            if (oA == null || seenAtk[oA] != null || replayObjs[oA] != null) return;
+            seenAtk[oA] = true;
+            var arr:Array = [];
+            replayObjs[oA] = arr;
+            replayObjArr.push(oA);
+            var frameN:int = cfgDuration - sandyLeft;
+            var sndA:String = "";
+            try { if (oA.weap != null && oA.weap.sndShoot != null) { sndA = oA.weap.sndShoot; } } catch (e:*) { }
+            for (var f:int = 0; f <= frameN; f++)
+            {
+               // v1.90：生成前补帧 vv=false——时停中新生成的攻击体（时停中
+               // 才出手的枪械/投掷）在回放开头不可见（否则冻结显示在生成
+               // 位置，表现为"回放开头凭空出现"）
+               arr.push({ x: oA.X, y: oA.Y, f: -1, s: (f == frameN ? sndA : ""), wx: 0, wy: 0, twx: 0, twy: 0, vv: f == frameN, sto: 1, wrot: -99 });
+            }
+            log("[DIAG] recAtk: cls=" + flash.utils.getQualifiedClassName(oA) + " X=" + oA.X + " Y=" + oA.Y + " frameN=" + frameN);
+         }
+         catch (e:*) { }
+      }
+
+      // ===== 时停中记录重演状态（场景级录像：每帧位置+动画帧+生成音效）=====
+      // 单位/攻击体必记录；场景对象移动检测（静态对象不记录，省存储）
+      private function recordReplayObjects():void
+      {
+         try
+         {
+            var frameN:int = cfgDuration - sandyLeft;   // 时停内帧号（0 起）
+            var locR:Object = world.loc;
+            if (locR == null) return;
+            var oR:Object = locR.firstObj;
+            var gR:int = 0;
+            while (oR != null)
+            {
+               var nxR:Object = oR.nobj;
+               try
+               {
+                  if (oR == world.gg) { /* 玩家跳过（历史记录） */ }
+                  else if (slowPartClass != null && oR is slowPartClass) { /* 粒子跳过 */ }
+                  else if (seenAtk[oR] != null) { /* 攻击体由追踪器记录（v1.85） */ }
+                  else
+                  {
+                  var qnR:String = flash.utils.getQualifiedClassName(oR);
+                  var isAtk:Boolean = qnR.indexOf("fe.weapon::") == 0;
+                  // 单位判断：fe.unit:: / fe.serv::（NPC 在 serv 包）/ 有 setPos 方法
+                  // （Unit 子类）。v1.90：setPos 括号探测改 try/catch——密封类
+                  // （Bullet/Box）上访问不存在成员抛 ReferenceError，此前整个
+                  // 链扫描体被吞（"链扫描之谜"：nPb 有值但录像恒 0 的真因）
+                  var isUnit:Boolean = qnR.indexOf("fe.unit::") == 0 || qnR.indexOf("fe.serv::") == 0;
+                  try { if (!isUnit && oR["setPos"] != null) { isUnit = true; } } catch (e:*) { }
+                     // 敌人武器位置（回放中武器不 step，记录位置供回放恢复——否则武器
+                     // 滞留在时停结束位置，与重演的身体脱节）
+                     var wxR:Number = 0;
+                     var wyR:Number = 0;
+                     // 投掷武器（手雷/投掷物，非 currentWeapon）与魔法武器同样记录
+                     var txR:Number = 0;
+                     var tyR:Number = 0;
+                     // 视觉可见性（v1.76：尸鬼钻地/炮塔死亡隐藏等按记录重演）
+                     var vvR:Boolean = true;
+                     try { if (oR.vis != null) { vvR = oR.vis.visible; } } catch (e:*) { }
+                     // 朝向与武器转动（v1.79：回放中 AI 因位置重钉不转向、
+                     // 瞄准目标失真——按记录恢复 storona 与武器 rot）
+                     var stoR:Number = 1;
+                     try { if (oR.storona != null) { stoR = oR.storona; } } catch (e:*) { }
+                     var wrotR:Number = -99;
+                     try
+                     {
+                        var cwRec:* = oR["currentWeapon"];
+                        if (cwRec != null && cwRec.rot != null) { wrotR = cwRec.rot; }
+                     }
+                     catch (e:*) { }
+                     // 视觉帧（v1.81：门开关等场景交互动画——帧变化触发记录，
+                     // 回放按帧重演）
+                     var vfR2:int = -1;
+                     try { if (oR.vis != null && oR.vis.currentFrame != null) { vfR2 = oR.vis.currentFrame; } } catch (e:*) { }
+                     try
+                     {
+                        var cwR:* = oR["currentWeapon"];
+                        if (cwR != null) { wxR = cwR.X; wyR = cwR.Y; }
+                        var twR:* = oR["throwWeapon"];
+                        if (twR != null) { txR = twR.X; tyR = twR.Y; }
+                        else
+                        {
+                           var mwR:* = oR["magicWeapon"];
+                           if (mwR != null) { txR = mwR.X; tyR = mwR.Y; }
+                        }
+                     }
+                     catch (e:*) { }
+                     var arrR:Array = replayObjs[oR];
+                     // 诊断（v1.84）：前几个 fe.weapon/fe.loc 对象——定位
+                     // "录像 atk 恒 0 / 投掷箱不重演"之谜（对象在链中却不被录）
+                     try
+                     {
+                        if (recDiagCnt < 6 && (isAtk || qnR.indexOf("fe.loc::") == 0))
+                        {
+                           recDiagCnt++;
+                           log("[DIAG] recObj: cls=" + qnR + " X=" + oR.X + " Y=" + oR.Y
+                               + " arr=" + (arrR != null ? 1 : 0) + " frameN=" + frameN);
+                        }
+                     }
+                     catch (e:*) { }
+                     if (arrR == null)
+                     {
+                        if (isAtk || isUnit)
+                        {
+                           // 单位/攻击体：必记录（补前期帧为当前位置，数组对齐 replayIdx）
+                           arrR = [];
+                           replayObjs[oR] = arrR;
+                           replayObjArr.push(oR);
+                           var sndR:String = "";
+                           if (frameN > 0)
+                           {
+                              // 时停中生成的攻击体：记录生成音效（重演时重播）
+                              try
+                              {
+                                 if (oR.weap != null && oR.weap.sndShoot != null) { sndR = oR.weap.sndShoot; }
+                              }
+                              catch (e:*) { }
+                           }
+                           for (var f0:int = 0; f0 < frameN; f0++) { arrR.push({ x: oR.X, y: oR.Y, f: -1, s: "", wx: wxR, wy: wyR, twx: txR, twy: tyR, vv: vvR, sto: stoR, wrot: wrotR }); }
+                           arrR.push({ x: oR.X, y: oR.Y, f: animFrameOf(oR), s: sndR, wx: wxR, wy: wyR, twx: txR, twy: tyR, vv: vvR, sto: stoR, wrot: wrotR });
+                        }
+                        else
+                        {
+                           // 场景对象：移动或视觉帧变化（门开关/机关动画）才记录
+                           // ——视觉帧变化=交互动画（位置不动也记录，回放按帧重演）
+                           var sp:Object = seenPos[oR];
+                           if (sp == null) { seenPos[oR] = { x: oR.X, y: oR.Y, vf: vfR2 }; }
+                           else if (sp.x != oR.X || sp.y != oR.Y || sp.vf != vfR2)
+                           {
+                              arrR = [];
+                              replayObjs[oR] = arrR;
+                              replayObjArr.push(oR);
+                              for (var f1:int = 0; f1 < frameN; f1++) { arrR.push({ x: sp.x, y: sp.y, f: -1, s: "", wx: 0, wy: 0, twx: 0, twy: 0, vv: vvR, vf: sp.vf }); }
+                              arrR.push({ x: oR.X, y: oR.Y, f: -1, s: "", wx: 0, wy: 0, twx: 0, twy: 0, vv: vvR, vf: vfR2 });
+                              sp.vf = vfR2;
+                           }
+                        }
+                     }
+                     else
+                     {
+                        arrR.push({ x: oR.X, y: oR.Y, f: animFrameOf(oR), s: "", wx: wxR, wy: wyR, twx: txR, twy: tyR, vv: vvR, sto: stoR, wrot: wrotR, vf: vfR2 });
+                     }
+                  }
+               }
+               catch (e:*) { }
+               oR = nxR;
+               if (++gR > 20000) break;
+            }
+            // 箱子/物品对象（loc.objs——Box 不在 firstObj 链，念力投掷的箱子
+            // 之前没被记录导致不回演）：移动检测，动了才记录
+            try
+            {
+               var objsArr:Array = locR.objs;
+               if (objsArr != null)
+               {
+                  for each (var oB2:Object in objsArr)
+                  {
+                     try
+                     {
+                        if (oB2 == null || oB2 == world.gg || replayObjs[oB2] != null) continue;
+                        var vfB:int = -1;
+                        try { if (oB2.vis != null && oB2.vis.currentFrame != null) { vfB = oB2.vis.currentFrame; } } catch (e:*) { }
+                        // 门（v1.82）：门的开合=其瓦片 opac 淡出（Box.door→tiles[]）——
+                        // 记录瓦片不透明度变化并重演
+                        var dopB:Number = -1;
+                        try
+                        {
+                           if (oB2.door != null && oB2.door > 0 && oB2.tiles != null && oB2.tiles.length > 0 && oB2.tiles[0] != null)
+                           {
+                              dopB = oB2.tiles[0].opac;
+                           }
+                        }
+                        catch (e:*) { }
+                        var sp2:Object = seenPos[oB2];
+                        // 门诊断（v1.85）：首个门对象的状态（定位门不重演之谜）
+                        try
+                        {
+                           if (recDoorCnt < 3 && oB2.door != null && oB2.door > 0)
+                           {
+                              recDoorCnt++;
+                              log("[DIAG] recDoor: X=" + oB2.X + " vf=" + vfB + " dop=" + dopB
+                                  + " seen=" + (sp2 != null ? 1 : 0));
+                           }
+                        }
+                        catch (e:*) { }
+                        if (sp2 == null)
+                        {
+                           seenPos[oB2] = { x: oB2.X, y: oB2.Y, vf: vfB, dop: dopB };
+                        }
+                        else if (sp2.x != oB2.X || sp2.y != oB2.Y || sp2.vf != vfB || sp2.dop != dopB)
+                        {
+                           var arr2:Array = [];
+                           replayObjs[oB2] = arr2;
+                           replayObjArr.push(oB2);
+                           var vvB:Boolean = true;
+                           try { if (oB2.vis != null) { vvB = oB2.vis.visible; } } catch (e:*) { }
+                           for (var f2:int = 0; f2 < frameN; f2++) { arr2.push({ x: sp2.x, y: sp2.y, f: -1, s: "", wx: 0, wy: 0, twx: 0, twy: 0, vv: vvB, vf: sp2.vf, dop: sp2.dop }); }
+                           arr2.push({ x: oB2.X, y: oB2.Y, f: -1, s: "", wx: 0, wy: 0, twx: 0, twy: 0, vv: vvB, vf: vfB, dop: dopB });
+                           sp2.vf = vfB;
+                           sp2.dop = dopB;
+                        }
+                     }
+                     catch (e:*) { }
+                  }
+               }
+            }
+            catch (e:*) { }
+            // 攻击体追踪器追加（v1.85）：按引用逐帧记录（绕开链扫描之谜）。
+            // 子弹在链中=存活继续录；投掷箱 isThrow 期间持续录；死亡后停止
+            // （数组止于死亡位置；死亡对象的 vis 已被摘除→回放中不可见）。
+            try
+            {
+               for (var kA:Object in seenAtk)
+               {
+                  try
+                  {
+                     var aliveA:Boolean = false;
+                     try { aliveA = kA.in_chain == true || kA["isThrow"] == true; } catch (e:*) { }
+                     if (!aliveA)
+                     {
+                        // v1.90：死亡帧补录 vv=false——回放中攻击体飞到死亡点后
+                        // 隐藏（否则重挂的 vis 在死亡位置冻结显示到回放结束）
+                        try
+                        {
+                           var arrA2:Array = replayObjs[kA];
+                           if (arrA2 != null)
+                           {
+                              arrA2.push({ x: kA.X, y: kA.Y, f: -1, s: "", wx: 0, wy: 0, twx: 0, twy: 0, vv: false, sto: 1, wrot: -99 });
+                           }
+                        }
+                        catch (e:*) { }
+                        // v1.91：自然爆炸（导火索到期/撞墙/被击落未走 stepProjHits）
+                        // 的投掷物——回放死亡帧真实爆炸（isExpl 判定排除
+                        // 飞出界/被清除）
+                        try
+                        {
+                           if (kA.isExpl == true && projBoom[kA] == null)
+                           {
+                              // v1.93：普通 Bullet 带爆炸半径（野火核弹/榴弹——
+                              // 时停前已在飞的爆炸死亡也记录，回放重演爆炸）
+                              var qnA2:String = flash.utils.getQualifiedClassName(kA);
+                              var isBoomB:Boolean = qnA2 == "fe.weapon::PhisBullet" || qnA2 == "fe.weapon::SmartBullet"
+                                  || (qnA2 == "fe.weapon::Bullet" && kA.explRadius != null && kA.explRadius > 0);
+                              if (isBoomB)
+                              {
+                                 projBoom[kA] = { f: cfgDuration - sandyLeft, x: kA.X, y: kA.Y };
+                              }
+                           }
+                        }
+                        catch (e:*) { }
+                        delete seenAtk[kA];
+                        continue;
+                     }
+                     var arrA:Array = replayObjs[kA];
+                     if (arrA != null)
+                     {
+                        // v1.94：已引爆体补帧 vv=false——回放中爆炸发生后
+                        // 精灵立即隐藏（不再"爆炸动画与飞行精灵重叠"的
+                        // 异常引爆动画）
+                        var vvA:Boolean = true;
+                        try { vvA = !(kA.isExpl == true); } catch (e:*) { }
+                        arrA.push({ x: kA.X, y: kA.Y, f: -1, s: "", wx: 0, wy: 0, twx: 0, twy: 0, vv: vvA, sto: 1, wrot: -99 });
+                     }
+                  }
+                  catch (e:*) { }
+               }
+            }
+            catch (e:*) { }
+         }
+         catch (e:*) { }
+      }
+
+      // ===== 回放中重演：敌人/物品/场景/攻击体按历史状态设置（位置+动画帧+生成音效）=====
+      private function replayObjects():void
+      {
+         try
+         {
+            if (sndClass == null)
+            {
+               try { sndClass = ApplicationDomain.currentDomain.getDefinition("fe.Snd") as Class; } catch (e:*) { }
+            }
+            var idxR:int = replayIdx;
+            for each (var oR:Object in replayObjArr)
+            {
+               try
+               {
+                  var arrR:Array = replayObjs[oR];
+                  if (arrR == null || arrR.length == 0) continue;
+                  var stR:Object = arrR[Math.min(idxR, arrR.length - 1)];
+                  if (stR == null) continue;
+                  // v1.90：setPos/setVisPos 仅 Unit 拥有——对密封类（Box/Bullet/
+                  // PhisBullet 等）括号访问不存在成员会抛 ReferenceError，整段 try
+                  // 被吞 → 非单位对象"完全不重演"且 rFix 从不打印的根因。
+                  // try/catch 探测一次，后续全部用布尔判断。
+                  var hasSP:Boolean = false;
+                  try { hasSP = oR["setPos"] != null; } catch (e:*) { }
+                  var hasSVP:Boolean = false;
+                  try { hasSVP = oR["setVisPos"] != null; } catch (e:*) { }
+                  // v1.91：被 clearFrozenBullets 清除的玩家攻击体（子弹/魔法/
+                  // 枪械投掷物——回放由重执行生成新体）——录像原体隐藏，
+                  // 否则与重执行体重叠成"鬼影"（投掷武器的手雷不重执行，
+                  // 录像体保留显示）
+                  if (!hasSP)
+                  {
+                     try
+                     {
+                        var isThrownB:Boolean = false;
+                        try { isThrownB = oR.weap != null && oR.weap == world.gg["throwWeapon"]; } catch (e:*) { }
+                        // v1.93：仅隐藏"时停中生成"的清除体（补帧 arrR[0].vv=false）
+                        // ——其由回放重执行生成新体渲染；时停前已在飞的攻击体
+                        // （含时停中爆炸死亡的核弹/导弹/榴弹）保持重演——
+                        // 重执行不覆盖它们，录像体是唯一实体
+                        var spawnedInS:Boolean = false;
+                        try { spawnedInS = arrR.length > 0 && arrR[0].vv == false; } catch (e:*) { }
+                        if (oR["owner"] == world.gg && oR.in_chain != true && !isThrownB && spawnedInS)
+                        {
+                           try { if (oR.vis != null) { oR.vis.visible = false; } } catch (e:*) { }
+                           continue;
+                        }
+                     }
+                     catch (e:*) { }
+                  }
+                  // 位置（setPos 更新碰撞边界——玩家子弹命中重演位置敌人正常结算）
+                  if (hasSP) { oR.setPos(stR.x, stR.y); }
+                  else { oR.X = stR.x; oR.Y = stR.y; }
+                  // 重钉诊断（v1.89）：首个非单位对象——验证重钉是否应用
+                  try
+                  {
+                     if (rFixCnt < 2 && !hasSP)
+                     {
+                        rFixCnt++;
+                        log("[DIAG] rFix: cls=" + flash.utils.getQualifiedClassName(oR)
+                            + " stX=" + stR.x + " stY=" + stR.y + " X=" + oR.X + " Y=" + oR.Y
+                            + " visX=" + (oR.vis != null ? oR.vis.x : -1) + " visPar=" + (oR.vis != null && oR.vis.parent != null ? 1 : 0));
+                     }
+                  }
+                  catch (e:*) { }
+                  // 视觉同步（setPos 不更新 vis——否则敌人视觉固定在时停结束位置）
+                  try
+                  {
+                     if (hasSVP) { oR.setVisPos(); }
+                     else if (oR.vis != null) { oR.vis.x = stR.x; oR.vis.y = stR.y; }
+                  }
+                  catch (e:*) { }
+                  // 攻击体/投掷物视觉重挂（v1.87）：时停中死亡或移除的对象
+                  // （子弹命中玩家、手雷爆炸、箱子撞毁）其 vis 被 remVisual
+                  // 从显示层摘除——回放重钉位置也**不可见**（手雷/导弹/天角兽
+                  // 攻击/投掷箱"不重演"的根因）。按原图层重挂后逐帧重演飞行
+                  // 轨迹；单位（有 setPos）不走此路径（其 vis 未摘除）。
+                  try
+                  {
+                     if (!hasSP && oR.vis != null && oR.vis.parent == null && oR.sloy != null)
+                     {
+                        var gVis2:Object = world["grafon"];
+                        if (gVis2 != null && gVis2.visObjs != null && gVis2.visObjs[oR.sloy] != null)
+                        {
+                           gVis2.visObjs[oR.sloy].addChild(oR.vis);
+                           reattached[oR] = true;
+                        }
+                     }
+                  }
+                  catch (e:*) { }
+                  // 视觉可见性重演（v1.76）：按记录强制 vis.visible——尸鬼钻地
+                  // （aiState=5 隐身）、炮塔预判死亡隐藏等，回放中 AI 状态可能与
+                  // 记录不同步，可见性按记录恢复（钻地/爆炸消失如实重演）
+                  try
+                  {
+                     if (oR.vis != null && stR.vv != null) { oR.vis.visible = stR.vv; }
+                  }
+                  catch (e:*) { }
+                  // 场景对象视觉帧重演（v1.81）：门开关/机关等交互动画——
+                  // 按记录 gotoAndStop（帧动画逐帧恢复；仅非单位对象）
+                  try
+                  {
+                     if (!hasSP && oR.vis != null && stR.vf != null && stR.vf >= 0)
+                     {
+                        oR.vis.gotoAndStop(stR.vf);
+                     }
+                  }
+                  catch (e:*) { }
+                  // 门视觉重演（v1.86）：按记录 dop 变化调 setVisState——
+                  // 门的可见形象是 Box 自己的 vis（open/close 帧），不是瓦片
+                  // 淡出；dop 变化=开合事件（doorPrevDop 防重复调用重播音效）
+                  try
+                  {
+                     if (!hasSP && stR.dop != null && stR.dop >= 0
+                         && oR["setVisState"] != null && oR.door != null && oR.door > 0)
+                     {
+                        var prevDop:Number = doorPrevDop[oR] != null ? doorPrevDop[oR] : -1;
+                        if (prevDop != stR.dop)
+                        {
+                           doorPrevDop[oR] = stR.dop;
+                           oR.setVisState(stR.dop < 0.5 ? "open" : "close");
+                        }
+                     }
+                  }
+                  catch (e:*) { }
+                  // 门瓦片不透明度重演（v1.82/1.84）：门开合=门框瓦片 opac 淡出——
+                  // 按记录恢复 opac + t_visi + visi（渲染路径三处全设，确保可见）
+                  try
+                  {
+                     if (!hasSP && stR.dop != null && stR.dop >= 0
+                         && oR.tiles != null)
+                     {
+                        var tls:Array = oR.tiles;
+                        for (var ti:int = 0; ti < tls.length; ti++)
+                        {
+                           try
+                           {
+                              if (tls[ti] != null)
+                              {
+                                 try { tls[ti].opac = stR.dop; } catch (e:*) { }
+                                 try { tls[ti].t_visi = stR.dop; } catch (e:*) { }
+                                 try { tls[ti].visi = stR.dop; } catch (e:*) { }
+                              }
+                           }
+                           catch (e:*) { }
+                        }
+                     }
+                  }
+                  catch (e:*) { }
+                  // 敌人武器位置恢复（回放中武器不 step——按历史位置放回，与重演身体贴合）
+                  try
+                  {
+                     var cwE:* = oR["currentWeapon"];
+                     if (cwE != null && stR.wx != null)
+                     {
+                        cwE.X = stR.wx;
+                        cwE.Y = stR.wy;
+                        if (cwE.vis != null) { cwE.vis.x = stR.wx; cwE.vis.y = stR.wy; }
+                     }
+                     // 投掷武器（手雷/投掷物）与魔法武器位置同样恢复（否则滞留在
+                     // 时停结束位置——用户报告手雷不复位）
+                     if (stR.twx != null && stR.twx != 0)
+                     {
+                        var twE:* = oR["throwWeapon"];
+                        if (twE == null) { twE = oR["magicWeapon"]; }
+                        if (twE != null)
+                        {
+                           twE.X = stR.twx;
+                           twE.Y = stR.twy;
+                           if (twE.vis != null) { twE.vis.x = stR.twx; twE.vis.y = stR.twy; }
+                        }
+                     }
+                  }
+                  catch (e:*) { }
+                  // 动画驱动（核心修复）：根据历史位移设置 dx/dy/stay 并调 animate()——
+                  // 游戏自身动画管线计算 animState（walk/run/jump/stay）并渲染。
+                  // 怪物的 anims（BlitAnim）是 internal 读不到，驱动公开的 animate()
+                  // 是唯一路径（读 vis.osn.body 帧对怪物永远 -1，故不依赖帧记录）
+                  try
+                  {
+                     if (hasSP && oR["animate"] != null)
+                     {
+                        var nxtR2:Object = arrR[Math.min(idxR + 1, arrR.length - 1)];
+                        var mvx:Number = (nxtR2.x - stR.x) * cfgReplaySpeed;
+                        var mvy:Number = (nxtR2.y - stR.y) * cfgReplaySpeed;
+                        // 动画驱动（v1.71 定稿）：敌对单位完整 step + 位置重钉——
+                        // enemyAct=1 让 AI 状态机运行（aiState/aiTCh 推进，动画
+                        // 状态随 AI 自然变化——走路/跑步/待机全部正常）但**不寻敌
+                        // 不攻击**（findCel 需 >1、攻击需 >=3）；step 内 run() 会
+                        // 移动单位，步后重钉到记录位置（视觉按记录重演，动画按
+                        // AI 状态自然播放）。NPC 保留量化驱动（其 control 无
+                        // enemyAct 门）。
+                        var qnR2:String = flash.utils.getQualifiedClassName(oR);
+                        var isHostile:Boolean = qnR2.indexOf("NPC") < 0 && oR["currentWeapon"] != null;
+                        // v1.84：被念力投掷过的单位并入敌对完整 step——回放中其
+                        // damWall 已被时停清零（endReplay 才恢复），step 撞墙不会
+                        // 结算伤害；位置步后重钉，飞行/坠落动画由单位自身物理
+                        // 状态自然驱动（原"只重钉不 step"导致动画僵死）
+                        if (isHostile)
+                        {
+                           try
+                           {
+                              // v1.81：攻击改由时停记录的开火事件复现（方向/时机
+                              // 忠实重演）——时停中子弹刚生成就命中无敌玩家、活不到
+                              // 录像帧（rStart 诊断 atk 恒 0），改在武器层面记录
+                              // t_attack 上升沿（含瞄准点），回放逐事件复现。
+                              var savedEA:Number = world["enemyAct"];
+                              world["enemyAct"] = 2;
+                              // v1.81：enemyAct=2——AI 寻敌/追击（走路跑步动画
+                              // 自然）但攻击需 >=3 **不会实时出手**（回放期间玩家
+                              // 不受攻击）；攻击改由时停记录的开火事件复现
+                              // （见下方——方向/时机忠实重演，替代 v1.76 的
+                              // "AI 重新开火"——那是瞄准回放中的玩家而非重演）。
+                              // v1.78 速率修正：敌对单位每显示帧 step **1** 次——
+                              // 时停中世界每 5 显示帧才步 1 次，回放每显示帧消耗
+                              // 5 个历史帧 = 恰好 1 个世界步（v1.76 误用 5 次/帧，
+                              // 攻击节奏与子弹飞行被错误加速 5 倍——玩家子弹一直
+                              // 是 1 次/帧且速度正确，可作对照）。
+                              // v1.79 瞄准按记录方向：cel 沿本帧记录的武器角延伸
+                              // （替代 v1.77 的"钉到当前玩家"——玩家 5 倍瞬移使
+                              // 炮塔头每帧猛甩）。
+                              try
+                              {
+                                 try
+                                 {
+                                    if (stR.wrot != null && stR.wrot != -99)
+                                    {
+                                       oR.celX = oR.X + Math.cos(stR.wrot) * 300;
+                                       oR.celY = oR.Y + Math.sin(stR.wrot) * 300;
+                                    }
+                                    oR["celUnit"] = world.gg;
+                                 }
+                                 catch (e:*) { }
+                                 // v1.82/v1.85：封锁实时开火——部分单位（天角兽等）的
+                                 // 攻击条件不含 enemyAct>=3 门（只有 findCel 需
+                                 // >1），enemyAct=2 下仍会开火 → 回放出现时停中
+                                 // 没有的额外攻击。预步把全部武器槽 t_attack 置 1
+                                 // （attack() 初始化要求 t_attack<=0 → 该步无法
+                                 // 开火）；prep 武器同时清 t_prep。**逐槽 try/catch**：
+                                 // 天角兽 psyWeapon 是 internal——bracket 访问抛异常
+                                 // 会让整条数组构造失败、守卫全部失效（v1.84 闪电/
+                                 // 精神攻击额外攻击仍存在的根源）。
+                                 try
+                                 {
+                                    var wSlots:Array = [];
+                                    try { wSlots.push(oR["currentWeapon"]); } catch (e:*) { }
+                                    try { wSlots.push(oR["throwWeapon"]); } catch (e:*) { }
+                                    try { wSlots.push(oR["magicWeapon"]); } catch (e:*) { }
+                                    try { wSlots.push(oR["psyWeapon"]); } catch (e:*) { }
+                                    for each (var wG:Object in wSlots)
+                                    {
+                                       try
+                                       {
+                                          if (wG != null && wG.t_attack != null)
+                                          {
+                                             wG.t_attack = 1;
+                                             try { if (wG.prep != null && wG.prep > 0 && wG.t_prep != null) { wG.t_prep = 0; } } catch (e:*) { }
+                                          }
+                                       }
+                                       catch (e:*) { }
+                                    }
+                                 }
+                                 catch (e:*) { }
+                                 oR.step();
+                              }
+                              catch (e:*) { }
+                              world["enemyAct"] = savedEA;
+                              // 重钉位置/视觉（step 内 run() 移动了单位）
+                              try { oR.setPos(stR.x, stR.y); } catch (e:*) { }
+                              try
+                              {
+                                 if (hasSVP) { oR.setVisPos(); }
+                                 else if (oR.vis != null) { oR.vis.x = stR.x; oR.vis.y = stR.y; }
+                              }
+                              catch (e:*) { }
+                              // 武器位置重钉（step 内武器 step 会移动武器）
+                              try
+                              {
+                                 var cwE2:* = oR["currentWeapon"];
+                                 if (cwE2 != null && stR.wx != null)
+                                 {
+                                    cwE2.X = stR.wx;
+                                    cwE2.Y = stR.wy;
+                                    if (cwE2.vis != null) { cwE2.vis.x = stR.wx; cwE2.vis.y = stR.wy; }
+                                 }
+                              }
+                              catch (e:*) { }
+                              // 朝向与武器转动如实重演（v1.79）：AI 因位置重钉
+                              // 不转向（storona 冻结在时停结束方向）；按记录恢复
+                              // storona 与武器 rot（武器视觉随 rot 重摆；炮塔头等
+                              // 嵌套视觉经 animate() 重摆——炮塔 animate 无逐帧
+                              // 动画推进，多调一次无副作用）
+                              try
+                              {
+                                 if (stR.sto != null) { oR.storona = stR.sto; }
+                                 try
+                                 {
+                                    if (hasSVP) { oR.setVisPos(); }
+                                    else if (oR.vis != null) { oR.vis.scaleX = stR.sto != null ? stR.sto : 1; }
+                                 }
+                                 catch (e:*) { }
+                                 var cwE3:* = oR["currentWeapon"];
+                                 if (cwE3 != null && stR.wrot != null && stR.wrot != -99)
+                                 {
+                                    cwE3.rot = stR.wrot;
+                                    try { if (cwE3.vis != null) { cwE3.vis.rotation = stR.wrot * 180 / Math.PI; } } catch (e:*) { }
+                                 }
+                                 if (qnR2.indexOf("Turret") >= 0)
+                                 {
+                                    try { oR.animate(); } catch (e:*) { }
+                                 }
+                              }
+                              catch (e:*) { }
+                              // v1.85：攻击体复现已移除——攻击体由追踪器（seenAtk）
+                              // 按引用逐帧录像并在回放中重钉（真实轨迹/方向/时机）；
+                              // 事件复现会造成双发且方向不忠实。
+                           }
+                           catch (e:*) { }
+                        }
+                        else
+                        {
+                           // NPC/无武器单位：量化驱动（按记录位移选择动画档位）
+                           var spd:Number = Math.sqrt(mvx * mvx + mvy * mvy);
+                           var newCat:int = spd < 1.5 ? 1 : (spd < 8 ? 2 : 3);
+                           var cat:int = replayAnimCat[oR] != null ? replayAnimCat[oR] : 0;
+                           if (cat != 0)
+                           {
+                              if (cat == 3 && newCat == 2 && spd > 5) { newCat = 3; }
+                              else if (cat == 2 && newCat == 1 && spd > 2.5) { newCat = 2; }
+                              else if (cat == 1 && newCat == 2 && spd < 3) { newCat = 1; }
+                              else if (cat == 2 && newCat == 3 && spd < 10) { newCat = 2; }
+                           }
+                           replayAnimCat[oR] = newCat;
+                           oR.stay = true;
+                           oR.dx = newCat == 1 ? 0 : (newCat == 2 ? (mvx >= 0 ? 4 : -4) : (mvx >= 0 ? 12 : -12));
+                           oR.dy = 0;
+                           oR.animate();
+                        }
+                     }
+                  }
+                  catch (e:*) { }
+                  // 生成音效（精确帧：攻击体生成事件在对应历史帧重播）
+                  if (idxR < arrR.length)
+                  {
+                     var stS:Object = arrR[idxR];
+                     if (stS != null && stS.s != null && stS.s != "" && sndClass != null)
+                     {
+                        try { sndClass["ps"](stS.s, stS.x, stS.y); } catch (e:*) { }
+                     }
+                  }
+               }
+               catch (e:*) { }
+            }
+         }
+         catch (e:*) { }
+      }
+
+      // ===== 回放中玩家攻击体手动 step（世界冻结 onPause=true 时攻击体不自动 step）=====
+      private function stepPlayerBullets():void
+      {
+         try
+         {
+            var locB:Object = world.loc;
+            if (locB == null) return;
+            var oB:Object = locB.firstObj;
+            var gB:int = 0;
+            while (oB != null)
+            {
+               var nxB:Object = oB.nobj;
+               try
+               {
+                  if (oB["owner"] == world.gg && replayObjs[oB] == null
+                      && flash.utils.getQualifiedClassName(oB).indexOf("fe.weapon::") == 0)
+                  {
+                     // v1.97：重执行孪生体的录像原体已爆炸（vv=false）→ 不再步进
+                     // （其导火索若在此步耗尽会自然爆炸，与 boom 重叠成"两次
+                     // 爆炸动画"；位置本就由 reExecPin 循环按录像重钉）
+                     var twinB:Object = reExecPin[oB];
+                     if (twinB != null)
+                     {
+                        var arrB3:Array = replayObjs[twinB];
+                        if (arrB3 != null)
+                        {
+                           var stB3:Object = arrB3[Math.min(replayIdx, arrB3.length - 1)];
+                           if (stB3 != null && stB3.vv == false) { oB = nxB; continue; }
+                        }
+                     }
+                     // v1.98：回放重执行的爆炸体（回放中新生成、不在录像中）
+                     // 一律惰性化——爆炸（视觉+伤害）全由 boom 按录像帧重演，
+                     // 孪生体只负责飞行轨迹视觉。v1.97 双倍伤害根因：回放重演
+                     // 子弹命中**未配对**孪生体触发真实爆炸（日志 replayHit
+                     // idx=80 与 boom f=74 同轮回放双爆，dmgExpl=800 双份）+
+                     // 配对孪生体导火索耗尽/命中与 boom 的竞态。isExpl=true
+                     // 使游戏 explosion() 直接早退（Bullet.as:668 守卫），且
+                     // projs 可击落表按 isExpl!=true 过滤——重演子弹不再引爆
+                     // 孪生体；endReplay 对仍存活在飞的孪生体恢复爆炸能力
+                     // （录像原体时停末仍在飞的场景，回放结束后自然续飞爆炸）。
+                     // 时停前在飞攻击体（preExistB）已在录像中，不入此分支。
+                     try
+                     {
+                        if (oB.explRadius != null && oB.explRadius > 0 && oB.isExpl != true && twinSavExpl[oB] == null)
+                        {
+                           twinSavExpl[oB] = (oB.damageExpl != null ? oB.damageExpl : 0);
+                           oB.isExpl = true;
+                           oB.damageExpl = 0;
+                           try
+                           {
+                              if (twinDiagCnt < 8)
+                              {
+                                 twinDiagCnt++;
+                                 log("[DIAG] twinInert: cls=" + flash.utils.getQualifiedClassName(oB)
+                                     + " X=" + oB.X + " Y=" + oB.Y + " idx=" + replayIdx);
+                              }
+                           }
+                           catch (e:*) { }
+                        }
+                     }
+                     catch (e:*) { }
+                     oB.step();
+                  }
+               }
+               catch (e:*) { }
+               oB = nxB;
+               if (++gB > 20000) break;
+            }
+         }
+         catch (e:*) { }
+      }
+
+      // ===== 回放中未被录制的敌人攻击体手动 step（v1.75/1.78）=====
+      // 实体型攻击（如天角兽闪电等）若不在录像中（replayObjs 未覆盖——时停中
+      // 子弹刚生成就命中无敌玩家、活不到录像帧），回放中会静止在时停结束位置；
+      // 回放中敌人重新出手（enemyAct=3）生成的新攻击体同样经此 step。
+      // 速率（v1.78 修正）：每显示帧 step **1** 次——时停中攻击体随世界节流
+      // 每 5 显示帧步 1 次，回放每显示帧消耗 5 个历史帧 = 恰好 1 个世界步
+      // （与玩家攻击体 stepPlayerBullets 同速率；v1.76 误用 5 次/帧，敌人
+      // 子弹飞行被错误加速 5 倍）。已录制的攻击体由 replayObjects 按记录重钉。
+      private function stepUnrecordedAtk():void
+      {
+         try
+         {
+            var locB:Object = world.loc;
+            if (locB == null) return;
+            var oB:Object = locB.firstObj;
+            var gB:int = 0;
+            while (oB != null)
+            {
+               var nxB:Object = oB.nobj;
+               try
+               {
+                  if (oB != world.gg && replayObjs[oB] == null)
+                  {
+                     // v1.95：玩家方攻击体（回放重执行的子弹/魔法/投掷物）由
+                     // stepPlayerBullets 负责步进——此处再步一次=每显示帧
+                     // 双步（2 世界步/帧），子弹相对世界快 2 倍：扫掠段错位
+                     // 错过交叉点、后发子弹在更远处才命中（"回放引爆位置
+                     // 晚于时停"的根因）
+                     var isOwnB:Boolean = false;
+                     try { isOwnB = oB["owner"] == world.gg; } catch (e:*) { }
+                     if (isOwnB) { oB = nxB; continue; }
+                     var qnB:String = flash.utils.getQualifiedClassName(oB);
+                     // 被投掷的箱子不 step（v1.84：保留飞行惯性——时停结束时的
+                     // 速度延续到回放结束后；step 会被 levit 阻尼逐帧消耗 dx）
+                     var isThrB:Boolean = false;
+                     try { isThrB = oB["isThrow"] == true; } catch (e:*) { }
+                     if ((qnB.indexOf("fe.weapon::") == 0 || qnB.indexOf("fe.unit::") == 0 || qnB.indexOf("fe.loc::") == 0) && !isThrB)
+                     {
+                        if (oB["step"] != null) { oB.step(); }
+                     }
+                  }
+               }
+               catch (e:*) { }
+               oB = nxB;
+               if (++gB > 20000) break;
+            }
+         }
+         catch (e:*) { }
+      }
+
+      // ===== 读取对象动画帧（共用视觉体系 vis.osn.body，容错）=====
+      private function animFrameOf(o:Object):int
+      {
+         try
+         {
+            if (o.vis != null && o.vis.osn != null && o.vis.osn.body != null) { return o.vis.osn.body.currentFrame; }
+         }
+         catch (e:*) { }
+         return -1;
+      }
+
+      // ===== 投掷物可击落（v1.83）：手雷（PhisBullet）/导弹（SmartBullet）/
+      // 榴弹（PhisBullet）受击至血量归零直接爆炸。仅限有爆炸半径的这两类
+      // ——普通子弹（含天角兽闪电）不参与。护甲 cfgProjArmor 为预留接口
+      // （伤害先减护甲）。时停中爆炸仅视觉（伤害清零——真实伤害由回放中
+      // 重演的子弹命中重演的投掷物结算，与攻击结算架构一致）。
+      private function stepProjHits(locP:Object, isSandy:Boolean):void
+      {
+         if (!cfgProjHits) return;
+         // v1.91：时停中引爆的投掷物（射击击落/自然到期）在回放对应帧
+         // 真实爆炸（damageExpl 从武器恢复——时停中玩家攻击体伤害被清零）
+         if (replaying)
+         {
+            try
+            {
+               for (var kB:Object in projBoom)
+               {
+                  try
+                  {
+                     var bm:Object = projBoom[kB];
+                     if (bm == null) { delete projBoom[kB]; continue; }
+                     if (replayIdx >= bm.f)
+                     {
+                        // v1.96：全部引爆统一走 boom 重演（日志证明位置与时停
+                        // 完全一致）——不再跳过重执行体（v1.93 跳过导致
+                        // "回放未击中/晚于时停引爆"）；重执行孪生体由
+                        // reExecPin 循环在其录像死亡帧终止（隐藏+禁爆），
+                        // 不会与 boom 重叠成两份
+                        try
+                        {
+                           if (kB.damageExpl != null && kB.damageExpl <= 0 && kB.weap != null && kB.weap.damageExpl != null)
+                           {
+                              kB.damageExpl = kB.weap.damageExpl;
+                           }
+                           kB.isExpl = false;
+                           kB.explosion();
+                           // v1.92：引爆即杀（回放结束后不再残留续飞）
+                           try { kB.liv = 0; } catch (e:*) { }
+                           // v1.94：隐藏残体精灵（游戏爆炸流程同款——防爆炸
+                           // 动画与飞行精灵重叠的"异常引爆动画"）
+                           try { if (kB.vis != null) { kB.vis.visible = false; } } catch (e:*) { }
+                           if (boomDiagCnt < 4)
+                           {
+                              boomDiagCnt++;
+                              log("[DIAG] boom: cls=" + flash.utils.getQualifiedClassName(kB)
+                                  + " f=" + bm.f + " X=" + kB.X + " Y=" + kB.Y
+                                  + " dmgExpl=" + (kB.damageExpl != null ? kB.damageExpl : -1));
+                           }
+                        }
+                        catch (e:*) { }
+                        delete projBoom[kB];
+                     }
+                  }
+                  catch (e:*) { }
+               }
+            }
+            catch (e:*) { }
+         }
+         try
+         {
+            var projs:Array = [];
+            var objs:Array = [];
+            // 投掷物列表（v1.85）：优先从攻击体追踪器取（按引用——
+            // 绕开链扫描之谜；链扫描作为补充兜底）
+            for (var kP2:Object in seenAtk)
+            {
+               try
+               {
+                  var qnP2:String = flash.utils.getQualifiedClassName(kP2);
+                  // v1.92：可击落投掷物扩到普通 Bullet——榴弹发射器/野火核弹
+                  // 发射器 tip=3 走 Weapon→Bullet（非 PhisBullet/SmartBullet），
+                  // 带爆炸半径；天角兽闪电 expl=0 仍排除
+                  if ((qnP2 == "fe.weapon::PhisBullet" || qnP2 == "fe.weapon::SmartBullet" || qnP2 == "fe.weapon::Bullet")
+                      && kP2.explRadius != null && kP2.explRadius > 0 && kP2.isExpl != true)
+                  {
+                     projs.push(kP2);
+                  }
+               }
+               catch (e:*) { }
+            }
+            var o:Object = locP.firstObj;
+            var g:int = 0;
+            while (o != null)
+            {
+               try
+               {
+                  var qn:String = flash.utils.getQualifiedClassName(o);
+                  if (qn == "fe.weapon::PhisBullet" || qn == "fe.weapon::SmartBullet" || qn == "fe.weapon::Bullet")
+                  {
+                     // v1.92：普通 Bullet 带爆炸半径（榴弹/野火核弹/等离子等
+                     // 爆炸弹）纳入可击落；无爆炸半径（枪弹/天角兽闪电）
+                     // 照常入 objs
+                     var isProjQ:Boolean = false;
+                     try { isProjQ = o.explRadius != null && o.explRadius > 0 && o.isExpl != true; } catch (e:*) { }
+                     if (isProjQ)
+                     {
+                        if (projs.indexOf(o) < 0) { projs.push(o); }
+                     }
+                     else
+                     {
+                        // v1.90：近战攻击体（vel=0 静止在手上）不参与击落判定——
+                        // 否则手雷飞过近战范围会被"拳击"引爆并把攻击体 remObj
+                        // 出链（破坏近战）
+                        try { if (o.vel != null && o.vel < 1) { o = o.nobj; continue; } } catch (e:*) { }
+                        objs.push(o);
+                     }
+                  }
+                  else if (qn.indexOf("fe.weapon::") == 0)
+                  {
+                     // v1.90：近战攻击体（vel=0 静止在手上）不参与击落判定——
+                     // 否则手雷飞过近战范围会被"拳击"引爆并把攻击体 remObj
+                     // 出链（破坏近战）
+                     try { if (o.vel != null && o.vel < 1) { o = o.nobj; continue; } } catch (e:*) { }
+                     objs.push(o);
+                  }
+               }
+               catch (e:*) { }
+               o = o.nobj;
+               if (++g > 20000) break;
+            }
+            // 清理已消失投掷物的血量记录
+            for (var kH:Object in projHp)
+            {
+               try { if (projs.indexOf(kH) < 0) { delete projHp[kH]; } } catch (e:*) { }
+            }
+            if (projs.length == 0 || objs.length == 0) return;
+            for each (var p:Object in projs)
+            {
+               for each (var b:Object in objs)
+               {
+                  try
+                  {
+                     if (b == p) continue;   // v1.92：自测防护——爆弹类子弹同时
+                                             // 出现在 projs/objs 两表
+                     // v1.91：同源不再一刀切跳过（"射击自己的手雷不引爆"根因）
+                     // ——改为出生护手：同源且投掷物距其 owner <200px（刚出手/
+                     // 枪口附近）不判定，防止投掷+连射在自己面前引爆；飞出后
+                     // 常规游戏/时停/回放均可射击自己的手雷导弹（回放重执行
+                     // 的子弹与重演的手雷同源，必须放行）
+                     if (b.owner == p.owner)
+                     {
+                        try
+                        {
+                           var pown:Object = p.owner;
+                           if (pown != null)
+                           {
+                              var odx:Number = p.X - pown.X;
+                              var ody:Number = p.Y - pown.Y;
+                              if (odx * odx + ody * ody < 200 * 200) continue;
+                           }
+                        }
+                        catch (e:*) { }
+                     }
+                     // v1.92 相对速度扫掠碰撞：子弹与投掷物本步**同时**移动
+                     // （各一世界步）——高速相向时旧的"子弹段 vs 投掷物末端"
+                     // 会漏判（交叉错过）；投掷物比子弹快时单段测永远追不上
+                     // （"弹药飞行状态提前/射击延后"的真因——玩家子弹与导弹
+                     // 同速，单测末端差一整个扫掠段）。物理最近点：
+                     // R(t)=O+t·RV（O=起步点相对差，RV=相对速度），
+                     // t∈[0,1] 钳制，|R(t*)|≤28 即命中（端点自然覆盖）。
+                     var sx:Number = b.X - (b.dx != null ? b.dx : 0);
+                     var sy:Number = b.Y - (b.dy != null ? b.dy : 0);
+                     var pdx:Number = p.dx != null ? p.dx : 0;
+                     var pdy:Number = p.dy != null ? p.dy : 0;
+                     var hitOK:Boolean = false;
+                     var ddx0:Number = sx - (p.X - pdx);
+                     var ddy0:Number = sy - (p.Y - pdy);
+                     if (ddx0 * ddx0 + ddy0 * ddy0 <= 28 * 28) { hitOK = true; }
+                     if (!hitOK)
+                     {
+                        var rvx:Number = (b.dx != null ? b.dx : 0) - pdx;
+                        var rvy:Number = (b.dy != null ? b.dy : 0) - pdy;
+                        var rv2:Number = rvx * rvx + rvy * rvy;
+                        if (rv2 > 0.0001)
+                        {
+                           var tS:Number = -(ddx0 * rvx + ddy0 * rvy) / rv2;
+                           if (tS < 0) { tS = 0; }
+                           if (tS > 1) { tS = 1; }
+                           var cxR:Number = ddx0 + rvx * tS;
+                           var cyR:Number = ddy0 + rvy * tS;
+                           if (cxR * cxR + cyR * cyR <= 28 * 28) { hitOK = true; }
+                        }
+                     }
+                     if (!hitOK) continue;
+                     var dmg:Number = b.damage != null ? b.damage : 0;
+                     // 时停中玩家子弹伤害被清零——用捕获的原始伤害
+                     if (dmg <= 0 && b.owner == world.gg && origDam[b] != null) { dmg = origDam[b]; }
+                     if (dmg <= 0) continue;
+                     dmg -= cfgProjArmor;   // 护甲（预留接口）
+                     if (dmg <= 0) continue;
+                     try { locP.remObj(b); } catch (e:*) { }   // 命中子弹弹出
+                     var hpP:Number = projHp[p] != null ? projHp[p] : cfgProjHp;
+                     hpP -= dmg;
+                     if (hpP <= 0)
+                     {
+                        delete projHp[p];
+                     if (isSandy)
+                     {
+                        // 时停中：爆炸仅视觉（伤害清零后爆炸，结束恢复原值；
+                        // 真实伤害由回放中重演结算）
+                        try
+                        {
+                           var svExpl:Number = p.damageExpl != null ? p.damageExpl : 0;
+                           var svDest:Number = p.destroy != null ? p.destroy : 0;
+                           p.damageExpl = 0;
+                           p.destroy = 0;
+                           p.explosion();
+                           p.damageExpl = svExpl;
+                           p.destroy = svDest;
+                        }
+                        catch (e:*) { }
+                        // v1.92：引爆即杀（liv=0 → 下一世界步 vse→remObj）——
+                        // 否则对象继续沿轨迹飞行（时停中+回放中"爆炸后鬼影"）
+                        try { p.liv = 0; } catch (e:*) { }
+                        // v1.91：记录引爆帧——回放中该帧真实爆炸
+                        if (projBoom[p] == null)
+                        {
+                           projBoom[p] = { f: cfgDuration - sandyLeft, x: p.X, y: p.Y };
+                        }
+                        // v1.95：时停命中位置诊断（与回放命中位置对比——
+                        // 定位"回放引爆位置晚于时停"）
+                        if (boomDiagCnt < 6)
+                        {
+                           boomDiagCnt++;
+                           log("[DIAG] sandyBoom: cls=" + flash.utils.getQualifiedClassName(p)
+                               + " f=" + (cfgDuration - sandyLeft) + " X=" + p.X + " Y=" + p.Y);
+                        }
+                     }
+                     else
+                     {
+                        try { p.explosion(); } catch (e:*) { }
+                        // v1.92：引爆即杀——explosion() 不移除对象（babah 不置位、
+                        // liv 尚余），否则常规游戏中爆炸后鬼影继续沿轨迹飞行
+                        try { p.liv = 0; } catch (e:*) { }
+                        // v1.95：回放/常规命中位置诊断（与 sandyBoom 对比）
+                        if (replaying && boomDiagCnt < 6)
+                        {
+                           boomDiagCnt++;
+                           log("[DIAG] replayHit: cls=" + flash.utils.getQualifiedClassName(p)
+                               + " idx=" + replayIdx + " X=" + p.X + " Y=" + p.Y);
+                        }
+                     }
+                     }
+                     else
+                     {
+                        projHp[p] = hpP;
+                     }
+                     break;
+                  }
+                  catch (e:*) { }
+               }
+            }
+         }
+         catch (e:*) { }
+      }
+
+      // ===== 时停慢速世界：节流调用真实 loc.step()（每 slowfactor 帧 1 次 = 1/N 速）=====
+      // "世界真慢速运行"：loc.step 步进玩家+全部对象+交互检测（celObj/celDist）——
+      // 移动/计时/AI/交互/动画一致慢速，玩家可交互（门/箱等）。玩家本帧已手动 step
+      // 过一次，loc.step 内的玩家步先清键（自由物理步），步后恢复。
+      private function slowStepWorld():void
+      {
+         try
+         {
+            var locS:Object = world.loc;
+            if (locS == null) return;
+            // 1. 预判死亡敌人压住位移（sost=3 控制早退的兜底）
+            for (var kP:Object in predDead)
+            {
+               try { kP.dx = 0; kP.dy = 0; kP.stay = true; } catch (e:*) { }
+            }
+            // 1b. 念力投掷的箱子：钉住 t_throw 防过期——碰撞在 t_throw>0 时
+            // 只打晕、过期后结算伤害（时停中不当场结算）；时停结束不恢复，
+            // 箱子在回放结束后继续飞行自然结算撞击伤害。
+            // 敌人见下方循环：不钉 t_throw（真实反弹+首撞结束投掷），撞击
+            // 记录后回放中结算伤害。
+            try
+            {
+               var objsT:Array = locS.objs;
+               if (objsT != null)
+               {
+                  for each (var oT:Object in objsT)
+                  {
+                     try
+                     {
+                        if (oT != null && oT.isThrow == true)
+                        {
+                           oT.t_throw = 5;
+                           // 投掷箱由追踪器接管录像（v1.86）：move 检测的录像
+                           // 受链扫描之谜影响不可靠——直接建/补追踪器数组，
+                           // 逐帧按引用记录，飞行轨迹回放重演
+                           try
+                           {
+                              if (seenAtk[oT] == null)
+                              {
+                                 seenAtk[oT] = true;
+                                 var arrTB:Array = replayObjs[oT];
+                                 if (arrTB == null)
+                                 {
+                                    arrTB = [];
+                                    replayObjs[oT] = arrTB;
+                                    replayObjArr.push(oT);
+                                 }
+                                 var fN2:int = cfgDuration - sandyLeft;
+                                 while (arrTB.length < fN2 + 1)
+                                 {
+                                    arrTB.push({ x: oT.X, y: oT.Y, f: -1, s: "", wx: 0, wy: 0, twx: 0, twy: 0, vv: true, sto: 1, wrot: -99 });
+                                 }
+                                 log("[DIAG] recBox: X=" + oT.X + " Y=" + oT.Y + " frameN=" + fN2);
+                              }
+                           }
+                           catch (e:*) { }
+                        }
+                     }
+                     catch (e:*) { }
+                  }
+               }
+            }
+            catch (e:*) { }
+            try
+            {
+               var unitsT:Array = locS.units;
+               if (unitsT != null)
+               {
+                  for each (var uT:Object in unitsT)
+                  {
+                     try
+                     {
+                        if (uT != null && uT != world.gg && uT.t_throw > 0)
+                        {
+                           // 时停中撞墙不当场结算：清零 damWall（damageWall 的
+                           // 伤害被跳过，碰撞反弹照常）。**不再钉 t_throw**——
+                           // 首次撞击后由模组手动置 0 结束投掷（等价真实
+                           // damageWall 行为）→ 单位自然制动下坠，反弹真实。
+                           // 步前快照速度，步后检测撞击（见步进后的第 5 步）。
+                           try
+                           {
+                              if (thrownDamWall[uT] == null) { thrownDamWall[uT] = uT.damWall; }
+                              uT.damWall = 0;
+                              thrownUnits[uT] = true;
+                              if (thrownImpacts[uT] == null && thrownPreV[uT] == null)
+                              {
+                                 thrownPreV[uT] = { dx: uT.dx, dy: uT.dy };
+                              }
+                           }
+                           catch (e:*) { }
+                        }
+                     }
+                     catch (e:*) { }
+                  }
+               }
+            }
+            catch (e:*) { }
+            // 1c. 敌人攻击事件快照（v1.81）：步前记录敌对单位各武器的
+            // t_attack——攻击初始化（attack() 置 t_attack=rapid）产生上升沿，
+            // 步后检测=本步开火。回放按记录事件复现攻击（方向/时机忠实
+            // 重演，AI 在回放中不再实时开火）。瞄准点取步前 cel（世界坐标）。
+            var atkPre:Dictionary = new Dictionary();
+            try
+            {
+               var unitsA:Array = locS.units;
+               if (unitsA != null)
+               {
+                  for each (var uA:Object in unitsA)
+                  {
+                     try
+                     {
+                        if (uA == null || uA == world.gg) continue;
+                        var qnA:String = flash.utils.getQualifiedClassName(uA);
+                        if (qnA.indexOf("NPC") >= 0) continue;
+                        var cwA:* = uA["currentWeapon"];
+                        if (cwA == null) continue;
+                        var recA:Object = { ta: cwA.t_attack != null ? cwA.t_attack : -1,
+                                            cx: uA.celX != null ? uA.celX : 0,
+                                            cy: uA.celY != null ? uA.celY : 0, tt: -1, tm: -1 };
+                        try
+                        {
+                           var twA:* = uA["throwWeapon"];
+                           if (twA != null && twA.t_attack != null) { recA.tt = twA.t_attack; }
+                        }
+                        catch (e:*) { }
+                        try
+                        {
+                           var mwA:* = uA["magicWeapon"];
+                           if (mwA != null && mwA.t_attack != null) { recA.tm = mwA.t_attack; }
+                        }
+                        catch (e:*) { }
+                        atkPre[uA] = recA;
+                     }
+                     catch (e:*) { }
+                  }
+               }
+            }
+            catch (e:*) { }
+            // 2. 玩家攻击体清零 + 原始伤害捕获（必须在 loc.step 前——玩家刚手动
+            //    step 完，本帧新生成的子弹尚未结算）
+            var oS:Object = locS.firstObj;
+            var gS:int = 0;
+            while (oS != null)
+            {
+               var nxS:Object = oS.nobj;
+               try
+               {
+                  if (flash.utils.getQualifiedClassName(oS).indexOf("fe.weapon::") == 0 && oS["owner"] == world.gg)
+                  {
+                     if (origDam[oS] == null && oS.damage > 0) { origDam[oS] = oS.damage; }
+                     oS.damage = 0;
+                     oS.damageExpl = 0;
+                  }
+               }
+               catch (e:*) { }
+               oS = nxS;
+               if (++gS > 20000) break;
+            }
+            // 3. 真实世界步进。玩家在 loc.step 内会被步一次（本帧第二次）——
+            //    只清攻击键（防新攻击生成子弹泄漏）；
+            //    **保留 keyAction**——control 在 keyAction=false 时走 else 分支
+            //    置 actionObj=null（取消交互）→ 按住 E 的开锁/破解进度每节流帧
+            //    被取消重来（进度条反复跳动）。actAction 对进行中的交互有
+            //    actionObj 幂等检查（只做距离判断），重复调用安全。
+            //    **保留 keySit**——下穿平台（throu = (keyJump||!stay) && keySit）
+            //    需要按住下蹲键；清掉会让第二遍步 throu=false 覆盖，无法穿过。
+            //    **保留 keyJump/keyBeUp**——清 keyJump 会让腾空时的第二遍步
+            //    触发二段跳分支反复起跳，破坏念力悬浮并反复消耗魔力。
+            //    步后恢复按键与悬浮状态。
+            var cSave:Object = {};
+            var savedLevit:int = 0;
+            try
+            {
+               var kNames:Array = ["keyAttack","keyPunch","keyReload","keyGrenad","keyMagic"];
+               for (var ki:int = 0; ki < kNames.length; ki++)
+               {
+                  cSave[kNames[ki]] = world.ctr[kNames[ki]];
+                  world.ctr[kNames[ki]] = false;
+               }
+               savedLevit = world.gg["levit"];
+            }
+            catch (e:*) { }
+            try
+            {
+               locS.step();
+            }
+            catch (e:*) { log("[SandyMod] loc.step error: " + e); }
+            try
+            {
+               for (var kj:String in cSave)
+               {
+                  world.ctr[kj] = cSave[kj];
+               }
+               world.gg["levit"] = savedLevit;
+            }
+            catch (e:*) { }
+            // 3b. 被投掷单位撞击检测（v1.74）：步后速度反转（elast 反弹/落地
+            //     dy=0）且 |步前速度|>damWallSpeed = 撞墙/地/天花板。记录首次
+            //     撞击帧与伤害（游戏 damageWall 公式：速度/damWallSpeed×damWall），
+            //     并手动置 t_throw=0 结束投掷（等价真实 damageWall——单位自然
+            //     制动下坠，反弹真实）；伤害在回放中撞击帧结算。
+            try
+            {
+               for (var kTV:Object in thrownPreV)
+               {
+                  try
+                  {
+                     var pvT:Object = thrownPreV[kTV];
+                     var dwsT:Number = kTV.damWallSpeed != null ? kTV.damWallSpeed : 12;
+                     var spdT:Number = Math.sqrt(pvT.dx * pvT.dx + pvT.dy * pvT.dy);
+                     var hitT:Boolean = (pvT.dx < -dwsT && kTV.dx >= 0) || (pvT.dx > dwsT && kTV.dx <= 0)
+                                      || (pvT.dy < -dwsT && kTV.dy >= 0) || (pvT.dy > dwsT && kTV.dy <= 0);
+                     if (hitT)
+                     {
+                        var dWallT:Number = thrownDamWall[kTV] != null ? thrownDamWall[kTV] : 0;
+                        var damT:Number = spdT / dwsT * dWallT;
+                        thrownImpacts[kTV] = { frame: cfgDuration - sandyLeft, dam: damT };
+                        kTV.t_throw = 0;   // 结束投掷（真实 damageWall 行为）
+                        delete thrownPreV[kTV];
+                     }
+                     else if (kTV.t_throw <= 0)
+                     {
+                        // 投掷自然过期（未撞击）——无伤害记录
+                        delete thrownPreV[kTV];
+                     }
+                  }
+                  catch (e:*) { }
+               }
+            }
+            catch (e:*) { }
+            // 3c. 敌人攻击事件检测（v1.81）：t_attack 上升沿=本步开火——
+            // 记录 {帧号, 武器槽 0=枪 1=手雷 2=魔法, 瞄准点世界坐标} 供回放复现
+            try
+            {
+               var frameAtk:int = cfgDuration - sandyLeft;
+               for (var kA:Object in atkPre)
+               {
+                  try
+                  {
+                     var recA2:Object = atkPre[kA];
+                     var cwA2:* = kA["currentWeapon"];
+                     if (cwA2 != null && cwA2.t_attack > recA2.ta) { addEnemyAtk(kA, { frame: frameAtk, w: 0, cx: recA2.cx, cy: recA2.cy }); }
+                     try
+                     {
+                        var twA2:* = kA["throwWeapon"];
+                        if (twA2 != null && twA2.t_attack > recA2.tt) { addEnemyAtk(kA, { frame: frameAtk, w: 1, cx: recA2.cx, cy: recA2.cy }); }
+                     }
+                     catch (e:*) { }
+                     try
+                     {
+                        var mwA2:* = kA["magicWeapon"];
+                        if (mwA2 != null && mwA2.t_attack > recA2.tm) { addEnemyAtk(kA, { frame: frameAtk, w: 2, cx: recA2.cx, cy: recA2.cy }); }
+                     }
+                     catch (e:*) { }
+                  }
+                  catch (e:*) { }
+               }
+            }
+            catch (e:*) { }
+            // 3d. 投掷物可击落检测（v1.83）：子弹命中手雷/导弹/榴弹——
+            // 血量归零直接爆炸（时停中仅视觉）
+            stepProjHits(locS, true);
+            // 3e. 敌人攻击体追踪登记（v1.85）：节流步后扫描（敌人子弹在
+            // loc.step 内生成——按引用录像，回放重演真实轨迹）
+            try
+            {
+               var oNE:Object = locS.firstObj;
+               var gNE:int = 0;
+               while (oNE != null)
+               {
+                  try
+                  {
+                     if (oNE["owner"] != world.gg && seenAtk[oNE] == null
+                         && flash.utils.getQualifiedClassName(oNE).indexOf("fe.weapon::") == 0)
+                     {
+                        registerAtk(oNE);
+                     }
+                  }
+                  catch (e:*) { }
+                  oNE = oNE.nobj;
+                  if (++gNE > 20000) break;
+               }
+            }
+            catch (e:*) { }
+            // 4. 攻击体移动后的命中检测（预判伤害记入）
+            oS = locS.firstObj;
+            gS = 0;
+            while (oS != null)
+            {
+               var nxS2:Object = oS.nobj;
+               try
+               {
+                  if (flash.utils.getQualifiedClassName(oS).indexOf("fe.weapon::") == 0 && oS["owner"] == world.gg
+                      && hitCred[oS] == null && origDam[oS] != null && origDam[oS] > 0)
+                  {
+                     creditHit(oS, origDam[oS]);
+                  }
+               }
+               catch (e:*) { }
+               oS = nxS2;
+               if (++gS > 20000) break;
+            }
+         }
+         catch (e:*) { }
+      }
+
+      // ===== 发射器计数维护（World.step 守卫内的每帧重置，时停中由模组代做）=====
+      private function resetFxCounter():void
+      {
+         try
+         {
+            var EmitterClass:Class = ApplicationDomain.currentDomain.getDefinition("fe.graph.Emitter") as Class;
+            if (EmitterClass != null)
+            {
+               EmitterClass["kol2"] = EmitterClass["kol1"];
+               EmitterClass["kol1"] = 0;
+            }
+         }
+         catch (e:*) { }
+      }
+
+      // ===== 时停中近战复用攻击体伤害清零（WClub 的 b 不在 loc 链表，直接清）=====
+      private function freezeMeleeDamage():void
+      {
+         try
+         {
+            var cwM:* = world.gg.currentWeapon;
+            if (cwM == null || cwM.b == null) return;
+            var qnM:String = flash.utils.getQualifiedClassName(cwM);
+            if (qnM != "fe.weapon::WClub" && qnM != "fe.weapon::WPunch" && qnM != "fe.weapon::WKick") return;
+            // 预判伤害：每次挥击（shoot 重设 damage）在清零前捕获并记入命中敌人
+            var dmgM:Number = cwM.b.damage;
+            if (dmgM > 0)
+            {
+               creditHit(cwM.b, dmgM);
+            }
+            cwM.b.damage = 0;
+            cwM.b.damageExpl = 0;
+         }
+         catch (e:*) { }
+      }
+
+      // ===== 期望命中率（预判死亡用）：按 udarBullet 的命中判定期望值——
+      // miss 判定 ×（弹道类：accuracy=precision/dist 与 dexter 的对抗；
+      // 近战类 tipBullet==1：闪避 dodge 判定）
+      private function expectedHitCh(body:Object, enemy:Object):Number
+      {
+         var p:Number = 1;
+         try
+         {
+            if (body.miss > 0) { p *= 1 - body.miss; }
+            if (body.tipBullet == 1)
+            {
+               var dg:Number = enemy.dodge != null ? enemy.dodge : 0;
+               if (dg < 1) { p *= (dg <= 0 ? 1 : 1 - dg); }
+            }
+            else
+            {
+               var acc:Number = 1;
+               if (body.precision != 0 && body.dist > 0)
+               {
+                  acc = body.precision / body.dist;
+                  if (body.antiprec > 0 && body.dist < body.antiprec)
+                  {
+                     acc = body.dist / body.antiprec * 0.75 + 0.25;
+                  }
+               }
+               var dex:Number = (enemy.dexter != null ? enemy.dexter : 0) + (enemy.dexterPlus != null ? enemy.dexterPlus : 0) + 0.05;
+               if (enemy.dexter > 0 && acc < dex) { p *= acc / dex; }
+            }
+            if (p > 1) { p = 1; }
+            if (p < 0) { p = 0; }
+         }
+         catch (e:*) { }
+         return p;
+      }
+
+      // ===== 期望伤害估算（预判死亡用）：按游戏 damage() 公式的期望值——
+      // 类型易伤 × 期望暴击 − 护甲减伤（(skin + armor_qual×armor + shitArmor)×
+      // armorMult − pier 穿甲）× 全局易伤 × 武器耐久减伤（breaking——武器每射
+      // 一发掉耐久，回放时比时停记录时更破）× 玩家特攻（damPony 等）×
+      // 期望命中率（距离/精度/闪避）× 回放损耗余量。
+      private function expectedDam(body:Object, enemy:Object, dmg:Number):Number
+      {
+         var ed:Number = dmg;
+         try
+         {
+            // 1) 伤害类型易伤
+            if (enemy.vulner != null && body.tipDamage != null && body.tipDamage < enemy.vulner.length)
+            {
+               ed *= enemy.vulner[body.tipDamage];
+            }
+            // 2) 期望暴击（critCh 概率 × critDamMult）
+            if (body.critCh != null && body.critCh > 0)
+            {
+               ed *= 1 + body.critCh * (body.critDamMult - 1);
+            }
+            // 3) 护甲减伤 − 穿甲（期望值；isrnd(armor_qual) 期望 = armor_qual）
+            var dr:Number = enemy.skin != null ? enemy.skin : 0;
+            if (enemy.armor_qual > 0) { dr += enemy.armor_qual * (enemy.armor != null ? enemy.armor : 0); }
+            if (enemy.shithp > 0) { dr += enemy.shitArmor != null ? enemy.shitArmor : 0; }
+            // 3b) 炮塔 turret3 的临时护盾（damage() 内每次受击临时设
+            //     shithp=1000/shitArmor=25，受击后立刻清零——模型平时读不到，
+            //     预测偏松的根源）：护盾在子弹速度与朝向同向（dx*storona>0，
+            //     即绕到炮塔后方）时失效，正面/侧向命中减伤 25
+            try
+            {
+               if (enemy.id != null && String(enemy.id).indexOf("turret3") == 0
+                   && body.dx != null && body.dx * enemy.storona <= 0)
+               {
+                  dr += 25;
+               }
+            }
+            catch (e:*) { }
+            dr = dr * (body.armorMult != null ? body.armorMult : 1) - (body.pier != null ? body.pier : 0);
+            if (dr > 0) { ed -= dr; }
+            // 4) 全局易伤倍率
+            if (enemy.allVulnerMult != null) { ed *= enemy.allVulnerMult; }
+            // 5) 武器耐久减伤：breaking = (maxhp-hp)/maxhp×2−1（hp<maxhp/2 时）
+            //    枪械 resultDamage 用 ×(1−0.3×brk)、近战 ×(1−0.6×brk)——
+            //    武器每发掉耐久，回放时比时停记录时更破，取类对应系数
+            try
+            {
+               var wpn:* = body.weap;
+               if (wpn != null && wpn.hp != null && wpn.maxhp != null && wpn.hp < wpn.maxhp / 2)
+               {
+                  var brk:Number = (wpn.maxhp - wpn.hp) / wpn.maxhp * 2 - 1;
+                  if (brk > 0)
+                  {
+                     var qnW2:String = flash.utils.getQualifiedClassName(wpn);
+                     var brkK:Number = (qnW2 == "fe.weapon::WClub" || qnW2 == "fe.weapon::WPunch" || qnW2 == "fe.weapon::WKick") ? 0.6 : 0.3;
+                     ed *= 1 - brk * brkK;
+                  }
+               }
+            }
+            catch (e:*) { }
+            // 6) 玩家对敌类型的特攻倍率（pers.damPony/damZombie/...，默认 1）
+            try
+            {
+               if (body.owner != null && body.owner.player && enemy.opt != null && body.owner.pers != null)
+               {
+                  var po:* = body.owner.pers;
+                  if (enemy.opt.pony && po.damPony != null) { ed *= po.damPony; }
+                  if (enemy.opt.zombie && po.damZombie != null) { ed *= po.damZombie; }
+                  if (enemy.opt.robot && po.damRobot != null) { ed *= po.damRobot; }
+                  if (enemy.opt.insect && po.damInsect != null) { ed *= po.damInsect; }
+                  if (enemy.opt.monster && po.damMonster != null) { ed *= po.damMonster; }
+                  if (enemy.opt.alicorn && po.damAlicorn != null) { ed *= po.damAlicorn; }
+               }
+            }
+            catch (e:*) { }
+            // 7) 期望命中率（回放中命中随机重掷——时停的"已命中"以真实概率折算）
+            ed *= expectedHitCh(body, enemy);
+            // 8) 回放损耗余量（回放时武器额外损耗、未建模的随机项）
+            ed *= 0.9;
+            if (ed < 0) { ed = 0; }
+         }
+         catch (e:*) { }
+         return ed;
+      }
+
+      // ===== 预判伤害记入：优先用攻击体 parr（真实碰撞命中的单位——时停中碰撞
+      // 仍发生，只是伤害被清零）；parr 为空时（近战捕获早于 bindMove 窗口）退回
+      // 位置盒检测。伤害按游戏公式期望值估算（含护甲/穿甲）。
+      private function creditHit(body:Object, dmg:Number):void
+      {
+         try
+         {
+            // 1) 精确路径：真实碰撞证据 parr（public）
+            try
+            {
+               var parrA:Array = body.parr;
+               if (parrA != null && parrA.length > 0)
+               {
+                  var credArr:Array = hitCred[body];
+                  if (credArr == null) { credArr = []; hitCred[body] = credArr; }
+                  for each (var u2:Object in parrA)
+                  {
+                     if (u2 == null || u2 == world.gg) continue;
+                     try
+                     {
+                        if (credArr.indexOf(u2) != -1) continue;
+                        if (u2.sost != 1) continue;
+                        if (u2.fraction == world.gg.fraction) continue;
+                        if (predDam[u2] == null) { predDam[u2] = 0; }
+                        predDam[u2] += expectedDam(body, u2, dmg);
+                        credArr.push(u2);
+                        checkPredDeath(u2);
+                     }
+                     catch (e:*) { }
+                  }
+                  return;
+               }
+            }
+            catch (e:*) { }
+            // 2) 兜底：位置盒检测（近战挥击捕获时 parr 尚未命中）
+            if (hitCred[body] != null) return;
+            var unitsU:Object = world.loc != null ? world.loc.units : null;
+            if (unitsU == null) return;
+            var bx:Number = body.X;
+            var by:Number = body.Y;
+            for each (var u:Object in unitsU)
+            {
+               if (u == world.gg) continue;
+               try
+               {
+                  if (u.sost != 1) continue;
+                  if (u.fraction == world.gg.fraction) continue;
+                  if (bx >= u.X1 && bx <= u.X2 && by >= u.Y1 && by <= u.Y2)
+                  {
+                     if (predDam[u] == null) { predDam[u] = 0; }
+                     predDam[u] += expectedDam(body, u, dmg);
+                     hitCred[body] = u;
+                     checkPredDeath(u);
+                     return;
+                  }
+               }
+               catch (e:*) { }
+            }
+         }
+         catch (e:*) { }
+      }
+
+      // ===== 预判死亡判定：累计伤害 ≥ 血量 → sost=3 死亡姿态（慢速死亡动画+停止行动）=====
+      // 不真杀（不调 die()）：回放中才真实结算死亡——时停只是"预告"
+      private function checkPredDeath(enemy:Object):void
+      {
+         try
+         {
+            if (enemy == null || predDead[enemy]) return;
+            if (enemy.sost != 1) return;
+            var pd:Number = predDam[enemy] != null ? predDam[enemy] : 0;
+            if (pd >= enemy.hp)
+            {
+               predDead[enemy] = true;
+               enemy.sost = 3;   // 死亡姿态：control 早退（Monstrik 检查 sost==3）+
+                                 // animate 播 die 动画；不走 timerDie（internal 无法访问）
+               // 无死亡动画的单位（炮塔/机器等 animate 不检查 sost）：禁用使其
+               // 停止行动（Unit.step 对 disabled 早退）——炮塔类死亡判定可视化；
+               // v1.75 增补：调用其 expl() 慢速播放爆炸动画（粒子只随节流帧
+               // 步进=1/N 慢动作）+ 隐藏本体视觉（真实死亡的爆炸+消失观感；
+               // endSandy 的 restorePredDead 恢复，回放中真实结算死亡）
+               try
+               {
+                  var qnPd:String = flash.utils.getQualifiedClassName(enemy);
+                  if (qnPd.indexOf("Turret") >= 0 || qnPd.indexOf("Bloat") >= 0
+                      || qnPd.indexOf("Robot") >= 0 || qnPd.indexOf("Msp") >= 0)
+                  {
+                     enemy.disabled = true;
+                     try { if (enemy.hpbar != null) enemy.hpbar.visible = false; } catch (e:*) { }
+                     try { if (enemy.expl != null) { enemy.expl(); } } catch (e:*) { }
+                     try { if (enemy.vis != null) { enemy.vis.visible = false; } } catch (e:*) { }
+                  }
+               }
+               catch (e:*) { }
+               log("[SandyMod] 预判死亡: " + flash.utils.getQualifiedClassName(enemy)
+                   + " predDam=" + pd + " hp=" + enemy.hp);
+            }
+         }
+         catch (e:*) { }
+      }
+
+      // ===== 时停结束：预判死亡的敌人恢复存活（回放中真实结算死亡）=====
+      private function restorePredDead():void
+      {
+         try
+         {
+            for (var k:Object in predDead)
+            {
+               try
+               {
+                  if (k != null && k.sost == 3) { k.sost = 1; }
+                  if (k != null && k.disabled) { k.disabled = false; }
+                  // 炮塔类预判死亡时隐藏的视觉恢复（回放中真实结算死亡）
+                  if (k != null && k.vis != null) { k.vis.visible = true; }
+               }
+               catch (e:*) { }
+            }
+         }
+         catch (e:*) { }
+         predDam = new Dictionary();
+         origDam = new Dictionary();
+         hitCred = new Dictionary();
+         predDead = new Dictionary();
+      }
+
+      // ===== 快照时停结束时的武器/弹药状态（回放结束后恢复，保证回放零净消耗）=====
+      private function buildSandyEndSnap():void
+      {
+         sandyEndSnap = null;
+         try
+         {
+            sandyEndSnap = {};
+            endWeapon = world.gg.currentWeapon;
+            var wns:* = world.invent.weapons;
+            for (var wid:String in wns)
+            {
+               try
+               {
+                  var wobj:* = wns[wid];
+                  if (wobj != null) { sandyEndSnap["h_" + wid] = wobj.hold; }
+               }
+               catch (e:*) { }
+            }
+            var ammE:* = world.invent.ammos;
+            for (var aE:String in ammE)
+            {
+               try { sandyEndSnap["it_" + aE] = world.invent.items[aE].kol; } catch (e:*) { }
+            }
+         }
+         catch (e:*) { sandyEndSnap = null; }
+      }
+
+      // ===== 模拟游戏 changeWeaponNow：立即切换武器（无切换动画），配套视觉/GUI 更新 =====
+      private function switchToWeapon(w:Object):void
+      {
+         try
+         {
+            if (world.gg.currentWeapon == w) return;
+            if (world.gg.currentWeapon != null)
+            {
+               try { world.gg.currentWeapon.remVisual(); } catch (e:*) { }
+            }
+            world.gg.currentWeapon = w;
+            world.gg.childObjs[0] = w;
+            if (w != null)
+            {
+               try
+               {
+                  w.addVisual();
+                  w.setNull();
+                  w.setPers(world.gg, world.gg.pers);
+                  world.gui.setWeapon();
+               }
+               catch (e:*) { log("[SandyMod] switchToWeapon visual error: " + e); }
+            }
+            log("[SandyMod] switchToWeapon -> " + (w != null ? w.id : "none"));
+         }
+         catch (e:*) { log("[SandyMod] switchToWeapon error: " + e); }
+      }
+
+      // ===== 恢复时停结束状态：回放结束后弹夹剩余=时停结束时，背包弹药不被回放消耗 =====
+      private function restoreSandyEndSnap():void
+      {
+         if (sandyEndSnap == null) return;
+         try
+         {
+            var wns:* = world.invent.weapons;
+            for (var wid:String in sandyEndSnap)
+            {
+               if (wid.indexOf("h_") == 0)
+               {
+                  var tW:String = wid.substr(2);
+                  try
+                  {
+                     var wobj:* = wns[tW];
+                     if (wobj != null) { wobj.hold = sandyEndSnap[wid]; }
+                  }
+                  catch (e:*) { }
+               }
+                  else if (wid.indexOf("it_") == 0)
+                  {
+                     var tI:String = wid.substr(3);
+                     try
+                     {
+                        var itR:* = world.invent.items[tI];
+                        // v1.97：**精确恢复**（不再只向上）——回放中武器切换+
+                        // 弹匣强制灌满若触发游戏的弹药返还（reloadWeapon 换弹
+                        // 型 / unloadWeapon）会把灌满的弹匣倒回背包，弹药反而
+                        // **增加**（"先开火再切换武器→回放后子弹有概率增加"
+                        // 根因）；回放期间玩家无操控不可能拾取，双向精确恢复
+                        // 安全（拾取不可能发生）
+                        if (itR != null && itR.kol != sandyEndSnap[wid])
+                        {
+                           var dKol:Number = sandyEndSnap[wid] - itR.kol;
+                           itR.kol = sandyEndSnap[wid];
+                           try
+                           {
+                              if (world.invent.mass != null && itR.mass != null)
+                              {
+                                 world.invent.mass[2] += dKol * itR.mass;
+                              }
+                           }
+                           catch (e:*) { }
+                        }
+                     }
+                     catch (e:*) { }
+                  }
+            }
+         }
+         catch (e:*) { }
+         sandyEndSnap = null;
+      }
+
       // ==================== 参数面板 ====================
       private function togglePanel(open:Boolean):void
       {
@@ -530,10 +2604,21 @@ package
             sb.push("duration=" + cfgDuration);
             sb.push("cooldown=" + cfgCooldown);
             sb.push("replayspeed=" + cfgReplaySpeed);
+            sb.push("slowfactor=" + cfgSlowFactor);
             sb.push("ghostevery=" + cfgGhostEvery);
+            sb.push("replayghost=" + cfgReplayGhost);
+            sb.push("replayghostlife=" + cfgReplayGhostLife);
+            sb.push("projhits=" + (cfgProjHits ? 1 : 0));
+            sb.push("projhp=" + cfgProjHp);
+            sb.push("projarmor=" + cfgProjArmor);
+            sb.push("ghostalpha=" + cfgGhostAlpha);
+            sb.push("ghostblend=" + cfgGhostBlend);
+            sb.push("colormode=" + cfgColorMode);
+            sb.push("edgethresh=" + cfgEdgeThresh);
             sb.push("fxrun=" + (cfgFxRun ? 1 : 0));
             sb.push("showmark=" + (cfgShowMark ? 1 : 0));
             sb.push("panelkey=" + cfgPanelKey);
+            sb.push("diaglog=" + (cfgDiagLog ? 1 : 0));
             sb.push("debugtest=0");
             stream.writeUTFBytes(sb.join(NL) + NL);
             stream.close();
@@ -550,7 +2635,25 @@ package
          try
          {
             savedOnPause = world.onPause;
+            // 时停慢速世界（v1.46）：onPause=true 冻结世界，模组节流 step——
+            // 玩家每帧手动 step（全速），敌人/物品/攻击体每 slowfactor 帧 step 1 次
+            // （1/N 速）。注：位移回退方案因帧序（模组先于游戏 step，渲染在游戏后）
+            // 回退被全速移动覆盖而无效——节流是"真慢速"（动作/判定同步 1/N）
             world.onPause = true;
+            // v1.82 伤害策略：时停中**不再设 godMode**——godMode 的 UnitPlayer.
+            // damage 在每次受击后把 hp 复位到受击前值（"掉血-回复反复横跳"的
+            // 根源）。现时停中玩家受**真实伤害**（慢速世界中的攻击正常掉血），
+            // 回放期间无敌（godMode 在回放开始处设置）。保存原值供结束恢复。
+            try
+            {
+               savedGod = world.godMode;
+            }
+            catch (e:*) { }
+            // 记录时停开始时的武器（回放开始切回它重演，回放结束切回时停结束时武器）
+            startWeapon = null;
+            try { startWeapon = world.gg.currentWeapon; } catch (e:*) { }
+            endWeapon = null;
+            sandyEndSnap = null;
             // 键状态处理：先保存当前按住的键，关 SATS（其 clearAll 会清布尔），再恢复，
             // 这样"按住空格/方向键进入时停"的玩家在时停中按键依然有效（Flash 不会为重按的键重发事件）
             try
@@ -582,8 +2685,86 @@ package
             sandyActive = true;
             sandyLeft = cfgDuration;
             history = new Array();
+            // 清空上一轮重演记录（场景级录像：敌人/物品/攻击体每帧状态）
+            replayObjs = new Dictionary();
+            replayAnimCat = new Dictionary();
+            replayObjArr = [];
+            seenPos = new Dictionary();
+            thrownImpacts = new Dictionary();   // 投掷撞击记录重置
+            thrownPreV = new Dictionary();
+            thrownUnits = new Dictionary();
+            thrownDamWall = new Dictionary();
+            enemyAtks = new Dictionary();       // 敌人攻击事件记录重置
+            gSnapKol = -1;
+            seenAtk = new Dictionary();         // 攻击体追踪器重置
+            projBoom = new Dictionary();        // v1.91：时停引爆记录重置
+            reExecPin = new Dictionary();       // v1.94：重执行孪生钉重置
+            boomDiagCnt = 0;                    // v1.94：boom 诊断计数重置
+            twinSavExpl = new Dictionary();     // v1.98：孪生体惰性化记录重置
+            twinDiagCnt = 0;
+            partDiagOnce = false;               // v1.98：粒子视觉类型诊断重置
+            reattached = new Dictionary();
+            doorPrevDop = new Dictionary();
+            projHp = new Dictionary();
+            recDiagCnt = 0;
+            recDoorCnt = 0;
+            // 时停开始时已在飞的攻击体：**全部登记录像**（玩家方的也录——
+            // 时停前抛出的手雷/导弹在回放中重演其慢速飞行轨迹；v1.87 之前
+            // 只录敌人的，玩家的漏录导致"时停前在飞手雷未重演"）。玩家方
+            // 同时留 preExistB 快照（endSandy 不清除，回放后继续飞行）。
+            preExistB = new Dictionary();
+            try
+            {
+               var oP2:Object = world.loc != null ? world.loc.firstObj : null;
+               var gP2:int = 0;
+               while (oP2 != null)
+               {
+                  try
+                  {
+                     if (flash.utils.getQualifiedClassName(oP2).indexOf("fe.weapon::") == 0)
+                     {
+                        try { if (oP2["owner"] == world.gg) { preExistB[oP2] = true; } } catch (e:*) { }
+                        registerAtk(oP2);
+                     }
+                  }
+                  catch (e:*) { }
+                  oP2 = oP2.nobj;
+                  if (++gP2 > 20000) break;
+               }
+            }
+            catch (e:*) { }
+            try
+            {
+               var oP:Object = world.loc != null ? world.loc.firstObj : null;
+               var gP:int = 0;
+               while (oP != null)
+               {
+                  try
+                  {
+                     if (oP["owner"] == world.gg && flash.utils.getQualifiedClassName(oP).indexOf("fe.weapon::") == 0)
+                     {
+                        preExistB[oP] = true;
+                     }
+                  }
+                  catch (e:*) { }
+                  oP = oP.nobj;
+                  if (++gP > 20000) break;
+               }
+            }
+            catch (e:*) { }
             rainbowIdx = 0;
             fxTicks = 0;
+            replayDiagOnce = false;   // 回放开始诊断每轮重置
+            rFixCnt = 0;               // 回放重钉诊断计数重置
+            recDiagCnt = 0;            // 录像对象诊断计数重置
+            playerAnimCat = 0;   // 回放玩家动画档位迟滞重置
+            recPrevHold = -1;   // 开火记录基线重置
+            recPrevTA = -1;
+            recPrevWid = "";
+            clearAllGhosts();   // 防上一轮残留的无限残影
+
+            lastGhostX = world.gg.X;
+            lastGhostY = world.gg.Y;
             if (ghostLayer == null)
             {
                ghostLayer = new Sprite();
@@ -592,7 +2773,17 @@ package
             {
                ghostLayer.parent.removeChild(ghostLayer);
             }
-            world.visual.addChild(ghostLayer);
+            // 残影层插到玩家视觉层**下方**（v1.77：原 addChild 把残影叠在玩家
+            // 本体之上——玩家显示在残影下层）。按玩家 vis 所在层（visObjs[sloy]）
+            // 的索引前插，残影绘制在玩家本体之后（被本体遮挡）
+            try
+            {
+               var pvParent:Object = world.gg.vis != null ? world.gg.vis.parent : null;
+               var pvIdx:int = pvParent != null ? world.visual.getChildIndex(pvParent) : -1;
+               if (pvIdx > 0) { world.visual.addChildAt(ghostLayer, pvIdx); }
+               else { world.visual.addChild(ghostLayer); }
+            }
+            catch (e:*) { world.visual.addChild(ghostLayer); }
             log("[SandyMod] 斯安维斯坦 ON");
          }
          catch (err:*) { trace("[SandyMod] start error: " + err); }
@@ -602,9 +2793,83 @@ package
       {
          if (!sandyActive) return;
          sandyActive = false;
+         // v1.82：时停前已在飞的玩家攻击体（手雷/导弹）——恢复时停中清零的
+         // 伤害（回放中继续飞行并正常结算）。必须在 restorePredDead 清空
+         // origDam 之前。
          try
          {
-            world.onPause = savedOnPause;
+            for (var kPB:Object in origDam)
+            {
+               try
+               {
+                  if (kPB == null || origDam[kPB] == null || origDam[kPB] <= 0) continue;
+                  // v1.91：恢复对象=时停前在飞攻击体（preExistB）+ 投掷武器
+                  // 抛出的投掷物（时停中抛出、被保留续飞的——伤害被时停
+                  // 清零循环清零，必须恢复才能在回放后正常爆炸）
+                  var keepPB:Boolean = preExistB[kPB] != null;
+                  try { if (!keepPB && kPB.weap != null && kPB.weap == world.gg["throwWeapon"]) { keepPB = true; } } catch (e:*) { }
+                  if (!keepPB) continue;
+                  kPB.damage = origDam[kPB];
+                  try { if (kPB.damageExpl != null && kPB.damageExpl <= 0 && kPB.weap != null && kPB.weap.damageExpl != null) { kPB.damageExpl = kPB.weap.damageExpl; } } catch (e:*) { }
+               }
+               catch (e:*) { }
+            }
+         }
+         catch (e:*) { }
+         // 预判死亡的敌人恢复存活（回放中真实结算死亡——时停的死亡动画只是预告）
+         restorePredDead();
+         // 清除时停期间的无限残影（回放开始，残影全部清场）
+         clearAllGhosts();
+         // 清除时停期间玩家发射的冻结子弹（回放重演攻击，避免双倍火力；
+         // 时停前已在飞的不清除——回放继续飞行）
+         clearFrozenBullets();
+         // v1.97：清掉时停末期爆炸残留的粒子——粒子寿命以世界步计，时停
+         // 1/5 速下到结束时仍在中途，回放开头会在爆炸处继续播放（"回放
+         // 开始时爆炸动画鬼影"根因）。快速步进至全部自然完结。
+         try
+         {
+            for (var ffP:int = 0; ffP < 60; ffP++) { stepParticles(world.loc); mcStepParts(world.loc, true); }
+         }
+         catch (e:*) { }
+         // 追踪器数组长度诊断（v1.88）：len=1 说明追加失败（对象"未重演"定位）
+         try
+         {
+            for (var kE:Object in seenAtk)
+            {
+               var arrE:Array = replayObjs[kE];
+               log("[DIAG] recEnd: cls=" + flash.utils.getQualifiedClassName(kE)
+                   + " len=" + (arrE != null ? arrE.length : -1)
+                   + " inChain=" + (kE.in_chain != null ? kE.in_chain : -1));
+            }
+         }
+         catch (e:*) { }
+         // 快照时停结束状态（回放结束后恢复：弹夹剩余=时停结束时，背包弹药不被回放消耗）
+         buildSandyEndSnap();
+         // 快照武器耐久/魔法值（回放重演会再次消耗——回放结束恢复，防双倍）
+         try
+         {
+            endSnapWpnHp = world.gg.currentWeapon != null ? world.gg.currentWeapon.hp : -1;
+            endSnapMana = world.gg["mana"] != null ? world.gg["mana"] : -1;
+            // 手雷库存快照（v1.81：回放重演抛掷会二次消耗——结束恢复）
+            gSnapKol = -1;
+            try
+            {
+               var twG:* = world.gg["throwWeapon"];
+               if (twG != null && twG.ammo != null && world.invent != null
+                   && world.invent.items != null && world.invent.items[twG.ammo] != null)
+               {
+                  gSnapKol = world.invent.items[twG.ammo].kol;
+               }
+            }
+            catch (e:*) { }
+         }
+         catch (e:*) { }
+
+         try
+         {
+            // 回放期间世界冻结（场景级重演：敌人/物品不 step，由 replayObjects 重演；
+            // 玩家手动 step 驱动攻击）——回放结束 endReplay 恢复 savedOnPause
+            world.onPause = true;
             if (savedInter != null)
             {
                try { world.gg["inter"] = savedInter; } catch (e:*) { }
@@ -635,6 +2900,32 @@ package
          replaying = true;
          replayIdx = 0;
          cooldownLeft = cfgCooldown;
+         // ==== 真回放模式：玩家从起点沿历史路径快速重演（残影跟随玩家本体）====
+         try
+         {
+            // godMode 已由 startSandy 保存（时停前值）——时停+回放全程无敌，结束恢复
+            world.godMode = true;                 // 回放期间无敌（世界正常运行）
+            savedGgCtrl = world.gg.ggControl;
+            // 取消残留的武器切换动画流程（游戏 changeWeapon 冷却 30+20 帧，
+            // 回放中武器切换必须立即生效、无冷却，否则动画流程会在回放中乱切武器）
+            try
+            {
+               world.gg.work = "";
+               world.gg.t_work = 0;
+            }
+            catch (e:*) { }
+            // 回放开始切回时停开始时的武器（否则回放停留在时停结束时的最后武器）
+            replayWpn = startWeapon;
+            savedOtbros = -1;   // 重置击退原始值记录（回放中重新保存）
+            switchToWeapon(startWeapon);
+            if (history.length > 0)
+            {
+               world.gg.setPos(history[0].x, history[0].y);   // 传送回起点
+               world.gg.setVisPos();
+            }
+
+         }
+         catch (e:*) { log("[SandyMod] replay init error: " + e); }
          log("[SandyMod] 斯安维斯坦 OFF, replay " + history.length + " frames");
       }
 
@@ -642,18 +2933,176 @@ package
       {
          try
          {
+            // 时停慢速世界（v1.56）帧序：
+            // 1. 帧首：近战复用攻击体伤害清零（时停中命中 0 伤害，回放重演结算）
+            // 2. 玩家手动 step（全速，每帧）
+            // 3. 节流帧：调用真实 loc.step()（世界真慢速运行——移动/计时/AI/交互检测
+            //    一致 1/N 速；玩家在 loc.step 内会被再步一次，预先清键使其为
+            //    "自由物理步"，步后恢复按键）
+            // 4. 记录历史（玩家最终位置）+ 场景录像
+            freezeMeleeDamage();
+            var wantA:Boolean = false;
+            var wantP:Boolean = false;
+            try
+            {
+               // 鼠标脉冲：同帧 DOWN+UP 的快速连点也能记录（按住由 mouseAtkDown 持续）
+               wantA = world.ctr.keyAttack || mouseAtkDown || mouseAtkPulse;
+               wantP = world.ctr.keyPunch;
+            }
+            catch (e:*) { }
+            mouseAtkPulse = false;   // 脉冲每帧消费一次
             var loc:Object = world.loc;
-            loc.gg.step();
+            loc.gg.step();   // 玩家全速手动 step
+            // 单步后的武器状态（节流帧第二遍步会再递减一次——用单步值做开火检测，
+            // 否则小攻速武器（rapid 1-2）的开火帧记录值与上一帧相同，上升沿检测不到）
+            var tAManual:int = world.gg.currentWeapon != null ? world.gg.currentWeapon.t_attack : 0;
+            var holdManual:Number = world.gg.currentWeapon != null ? world.gg.currentWeapon.hold : -1;
+            // 真实开火逐帧记录（v1.72）：同武器相邻帧弹夹下降=子弹真实生成
+            // （shoot() 内 hold-=rashod）；t_attack 上升沿兜底（近战/无弹药武器/
+            // recyc 不耗弹）。换武器帧 t_attack>0 视为该帧开火（卸下时 setNull
+            // 清零 t_attack，切换后为正=本帧初始化）。每帧 0/1 发记录进历史，
+            // 回放直接累加——根除窗口边缘检测导致的吞攻击。
+            var cwRec:* = world.gg.currentWeapon;
+            var widRec:String = cwRec != null ? cwRec.id : "";
+            var dHRec:int = 0;
+            var tAEdgeRec:Boolean = false;
+            if (cwRec != null)
+            {
+               if (widRec == recPrevWid)
+               {
+                  if (recPrevHold >= 0 && holdManual >= 0 && recPrevHold > holdManual)
+                  {
+                     dHRec = recPrevHold - holdManual;
+                  }
+                  if (recPrevTA >= 0 && tAManual > recPrevTA) { tAEdgeRec = true; }
+               }
+               else if (tAManual > 0 && recPrevWid != "")
+               {
+                  // 换武器帧即开火：新武器 t_attack>0（卸下时 setNull 清零）=
+                  // 本帧初始化。recPrevWid!="" 排除时停首帧（进入时停前残留
+                  // 的冷却不能算本帧开火）
+                  tAEdgeRec = true;
+               }
+               recPrevWid = widRec;
+               recPrevHold = holdManual;
+               recPrevTA = tAManual;
+            }
+            else
+            {
+               recPrevWid = "";
+               recPrevHold = -1;
+               recPrevTA = -1;
+            }
+            var rashodRec:int = 1;
+            try { if (cwRec != null && cwRec.rashod != null) { rashodRec = cwRec.rashod; } } catch (e:*) { }
+            if (rashodRec < 1) { rashodRec = 1; }
+            var fcRec:int = (dHRec >= rashodRec || tAEdgeRec) ? 1 : 0;
+            // 攻击体追踪登记（v1.85）：玩家步后立即扫描登记新生成的攻击体
+            // （按引用录像，绕开链扫描之谜）
+            try
+            {
+               var oNA:Object = loc.firstObj;
+               var gNA:int = 0;
+               while (oNA != null)
+               {
+                  try
+                  {
+                     if (oNA["owner"] == world.gg && seenAtk[oNA] == null
+                         && flash.utils.getQualifiedClassName(oNA).indexOf("fe.weapon::") == 0)
+                     {
+                        registerAtk(oNA);
+                     }
+                  }
+                  catch (e:*) { }
+                  oNA = oNA.nobj;
+                  if (++gNA > 20000) break;
+               }
+            }
+            catch (e:*) { }
+            slowTick++;
+            var isThr:Boolean = (slowTick % cfgSlowFactor == 0);
+            if (isThr)
+            {
+               slowStepWorld();   // 真实 loc.step()：世界 1/N 速步进（含交互检测）
+            }
+            // v1.98：MC 型粒子每显示帧 stop、节流帧（世界步帧）nextFrame 推 1 帧
+            // ——爆炸动画 1/N 慢速播放且不循环（修复"时停中爆炸动画多次加载"）
+            mcStepParts(loc, isThr);
 
             var gg:Object = loc.gg;
-            history.push({ x: gg.X, y: gg.Y, s: gg.storona, r: gg.vis != null ? gg.vis.rotation : 0, v: gg.vis != null ? gg.vis.scaleX : 1 });
+            // 记录攻击键状态与瞄准方向（回放时攻击指向时停期间的发射方向）
+            history.push({ x: gg.X, y: gg.Y, s: gg.storona, r: gg.vis != null ? gg.vis.rotation : 0, v: gg.vis != null ? gg.vis.scaleX : 1,
+                           a: wantA, p: wantP, g: world.ctr.keyGrenad, m: world.ctr.keyMagic,
+                           ax: world.celX, ay: world.celY,
+                           w: world.gg.currentWeapon != null ? world.gg.currentWeapon.id : "",
+                           wx: world.gg.currentWeapon != null ? world.gg.currentWeapon.X : 0,
+                           wy: world.gg.currentWeapon != null ? world.gg.currentWeapon.Y : 0,
+                           tA: tAManual, hold: holdManual, fc: fcRec,
+                           tx: world.gg.teleObj != null ? world.gg.teleObj.X : 0,
+                           ty: world.gg.teleObj != null ? world.gg.teleObj.Y : 0,
+                           ci: speedToEdgeIdx(Math.abs(gg.dx) + Math.abs(gg.dy)) });
+            // 记录重演状态（场景级录像：敌人/物品/攻击体每帧位置+动画帧+生成音效）
+            recordReplayObjects();
+            // 时停攻击状态诊断（每 30 帧）：观察时停中攻击意图与武器状态；
+            // nPb=loc 中玩家攻击体计数（定位录像 atk=0 之谜——子弹为何不被录制）
+            if (++sandyAtkTick % 30 == 0)
+            {
+               try
+               {
+                  var cwS:* = world.gg.currentWeapon;
+                  var nPb:int = 0;
+                  var oPB:Object = world.loc != null ? world.loc.firstObj : null;
+                  var gPB:int = 0;
+                  while (oPB != null)
+                  {
+                     try
+                     {
+                        if (oPB["owner"] == world.gg && flash.utils.getQualifiedClassName(oPB).indexOf("fe.weapon::") == 0) { nPb++; }
+                     }
+                     catch (e:*) { }
+                     oPB = oPB.nobj;
+                     if (++gPB > 20000) break;
+                  }
+                  log("[DIAG] sAtk: wantA=" + wantA + " wantP=" + wantP
+                      + " A=" + world.ctr.keyAttack + " mouse=" + mouseAtkDown + " pulse=" + mouseAtkPulse
+                      + " tA=" + (cwS != null ? cwS.t_attack : -1)
+                      + " cw=" + (cwS != null ? flash.utils.getQualifiedClassName(cwS) : "none")
+                      + " nPb=" + nPb);
+               }
+               catch (e:*) { }
+            }
+            // 时停敌人移动诊断（每 60 帧）：验证节流 step 是否生效（敌人位置应变化）
+            if (++sandyEnemyTick % 60 == 0)
+            {
+               try
+               {
+                  var oE2:Object = world.loc.firstObj;
+                  var gE2:int = 0;
+                  while (oE2 != null)
+                  {
+                     var nxE2:Object = oE2.nobj;
+                     try
+                     {
+                        if (oE2 != world.gg && oE2["setPos"] != null)
+                        {
+                           log("[DIAG] sEnemy: X=" + oE2.X + " Y=" + oE2.Y + " cls=" + flash.utils.getQualifiedClassName(oE2));
+                           break;
+                        }
+                     }
+                     catch (e:*) { }
+                     oE2 = nxE2;
+                     if (++gE2 > 20000) break;
+                  }
+               }
+               catch (e:*) { }
+            }
+
 
             fxTicks++;
             if (fxTicks >= cfgGhostEvery)
             {
                fxTicks = 0;
-               spawnGhost(gg, palette(rainbowIdx));
-               rainbowIdx++;
+               spawnGhost(gg, ghostColor(Math.abs(gg.dx) + Math.abs(gg.dy)));
             }
             if (diagTick++ % 30 == 0)
             {
@@ -666,7 +3115,10 @@ package
 
             if (cfgFxRun)
             {
-               stepParticles(loc);
+               // v1.75：粒子只随节流帧（loc.step）步进 = 1/N 慢速——与"世界真
+               // 慢速运行"一致；炮塔预判死亡的爆炸粒子自然慢放（慢动作爆炸）。
+               // 每帧仍维护发射器计数（World.step 守卫内的重置由模组代做）
+               resetFxCounter();
             }
 
             // [DIAG] jump simulation: every 60 frames press jump for 3 frames
@@ -724,10 +3176,184 @@ package
          }
       }
 
+      // ===== 时停中 MovieClip 型粒子慢放（v1.98）=====
+      // 游戏 Part 视觉分两类：Blit 型（blitData!=null，blitFrame 随 step 推进
+      // ——已随世界 1/N 慢速）与 MovieClip 型（vClass，initVis 后 gotoAndPlay：
+      // 播放头按**舞台帧率**推进，与时停慢速无关）。爆炸动画几十帧数秒播完，
+      // 而粒子寿命 liv 以世界步计被拉长 5 倍——MC 播完即循环重播 = 用户所见
+      // "时停中爆炸动画多次加载"。修复：每显示帧 stop()（防按舞台帧率播放），
+      // 节流帧（世界步帧）手动 nextFrame() 推 1 帧——爆炸动画 1/N 慢速播放，
+      // 播完停在末帧不循环。
+      private function mcStepParts(loc:Object, advance:Boolean):void
+      {
+         try
+         {
+            var PartClass:Class = ApplicationDomain.currentDomain.getDefinition("fe.graph.Part") as Class;
+            if (PartClass == null) return;
+            var objP:Object = loc.firstObj;
+            var guardP:int = 0;
+            var mcN:int = 0;
+            var blN:int = 0;
+            var clsS:String = "";
+            while (objP != null)
+            {
+               var nxtP:Object = objP.nobj;
+               try
+               {
+                  if (objP is PartClass && objP.vis != null)
+                  {
+                     var isAnimP:* = objP.isAnim;
+                     if (isAnimP != null && isAnimP > 0)
+                     {
+                        if (objP.blitData == null)
+                        {
+                           // MovieClip 型：stop + 世界步帧手动推进（不循环）
+                           mcN++;
+                           if (mcN <= 3)
+                           {
+                              try { clsS += (clsS != "" ? "," : "") + flash.utils.getQualifiedClassName(objP.vis); } catch (e:*) { }
+                           }
+                           try { objP.vis.stop(); } catch (e:*) { }
+                           if (advance)
+                           {
+                              try
+                              {
+                                 var otkP:* = objP.otklad;
+                                 if ((otkP == null || otkP <= 0) && objP.vis.visible == true
+                                     && objP.vis.currentFrame < objP.vis.totalFrames)
+                                 {
+                                    objP.vis.nextFrame();
+                                 }
+                              }
+                              catch (e:*) { }
+                           }
+                        }
+                        else
+                        {
+                           blN++;   // Blit 型：随 step 慢速，不处理
+                        }
+                     }
+                  }
+               }
+               catch (e:*) { }
+               objP = nxtP;
+               if (++guardP > 20000) break;
+            }
+            // 诊断（每轮时停一次，首个出现动画粒子的帧）：确认爆炸粒子视觉
+            // 类型分布（MC/Blit）+ MC 类名样本——定位"多次加载"的 Part 类型
+            if (!partDiagOnce && (mcN > 0 || blN > 0))
+            {
+               partDiagOnce = true;
+               log("[DIAG] parts: mc=" + mcN + " blit=" + blN + " mcCls=" + clsS);
+            }
+         }
+         catch (e:*) { }
+      }
+
       // ==================== 回放 ====================
       private function stepReplay():void
       {
+         try
+         {
+            // 锁定输入：回放期间玩家不可操控（清空键状态，control 读到全 false）
+            world.ctr.clearAll();
+            // 回放中弹匣无限 + 跳过换弹计时（攻击持续流畅，不被换弹打断）
+            var cwR:* = world.gg.currentWeapon;
+            if (cwR != null)
+            {
+               if (cwR.holder > 0) { cwR.hold = cwR.holder; }
+               cwR.t_reload = 0;
+            }
+            // 消除回放中游戏武器切换冷却：取消残留切换动画流程，并钉住回放武器
+            // （否则 changeWeapon 的 changeWeaponNow 会在回放中触发，把武器切走/卸掉）
+            try
+            {
+               if (world.gg.work == "change") { world.gg.work = ""; world.gg.t_work = 0; }
+               if (replayWpn != null && world.gg.currentWeapon != replayWpn) { switchToWeapon(replayWpn); }
+            }
+            catch (e:*) { }
+         }
+         catch (e:*) { }
+         // 回放开始诊断（每轮回放一次，v1.75）：录像构成（按类前缀计数）+
+         // loc 中敌人攻击体（类名/位置/是否已录制）——定位"实体型攻击回放
+         // 中静止"的未覆盖对象
+         if (!replayDiagOnce)
+         {
+            replayDiagOnce = true;
+            try
+            {
+               var cntWp:int = 0, cntUn:int = 0, cntSc:int = 0, cntOt:int = 0;
+               for each (var roX:Object in replayObjArr)
+               {
+                  try
+                  {
+                     var qnX:String = flash.utils.getQualifiedClassName(roX);
+                     if (qnX.indexOf("fe.weapon::") == 0) { cntWp++; }
+                     else if (qnX.indexOf("fe.unit::") == 0 || qnX.indexOf("fe.serv::") == 0) { cntUn++; }
+                     else if (qnX.indexOf("fe.loc::") == 0) { cntSc++; }
+                     else { cntOt++; }
+                  }
+                  catch (e:*) { }
+               }
+               log("[DIAG] rStart: recObjs=" + replayObjArr.length + " atk=" + cntWp + " unit=" + cntUn + " scene=" + cntSc + " other=" + cntOt);
+               var oR2:Object = world.loc != null ? world.loc.firstObj : null;
+               var gR2:int = 0;
+               while (oR2 != null)
+               {
+                  try
+                  {
+                     var qnR3:String = flash.utils.getQualifiedClassName(oR2);
+                     if (qnR3.indexOf("fe.weapon::") == 0 && oR2["owner"] != world.gg)
+                     {
+                        log("[DIAG] rStart: enemyAtk cls=" + qnR3 + " X=" + oR2.X + " Y=" + oR2.Y
+                            + " rec=" + (replayObjs[oR2] != null ? 1 : 0));
+                     }
+                  }
+                  catch (e:*) { }
+                  oR2 = oR2.nobj;
+                  if (++gR2 > 20000) break;
+               }
+            }
+            catch (e:*) { }
+         }
+         // 回放段诊断：loc 中攻击体计数（生成/结算是否平衡）与弹夹状态（每 60 帧）
+         if (++replayDiagTick % 60 == 1)
+         {
+            try
+            {
+               var locR:Object = world.loc;
+               var oR:Object = locR.firstObj;
+               var nR:int = 0;
+               var guardR:int = 0;
+               while (oR != null)
+               {
+                  try
+                  {
+                     if (flash.utils.getQualifiedClassName(oR).indexOf("fe.weapon::") == 0) { nR++; }
+                  }
+                  catch (e:*) { }
+                  oR = oR.nobj;
+                  if (++guardR > 20000) break;
+               }
+               var cwD:* = world.gg.currentWeapon;
+               log("[DIAG] replay: locWeapons=" + nR + " hold=" + (cwD != null ? cwD.hold : -1)
+                   + " holder=" + (cwD != null ? cwD.holder : -1) + " t_atk=" + (cwD != null ? cwD.t_attack : -1));
+            }
+            catch (e:*) { }
+         }
          var n:int = Math.ceil(cfgReplaySpeed);
+         var ghostIdx:int = replayIdx;
+         var atkOn:Boolean = false;
+         var punchOn:Boolean = false;
+         var grenOn:Boolean = false;
+         var magOn:Boolean = false;
+         var fireCnt:int = 0;   // 窗口内真实开火次数（时停记录逐帧累加）
+         var firePts:Array = [];   // 开火帧的武器位置/瞄准点（v1.86：子弹按开火帧精确复现）
+         var lastAimX:Number = 0;   // 窗口末帧瞄准点（开火前武器重新瞄准用）
+         var lastAimY:Number = 0;
+         var prevGx:Number = 0;   // 上一历史帧位置（残影速度/配色用）
+         var prevGy:Number = 0;
+         var prevWid:String = replayWpn != null ? replayWpn.id : "";   // 当前回放武器 id（用于重演切换）
          for (var i:int = 0; i < n; i++)
          {
             if (replayIdx >= history.length)
@@ -736,9 +3362,525 @@ package
                return;
             }
             var h:Object = history[replayIdx];
-            spawnGhostAt(h.x, h.y, h.s, h.r, h.v, palette(rainbowIdx));
-            rainbowIdx++;
+            // 武器切换重演：历史中武器变化时立即切换（无冷却，跟随时停期间的切枪）
+            if (h.w != null && h.w != prevWid)
+            {
+               var tgtW:Object = h.w == "" ? null : world.invent.weapons[h.w];
+               switchToWeapon(tgtW);
+               replayWpn = tgtW;
+               prevWid = h.w;
+            }
+            // 驱动玩家沿历史路径移动（真回放：玩家本体重演）
+            try
+            {
+               world.gg.X = h.x;
+               world.gg.Y = h.y;
+               world.gg.storona = h.s;
+               world.gg.setVisPos();
+               // 念力投掷物复位：回放开始时（及全程）钉在历史位置——否则
+               // 物品仍从时停结束位置开始移动（玩家 gg.step 的 teleObj 逻辑会
+               // 跟随玩家更新其位置，覆盖场景记录）
+               try
+               {
+                  if (world.gg.teleObj != null && h.tx != null)
+                  {
+                     world.gg.teleObj.X = h.tx;
+                     world.gg.teleObj.Y = h.ty;
+                     if (world.gg.teleObj.vis != null)
+                     {
+                        world.gg.teleObj.vis.x = h.tx;
+                        world.gg.teleObj.vis.y = h.ty;
+                     }
+                  }
+               }
+               catch (e:*) { }
+               // 喂回记录的瞄准方向（攻击指向时停期间的发射方向）
+               if (h.ax != null)
+               {
+                  world.celX = h.ax;
+                  world.celY = h.ay;
+                  lastAimX = h.ax;
+                  lastAimY = h.ay;
+                  // 武器位置：枪械强制就位（枪口钉在角色手上，跳过渐进旋转）；
+                  // 近战重现时停期间的独立位置（历史 wx/wy + 清插值 del，
+                  // 否则 WClub.actions 的追赶插值追不上回放中瞬移的瞄准点，
+                  // 武器会滞留在时停结束时的位置）
+                  try
+                  {
+                     var wv:* = world.gg.currentWeapon;
+                     if (wv != null)
+                     {
+                        var qnW:String = flash.utils.getQualifiedClassName(wv);
+                        var meleeW:Boolean = qnW == "fe.weapon::WClub" || qnW == "fe.weapon::WPunch" || qnW == "fe.weapon::WKick";
+                        if (meleeW)
+                        {
+                           wv.X = h.wx;
+                           wv.Y = h.wy;
+                           try { wv.del.x = 0; wv.del.y = 0; } catch (e:*) { }
+                        }
+                        else
+                        {
+                           wv.X = world.gg.weaponX;          // 枪口位置就位
+                           wv.Y = world.gg.weaponY;
+                           wv.rot = Math.atan2(h.ay - world.gg.Y, h.ax - world.gg.X);  // 瞄准角
+                           wv.ready = true;                   // 视为已就位（可立即攻击）
+                        }
+                     }
+                  }
+                  catch (e:*) { }
+               }
+            }
+            catch (e:*) { }
+            // 攻击键 OR 合并（窗口内任一历史帧按下则本帧触发，点按不丢）
+            if (h.a == true) atkOn = true;
+            if (h.p == true) punchOn = true;
+            if (h.g == true) grenOn = true;
+            if (h.m == true) magOn = true;
+            // 真实开火计数（v1.72）：直接累加时停期间逐帧记录的开火数——
+            // 记录时以相邻帧弹夹下降（子弹真实生成）判定，回放不再做窗口
+            // 边缘检测（旧上升沿/下降沿在窗口首帧必丢边——吞攻击根源之一）。
+            // v1.86：开火帧的武器位置与瞄准点逐帧记录（子弹按开火帧精确
+            // 复现——窗口末位置/瞄准会让子弹与重演的投掷物等实体产生
+            // 整窗口偏差："回放中子弹离手雷偏差大"的根源）
+            if (h.fc != null && h.fc > 0)
+            {
+               fireCnt += h.fc;
+               firePts.push({ f: replayIdx, x: h.wx, y: h.wy, ax: h.ax != null ? h.ax : 0, ay: h.ay != null ? h.ay : 0 });
+            }
+            prevGx = h.x;
+            prevGy = h.y;
             replayIdx++;
+         }
+         // 回放残影（v1.73）：生成间隔 replayghost（显示帧）+ 寿命 replayghostlife
+         // （显示帧）均可配置——高频率+短寿命=拖尾。颜色用**时停期间记录的颜色
+         // 索引**（按回放实际速度算会因采样步长全变紫色——Sandy 记录时的真实
+         // 速度映射才正确）
+         try
+         {
+            if (replayIdx > 0)
+            {
+               var ghH:Object = history[Math.min(replayIdx - 1, history.length - 1)];
+               if (++replayGhostDisp % Math.max(1, cfgReplayGhost) == 0)
+               {
+                  var gct:ColorTransform = (cfgColorMode == 1)
+                     ? edgePalette(ghH.ci != null ? ghH.ci : 0)
+                     : palette(rainbowIdx++);
+                  spawnGhostAt(ghH.x, ghH.y, ghH.s, ghH.r, ghH.v, gct);
+               }
+            }
+         }
+         catch (e:*) { }
+         // ===== 攻击重演（v1.62）：按历史记录的真实开火次数精确驱动 =====
+         // 旧的 -=5 冷却加速有量化误差（周期向显示帧取整）→ 部分 rapid 值下
+         // 回放攻击数 < 时停攻击数（吞攻击）。现按时停记录的 tA 上升沿精确计数，
+         // 逐发手动驱动 weapon.attack()+step()，开火次数与时停完全一致。
+         try
+         {
+            // 攻击键不再喂回 keyAttack（开火由 fireCnt 精确驱动，喂回会双发）
+            world.ctr.keyAttack = false;
+            world.ctr.keyPunch = punchOn;
+            // v1.91：手雷不重执行——投掷物由录像按引用重演（同一对象，
+            // 位置逐帧重钉）；重执行会另生成一份实时飞行体，与录像体
+            // 重叠成"鬼影"且回放后出现双份（录像体保留，回放结束自然
+            // 续飞爆炸）。魔法保留重执行（其伤害依赖重执行结算）。
+            world.ctr.keyGrenad = false;
+            world.ctr.keyMagic = magOn;
+         }
+         catch (e:*) { }
+         // 世界冻结（onPause=true）下的手动驱动：
+         // 1. 玩家手动 step（消费喂回的键 → 移动/拳击/投掷/魔法）
+         // 2. 攻击逐发重演（fireCnt 驱动 attack+step——枪械/近战）
+         // 3. 玩家攻击体手动 step（全速飞行+碰撞结算）
+         // 4. 敌人/物品/场景/攻击体重演（位置+动画帧+生成音效）
+         // 5. 粒子特效照常（枪口火焰等）
+         try { world.loc.gg.step(); } catch (e:*) { }
+         // 玩家动画驱动（v1.73）：回放中按键清空 → control() 置 dx=0 → 玩家
+         // animate() 恒走 stay 待机帧（回放中玩家视觉僵死）。按历史轨迹量化 dx
+         // 喂 animate()：|dx|>4 进入移动子分支（walk/run/trot——该子分支在
+         // stay 外块内部，stay=true 不阻塞）；maxSpeed 公开可写——<5 走档、
+         // 用 runForever 强开跑档；档位迟滞防抖；待机档 dx=0 回 stay 帧。
+         // maxSpeed/runForever 为瞬时值（下一帧 control 重算），动画后恢复。
+         try
+         {
+            var cP2:Object = history[Math.min(replayIdx - 1, history.length - 1)];
+            var nP2:Object = history[Math.min(replayIdx, history.length - 1)];
+            if (cP2 != null && nP2 != null)
+            {
+               var pdxR:Number = (nP2.x - cP2.x) * cfgReplaySpeed;
+               var pspdR:Number = pdxR >= 0 ? pdxR : -pdxR;
+               var pCatR:int = pspdR < 1.5 ? 1 : (pspdR < 8 ? 2 : 3);
+               var pPrevC:int = playerAnimCat;
+               if (pPrevC != 0)
+               {
+                  if (pPrevC == 3 && pCatR == 2 && pspdR > 5) { pCatR = 3; }
+                  else if (pPrevC == 2 && pCatR == 1 && pspdR > 2.5) { pCatR = 2; }
+                  else if (pPrevC == 1 && pCatR == 2 && pspdR < 3) { pCatR = 1; }
+                  else if (pPrevC == 2 && pCatR == 3 && pspdR < 10) { pCatR = 2; }
+               }
+               playerAnimCat = pCatR;
+               var savedMS:Number = 0;
+               var savedRF:int = 0;
+               try
+               {
+                  savedMS = world.gg.maxSpeed;
+                  savedRF = world.gg.runForever;
+                  if (pCatR == 1)
+                  {
+                     world.gg.dx = 0;
+                  }
+                  else
+                  {
+                     world.gg.dx = (pdxR >= 0 ? 1 : -1) * (pCatR == 2 ? 6 : 14);
+                     world.gg.maxSpeed = pCatR == 2 ? 4 : 20;
+                     if (pCatR == 3) { world.gg.runForever = 1; }
+                  }
+                  world.gg.animate();
+                  world.gg.maxSpeed = savedMS;
+                  world.gg.runForever = savedRF;
+               }
+               catch (e:*) { }
+            }
+         }
+         catch (e:*) { }
+         var cwNow:* = world.gg.currentWeapon;
+         var execCnt:int = 0;   // 实际执行的开火数（attack() 返回 true）
+         if (cwNow != null && fireCnt > 0)
+         {
+            // 回放不重掷损坏/卡壳骰子（v1.72）：weaponAttack 按 hp 推算 breaking，
+            // 半耐久武器在回放中会随机卡壳/哑火吞攻击（时停中已打出的子弹
+            // 回放必须同样打出）；hp<=0 时 attack() 直接拒开。逐发把 hp 抬满
+            // （breaking=0）+清卡壳标记；耐久 endReplay 由快照恢复，循环后
+            // 恢复原状态。
+            var savedHpF:* = cwNow.hp;
+            var savedJamF:* = cwNow.jammed;
+            var qnNow:String = flash.utils.getQualifiedClassName(cwNow);
+            var meleeNow:Boolean = qnNow == "fe.weapon::WClub" || qnNow == "fe.weapon::WPunch" || qnNow == "fe.weapon::WKick";
+            for (var fi:int = 0; fi < fireCnt; fi++)
+            {
+               try
+               {
+                  // 开火前武器重新瞄准/就位（枪械）：v1.86 按**开火帧**记录的
+                  // 武器位置与瞄准点精确复现（firePts）——跳跃/窗口偏移不再
+                  // 使子弹偏离；无记录时退回窗口末瞄准。近战不需要。
+                  if (!meleeNow)
+                  {
+                     try
+                     {
+                        var fp:Object = firePts.length > 0 ? firePts.shift() : null;
+                        if (fp != null)
+                        {
+                           cwNow.X = fp.x;
+                           cwNow.Y = fp.y;
+                           world.celX = fp.ax;
+                           world.celY = fp.ay;
+                        }
+                        else
+                        {
+                           cwNow.X = world.gg.weaponX;
+                           cwNow.Y = world.gg.weaponY;
+                           world.celX = lastAimX;
+                           world.celY = lastAimY;
+                        }
+                        cwNow.rot = Math.atan2(world.celY - cwNow.Y, world.celX - cwNow.X);
+                        cwNow.ready = true;
+                        // v1.90：v1.88 预推进移除——与 stepPlayerBullets + 世界重钉
+                        // 双重计入，子弹超前最多 1 个世界步（~200px，用户实测
+                        // "手雷飞行状态提前/玩家射击延后"）。正确对齐：子弹生成于
+                        // 显示帧 m（世界时间 m），随后 stepPlayerBullets 步 1 次、
+                        // replayObjects 把世界重钉到 m+1——子弹与世界天然同步，
+                        // 无需修正（时停中两者同按世界节流步进，映射严格一致）。
+                     }
+                     catch (e:*) { }
+                  }
+                  cwNow.t_attack = 0;
+                  cwNow.t_auto = 0;
+                  cwNow.t_reload = 0;
+                  try
+                  {
+                     cwNow.hp = cwNow.maxhp;      // breaking=0（weaponAttack 按 hp 推算）
+                     cwNow.jammed = false;        // 卡壳标记不清会阻断开火
+                  }
+                  catch (e:*) { }
+                  // 蓄力武器（prep>0）：强制充满蓄力——单次 attack() 只加 2 点
+                  // t_prep，不满 prep 不会开火（跳跃时蓄力武器吞攻击的来源之一）
+                  try
+                  {
+                     if (cwNow.prep > 0) { cwNow.t_prep = cwNow.prep; }
+                  }
+                  catch (e:*) { }
+                  if (cwNow.attack() == true) { execCnt++; }
+                  cwNow.step();       // 武器步进（shoot 在 t_attack==rapid 触发）
+                  // v1.94：爆弹体孪生发现——重执行生成的爆弹（核弹/榴弹/
+                  // 火箭）与录像原体配对：回放中把重执行体钉到录像轨迹
+                  // （重演子弹与重执行体按原几何相遇→命中引爆，窗口量化
+                  // 误差消除）。孪生=玩家方、时停中生成（补帧 vv=false）、
+                  // 首个 vv=true 索引==本开火帧 fp.f。
+                  try
+                  {
+                     if (!meleeNow && fp != null && fp.f != null)
+                     {
+                        var nb2:* = cwNow.b;
+                        if (nb2 != null && nb2.explRadius != null && nb2.explRadius > 0 && reExecPin[nb2] == null)
+                        {
+                           for (var kT2:Object in seenAtk)
+                           {
+                              try
+                              {
+                                 if (kT2 == null || kT2 == nb2) continue;
+                                 if (kT2["owner"] != world.gg) continue;
+                                 var arrT2:Array = replayObjs[kT2];
+                                 if (arrT2 == null || arrT2.length <= 1) continue;
+                                 if (arrT2[0].vv != false) continue;
+                                 var spawnF:int = -1;
+                                 for (var fi2:int = 1; fi2 < arrT2.length; fi2++)
+                                 {
+                                    if (arrT2[fi2].vv == true) { spawnF = fi2; break; }
+                                 }
+                                 if (spawnF == fp.f)
+                                 {
+                                    reExecPin[nb2] = kT2;
+                                    break;
+                                 }
+                              }
+                              catch (e:*) { }
+                           }
+                        }
+                     }
+                  }
+                  catch (e:*) { }
+                  // 连发武器（dkol>0）：初始化后持续步进完成整个连发
+                  try
+                  {
+                     if (cwNow.dkol != null && cwNow.dkol > 0 && cwNow.t_attack > 0)
+                     {
+                        while (cwNow.t_attack > 0) { cwNow.step(); }
+                     }
+                  }
+                  catch (e:*) { }
+               }
+               catch (e:*) { }
+               if (meleeNow)
+               {
+                  // 近战直接结算（bindMove 窗口被跳过——逐发结算命中）
+                  try
+                  {
+                     if (cwNow.b != null && cwNow.b.off == false)
+                     {
+                        var angB:Number = Math.atan2(world.celY - world.gg.Y, world.celX - world.gg.X);
+                        cwNow.b.X = world.gg.X + Math.cos(angB) * 60;
+                        cwNow.b.Y = world.gg.Y + Math.sin(angB) * 60 - 10;
+                        var unitsArr:Object = world.loc.units;
+                        for each (var uu:Object in unitsArr)
+                        {
+                           if (cwNow.b.off) break;
+                           if (uu == world.gg) continue;
+                           if (uu.sost == 4 || uu.disabled || uu.trigDis) continue;
+                           if (uu.loc != world.loc) continue;
+                           try { if (uu.fraction == world.gg.fraction) continue; } catch (e:*) { }
+                           var ddxB:Number = uu.X - cwNow.b.X;
+                           var ddyB:Number = uu.Y - cwNow.b.Y;
+                           if (ddxB * ddxB + ddyB * ddyB < 80 * 80)
+                           {
+                              var hitResB:int = uu.udarBullet(cwNow.b);
+                              if (hitResB >= 0) { cwNow.b.popadalo(hitResB); }
+                              cwNow.b.off = true;
+                              break;
+                           }
+                        }
+                     }
+                  }
+                  catch (e:*) { }
+               }
+            }
+            // 恢复武器耐久/卡壳状态（endReplay 另有快照恢复兜底）
+            try
+            {
+               cwNow.hp = savedHpF;
+               cwNow.jammed = savedJamF;
+            }
+            catch (e:*) { }
+         }
+         // 开火诊断（每 15 帧）：fireCnt=检测到应开火数 exec=实际执行数
+         // 玩家 stay（跳跃状态）——定位跳跃相关吞攻击
+         if (++replayFireTick % 15 == 0)
+         {
+            try
+            {
+               log("[DIAG] rFire: cnt=" + fireCnt + " exec=" + execCnt
+                   + " pStay=" + world.gg.stay + " pJump=" + world.gg.isJump
+                   + " cw=" + (cwNow != null ? flash.utils.getQualifiedClassName(cwNow) : "none")
+                   + " tA=" + (cwNow != null ? cwNow.t_attack : -1));
+            }
+            catch (e:*) { }
+         }
+         stepPlayerBullets();
+         stepUnrecordedAtk();
+         replayObjects();
+         // v1.94：重执行爆弹体钉到录像轨迹——消除窗口量化误差，
+         // 重演子弹与重执行体按时停原几何相遇命中引爆
+         try
+         {
+            for (var kRP:Object in reExecPin)
+            {
+               try
+               {
+                  if (kRP == null) { delete reExecPin[kRP]; continue; }
+                  try { if (kRP.in_chain != true || kRP.isExpl == true) { delete reExecPin[kRP]; continue; } } catch (e:*) { }
+                  var twinRP:Object = reExecPin[kRP];
+                  var arrRP:Array = replayObjs[twinRP];
+                  if (arrRP == null || arrRP.length == 0) { delete reExecPin[kRP]; continue; }
+                  var stRP:Object = arrRP[Math.min(replayIdx, arrRP.length - 1)];
+                  if (stRP == null) continue;
+                  // v1.96：录像孪生体已爆炸（vv=false 死亡标记）→ 终止重执行体
+                  // （隐藏 + 禁爆 + 杀）——爆炸由 boom 按录像帧如实重演，
+                  // 不再由孪生体后续自然爆炸产生"晚于时停"的第二爆/定格残影
+                  if (stRP.vv == false)
+                  {
+                     try { kRP.isExpl = true; } catch (e:*) { }
+                     try { kRP.liv = 0; } catch (e:*) { }
+                     try { if (kRP.vis != null) { kRP.vis.visible = false; } } catch (e:*) { }
+                     // v1.98：已由 boom 替代演出——不得在 endReplay 恢复爆炸能力
+                     // （否则 liv=0 的终止体回放结束后再爆一次）
+                     try { delete twinSavExpl[kRP]; } catch (e:*) { }
+                     delete reExecPin[kRP];
+                     continue;
+                  }
+                  kRP.X = stRP.x;
+                  kRP.Y = stRP.y;
+                  try { if (kRP.vis != null) { kRP.vis.x = stRP.x; kRP.vis.y = stRP.y; } } catch (e:*) { }
+               }
+               catch (e:*) { }
+            }
+         }
+         catch (e:*) { }
+         // 投掷物可击落检测（v1.83）：回放中重演的子弹命中重演的
+         // 投掷物 → 真实爆炸结算（时停中的引爆只是视觉预告）
+         stepProjHits(world.loc, false);
+         // 被投掷单位撞击伤害结算（v1.74）：时停中记录的首次撞击——回放推进
+         // 到撞击帧时按游戏 damageWall 公式结算（时停中已跳过伤害）。单位
+         // 位置由 replayObjects 重钉在撞击位置，伤害与视觉同步。
+         // v1.76：补撞击反馈（游戏 damageWall 的撞击音效 hit_flesh + 尘土 bum）
+         try
+         {
+            for (var kTI:Object in thrownImpacts)
+            {
+               try
+               {
+                  var impTI:Object = thrownImpacts[kTI];
+                  if (replayIdx >= impTI.frame)
+                  {
+                     if (impTI.dam > 0 && kTI.damage != null)
+                     {
+                        kTI.damage(impTI.dam, 2);   // D_PHIS=2（物理撞击）
+                        try
+                        {
+                           if (sndClass != null) { sndClass["ps"]("hit_flesh", kTI.X, kTI.Y); }
+                           var EmClass:Class = ApplicationDomain.currentDomain.getDefinition("fe.graph.Emitter") as Class;
+                           if (EmClass != null) { EmClass["emit"]("bum", world.loc, kTI.X, kTI.Y); }
+                        }
+                        catch (e:*) { }
+                     }
+                     delete thrownImpacts[kTI];
+                  }
+               }
+               catch (e:*) { }
+            }
+         }
+         catch (e:*) { }
+         if (cfgFxRun) { try { stepParticles(world.loc); } catch (e:*) { } }
+         // 回放动画诊断（每 30 帧）：采样前 2 个重演单位的视觉像素哈希——
+         // 哈希随帧变化=动画在播放；恒不变=渲染冻结（僵死根因判定）
+         if (++replayAnimTick % 30 == 0)
+         {
+            try
+            {
+               var nA:int = 0;
+               for each (var oA:Object in replayObjArr)
+               {
+                  try
+                  {
+                     if (oA == null || oA["setPos"] == null || oA.vis == null) continue;
+                     var hsh:String = "-";
+                     try
+                     {
+                        var bdA:* = oA.vis.bitmapData;
+                        if (bdA != null)
+                        {
+                           hsh = bdA.getPixel32(int(bdA.width / 2), int(bdA.height / 2)).toString(16)
+                               + "/" + bdA.getPixel32(int(bdA.width / 3), int(bdA.height / 3)).toString(16);
+                        }
+                        else if (oA.vis.currentFrame != null)
+                        {
+                           // MovieClip 视觉：动画在嵌套剪辑或子 Bitmap 中——
+                           // 采样嵌套帧号与子 Bitmap 像素（顶层帧恒 0 无意义）
+                           hsh = "f" + oA.vis.currentFrame;
+                           try
+                           {
+                              if (oA.vis.osn != null && oA.vis.osn.body != null)
+                              {
+                                 hsh += "/o" + oA.vis.osn.body.currentFrame;
+                              }
+                              else if (oA.vis.body != null)
+                              {
+                                 hsh += "/b" + oA.vis.body.currentFrame;
+                              }
+                           }
+                           catch (e:*) { }
+                           try
+                           {
+                              var nc:int = oA.vis.numChildren;
+                              for (var ci:int = 0; ci < nc && ci < 3; ci++)
+                              {
+                                 var ch:* = oA.vis.getChildAt(ci);
+                                 if (ch != null && ch.bitmapData != null)
+                                 {
+                                    hsh += "/c" + ch.bitmapData.getPixel32(int(ch.bitmapData.width / 2), int(ch.bitmapData.height / 2)).toString(16);
+                                    break;
+                                 }
+                              }
+                           }
+                           catch (e:*) { }
+                        }
+                     }
+                     catch (e:*) { }
+                     log("[DIAG] rAnim: cls=" + flash.utils.getQualifiedClassName(oA)
+                         + " sost=" + oA.sost + " stay=" + oA.stay + " dx=" + oA.dx
+                         + " hp=" + oA.hp + " hash=" + hsh);
+                     if (++nA >= 2) break;
+                  }
+                  catch (e:*) { }
+               }
+            }
+            catch (e:*) { }
+         }
+         // 回放攻击体状态诊断（每 3 帧）：攻击体位置/伤害/off 状态（定位近战结算问题）
+         if (++replayBodyTick % 3 == 0)
+         {
+            try
+            {
+               var cwB:* = world.gg.currentWeapon;
+               if (cwB != null && cwB.b != null)
+               {
+                  log("[DIAG] rBody: bX=" + cwB.b.X + " bY=" + cwB.b.Y + " dmg=" + cwB.b.damage
+                      + " off=" + cwB.b.off + " liv=" + cwB.b.liv + " vel=" + cwB.b.vel
+                      + " ggX=" + world.gg.X + " ggY=" + world.gg.Y
+                      + " cwX=" + cwB.X + " cwY=" + cwB.Y + " tA=" + cwB.t_attack);
+               }
+            }
+            catch (e:*) { }
+         }
+         // 回放攻击链路诊断（每 10 帧）：确认喂回与游戏攻击条件
+         if (++replayAtkTick % 10 == 0)
+         {
+            try
+            {
+               var cwA:* = world.gg.currentWeapon;
+               log("[DIAG] rAtk: atkOn=" + atkOn + " kA=" + world.ctr.keyAttack
+                   + " tA=" + (cwA != null ? cwA.t_attack : -1)
+                   + " atkPos=" + (cwA != null ? cwA.attackPos() : false)
+                   + " cw=" + (cwA != null ? flash.utils.getQualifiedClassName(cwA) : "none"));
+            }
+            catch (e:*) { }
          }
          if (replayIdx >= history.length)
          {
@@ -750,6 +3892,173 @@ package
       {
          replaying = false;
          history = new Array();
+         try
+         {
+            // 回放结束：恢复世界运行（敌人/场景恢复自由行动）
+            world.onPause = savedOnPause;
+            world.godMode = savedGod;    // 恢复无敌状态
+            world.ctr.keyAttack = false;
+            world.ctr.keyPunch = false;
+            world.ctr.keyGrenad = false;
+            world.ctr.keyMagic = false;
+         }
+         catch (e:*) { }
+         // v1.80：预判死亡隐藏（vis.visible=false）的炮塔类若回放中未被真实
+         // 击杀（预测偏松/子弹未命中），回放结束后恢复可见——否则以隐身状态
+         // 存活并继续攻击。正常钻地的尸鬼由 AI 状态（aiState=5）自行控制
+         // 可见性，不受影响。
+         try
+         {
+            for each (var oV:Object in replayObjArr)
+            {
+               try
+               {
+                  if (oV != null && oV["setPos"] != null && oV.vis != null)
+                  {
+                     var qnV:String = flash.utils.getQualifiedClassName(oV);
+                     if (qnV.indexOf("Turret") >= 0 || qnV.indexOf("Bloat") >= 0
+                         || qnV.indexOf("Robot") >= 0 || qnV.indexOf("Msp") >= 0)
+                     {
+                        oV.vis.visible = true;
+                     }
+                  }
+               }
+               catch (e:*) { }
+            }
+         }
+         catch (e:*) { }
+         // v1.87：摘除回放中重挂过的 vis（时停中已死亡对象的视觉——
+         // 不摘除会在回放结束后残留成静止画面）
+         try
+         {
+            for (var kRA:Object in reattached)
+            {
+               try { if (kRA.vis != null && kRA.vis.parent != null) { kRA.vis.parent.removeChild(kRA.vis); } } catch (e:*) { }
+            }
+            reattached = new Dictionary();
+         }
+         catch (e:*) { }
+         // v1.98：恢复回放中惰性化的重执行爆炸体——仍存活在飞的（录像原体
+         // 时停末未爆/未配对孪生体）回放结束后继续自然飞行/爆炸；已被 boom
+         // 终止或已 babah/出链的不恢复（防第二次爆炸）。
+         try
+         {
+            for (var kTE:Object in twinSavExpl)
+            {
+               try
+               {
+                  if (kTE != null && kTE.in_chain == true && kTE.liv > 0 && kTE.babah != true)
+                  {
+                     kTE.isExpl = false;
+                     kTE.damageExpl = twinSavExpl[kTE];
+                  }
+               }
+               catch (e:*) { }
+               try { delete twinSavExpl[kTE]; } catch (e:*) { }
+            }
+         }
+         catch (e:*) { }
+         // 清空场景重演记录
+         replayObjs = new Dictionary();
+         replayAnimCat = new Dictionary();
+         replayObjArr = [];
+         seenPos = new Dictionary();
+         // 回放结束：切回时停结束时手上的武器，恢复弹夹/背包（弹夹剩余=时停结束时）
+         try
+         {
+            // 取消残留切换动画（回放结束的切换同样立即生效）
+            try { world.gg.work = ""; world.gg.t_work = 0; } catch (e:*) { }
+            // 恢复回放中改过的武器攻速（rapid）
+            for (var rid:String in savedRapids)
+            {
+               try
+               {
+                  var wR:* = world.invent.weapons[rid];
+                  if (wR != null) { wR.rapid = savedRapids[rid]; }
+               }
+               catch (e:*) { }
+            }
+            savedRapids = {};
+            switchToWeapon(endWeapon);
+            restoreSandyEndSnap();
+            // 恢复武器耐久/魔法值（回放重演不应二次消耗）
+            try
+            {
+               if (endSnapWpnHp >= 0 && world.gg.currentWeapon != null)
+               {
+                  world.gg.currentWeapon.hp = endSnapWpnHp;
+               }
+               if (endSnapMana >= 0 && world.gg["mana"] != null)
+               {
+                  world.gg["mana"] = endSnapMana;
+               }
+            }
+            catch (e:*) { }
+            endSnapWpnHp = -1;
+            endSnapMana = -1;
+            // 手雷库存恢复（v1.81：回放重演抛掷不应二次消耗——恢复至时停结束
+            // 时数量，同步修正负重）
+            try
+            {
+               if (gSnapKol >= 0)
+               {
+                  var twG2:* = world.gg["throwWeapon"];
+                  if (twG2 != null && twG2.ammo != null && world.invent != null
+                      && world.invent.items != null && world.invent.items[twG2.ammo] != null)
+                  {
+                     var itG:* = world.invent.items[twG2.ammo];
+                     var dKol:Number = gSnapKol - itG.kol;
+                     if (dKol != 0)
+                     {
+                        try
+                        {
+                           if (world.invent.mass != null && world.invent.mass[2] != null && itG.mass != null)
+                           {
+                              world.invent.mass[2] += dKol * itG.mass;
+                           }
+                        }
+                        catch (e:*) { }
+                        itG.kol = gSnapKol;
+                     }
+                  }
+                  gSnapKol = -1;
+               }
+            }
+            catch (e:*) { }
+            // 恢复被投掷单位的 damWall（时停中清零延后撞墙伤害——伤害已在
+            // 回放撞击帧结算；恢复后世界正常运行）+ 清空撞击记录
+            try
+            {
+               for (var kT:Object in thrownDamWall)
+               {
+                  try { kT.damWall = thrownDamWall[kT]; } catch (e:*) { }
+               }
+               // v1.86：被投掷敌人的惯性恢复——用节流步前速度快照的
+               // 末次值（时停末仍在飞行的单位），回放结束后继续沿投掷方向飞行
+               try
+               {
+                  for (var kPV:Object in thrownPreV)
+                  {
+                     try
+                     {
+                        kPV.dx = thrownPreV[kPV].dx;
+                        kPV.dy = thrownPreV[kPV].dy;
+                     }
+                     catch (e:*) { }
+                  }
+               }
+               catch (e:*) { }
+               thrownDamWall = new Dictionary();
+               thrownImpacts = new Dictionary();
+               thrownPreV = new Dictionary();
+               thrownUnits = new Dictionary();
+            }
+            catch (e:*) { }
+            replayWpn = null;
+         }
+         catch (e:*) { log("[SandyMod] endReplay restore error: " + e); }
+
+
          if (debugTest)
          {
             try
@@ -765,10 +4074,47 @@ package
       }
 
       // ==================== 残影 ====================
+      // 位图不透明像素质心 x（网格采样，用于翻转对照诊断判定镜像是否生效）
+      private function ghostCenterX(bd:BitmapData):Number
+      {
+         var s:Number = 0;
+         var wSum:Number = 0;
+         try
+         {
+            for (var yy:int = 40; yy < bd.height - 40; yy += 8)
+            {
+               for (var xx:int = 20; xx < bd.width - 20; xx += 8)
+               {
+                  var al:int = bd.getPixel32(xx, yy) >>> 24;
+                  if (al > 0)
+                  {
+                     s += xx * al;
+                     wSum += al;
+                  }
+               }
+            }
+         }
+         catch (e:*) { }
+         return wSum > 0 ? s / wSum : -1;
+      }
+
       private function spawnGhost(gg:Object, ct:ColorTransform):void
       {
          try
          {
+            // 叠加防护：位移不足不生成（静止时大量残影堆叠在同一位置会破坏
+            // 房间图层显示）；总数上限（无限寿命残影，超限移除最旧的）
+            var dgx:Number = gg.X - lastGhostX;
+            var dgy:Number = gg.Y - lastGhostY;
+            if (dgx * dgx + dgy * dgy < 64) { return; }
+            lastGhostX = gg.X;
+            lastGhostY = gg.Y;
+            if (ghosts.length >= 50)
+            {
+               var go:Object = ghosts.shift();
+               try { if (go.s.parent != null) go.s.parent.removeChild(go.s); } catch (e:*) { }
+               try { go.b.dispose(); } catch (e:*) { }
+            }
             var vis:* = gg.vis;
             if (vis == null || !vis.visible) { log("[DIAG] spawnGhost skip: vis null/not visible"); return; }
             var w:Number = vis.width;
@@ -781,19 +4127,31 @@ package
             m.ty = -b.top;
             var savedHp:Boolean = false;
             if (gg.hpbar != null && gg.hpbar.visible) { savedHp = true; gg.hpbar.visible = false; }
-            bmp.draw(vis as IBitmapDrawable, m, ct, "normal", null, true);
-            if (savedHp) gg.hpbar.visible = true;
-            if (debugTest)
+            // 消除双重缩放：draw 会应用父级链变换（world.visual 相机缩放 0.667），
+            // 临时脱离父容器绘制（同帧加回，无渲染间隙），残影尺寸与玩家本体一致
+            var savedParent:Object = vis.parent;
+            var savedIdx:int = -1;
+            if (savedParent != null)
             {
-               var sC:uint = bmp.getPixel32(int(bmp.width / 2), int(bmp.height / 2));
-               var sTL:uint = bmp.getPixel32(20, 20);
-               var sTR:uint = bmp.getPixel32(bmp.width - 20, 20);
-               var sBL:uint = bmp.getPixel32(20, bmp.height - 20);
-               var sBR:uint = bmp.getPixel32(bmp.width - 20, bmp.height - 20);
-               var sM2:uint = bmp.getPixel32(int(bmp.width / 2), int(bmp.height * 0.25));
-               log("[DIAG] ts-ghostbmp C=" + sC.toString(16) + " TL=" + sTL.toString(16) + " TR=" + sTR.toString(16)
-                   + " BL=" + sBL.toString(16) + " BR=" + sBR.toString(16) + " M2=" + sM2.toString(16)
-                   + " vis.alpha=" + vis.alpha + " vis.visible=" + vis.visible);
+               try { savedIdx = savedParent.getChildIndex(vis); } catch (e:*) { }
+               try { savedParent.removeChild(vis); } catch (e:*) { }
+            }
+            // 朝向镜像（根因修复）：draw 的 matrix 参数替换源显示变换（忽略 vis.scaleX），
+            // 动画帧是朝右绘制的——朝左（storona<0）时用水平翻转矩阵画出镜像内容
+            var dm:Matrix = m;
+            if (gg.storona < 0) { dm = new Matrix(-1, 0, 0, 1, b.right, m.ty); }
+            bmp.draw(vis as IBitmapDrawable, dm, ct, "normal", null, true);
+            if (savedParent != null)
+            {
+               try { savedParent.addChildAt(vis, savedIdx); } catch (e:*) { }
+            }
+            if (savedHp) gg.hpbar.visible = true;
+            if (debugTest || cfgDiagLog)
+            {
+               // 质心诊断：cxA<mid=内容偏左（朝左），cxA>mid=内容偏右（朝右）
+               var cxA:Number = ghostCenterX(bmp);
+               log("[DIAG] mirror: cxA=" + cxA + " mid=" + (w / 2)
+                   + " storona=" + gg.storona + " visScaleX=" + vis.scaleX);
             }
             var bit:Bitmap = new Bitmap(bmp, "auto", true);
             var spr:Sprite = new Sprite();
@@ -806,7 +4164,7 @@ package
             spr.addChild(bit);
             bit.blendMode = cfgGhostBlend == 0 ? "add" : "normal";
             ghostLayer.addChild(spr);
-            ghosts.push({ s: spr, t: 30, b: bmp });
+            ghosts.push({ s: spr, t: -1, life: 0, b: bmp });   // 无限残影（时停结束才清除）
          }
          catch (e:*) { log("[DIAG] spawnGhost ERROR: " + e + " vis=" + (world != null && world.gg != null ? world.gg.vis : "n/a")); }
       }
@@ -826,13 +4184,29 @@ package
             var b:Rectangle = vis.getBounds(vis);
             m.tx = -b.left;
             m.ty = -b.top;
-            bmp.draw(vis as IBitmapDrawable, m, ct, "normal", null, true);
-            if (debugTest)
+            // 朝向镜像（根因修复）：draw 的 matrix 替换源显示变换（忽略 vis.scaleX），
+            // 动画帧是朝右绘制的——历史朝向 s<0 时用水平翻转矩阵画出镜像内容
+            var dm:Matrix = m;
+            if (s < 0) { dm = new Matrix(-1, 0, 0, 1, b.right, m.ty); }
+            // 消除双重缩放（同 spawnGhost：临时脱离父容器绘制）
+            var savedParent:Object = vis.parent;
+            var savedIdx:int = -1;
+            if (savedParent != null)
             {
-               var aC:uint = bmp.getPixel32(int(bmp.width / 2), int(bmp.height / 2));
-               var aTL:uint = bmp.getPixel32(5, 5);
-               log("[DIAG] ghostbmp: w=" + bmp.width + " h=" + bmp.height + " center=" + aC.toString(16) + " tl=" + aTL.toString(16)
-                   + " vis.alpha=" + vis.alpha + " vis.visible=" + vis.visible + " sost=" + gg.sost);
+               try { savedIdx = savedParent.getChildIndex(vis); } catch (e:*) { }
+               try { savedParent.removeChild(vis); } catch (e:*) { }
+            }
+            bmp.draw(vis as IBitmapDrawable, dm, ct, "normal", null, true);
+            if (savedParent != null)
+            {
+               try { savedParent.addChildAt(vis, savedIdx); } catch (e:*) { }
+            }
+            if (debugTest || cfgDiagLog)
+            {
+               // 质心诊断：cxA<mid=内容偏左（朝左），cxA>mid=内容偏右（朝右）
+               var cxA:Number = ghostCenterX(bmp);
+               log("[DIAG] ghostAt-f: s=" + s + " storona=" + gg.storona + " visScaleX=" + vis.scaleX
+                   + " cxA=" + cxA + " mid=" + (w / 2));
             }
             var bit:Bitmap = new Bitmap(bmp, "auto", true);
             var spr:Sprite = new Sprite();
@@ -845,9 +4219,20 @@ package
             spr.addChild(bit);
             bit.blendMode = cfgGhostBlend == 0 ? "add" : "normal";
             ghostLayer.addChild(spr);
-            ghosts.push({ s: spr, t: 26, b: bmp });
+            ghosts.push({ s: spr, t: Math.max(1, cfgReplayGhostLife), life: Math.max(1, cfgReplayGhostLife), b: bmp });  // 回放残影：寿命可配置（replayghostlife）
          }
          catch (e:*) { log("[DIAG] spawnGhostAt ERROR: " + e); }
+      }
+
+      // ===== 清除全部残影（时停结束/新时停开始时调用——时停残影无限寿命）=====
+      private function clearAllGhosts():void
+      {
+         for each (var g:Object in ghosts)
+         {
+            try { if (g.s.parent != null) g.s.parent.removeChild(g.s); } catch (e:*) { }
+            try { g.b.dispose(); } catch (e:*) { }
+         }
+         ghosts = [];
       }
 
       private function updateGhosts():void
@@ -857,13 +4242,22 @@ package
          while (i >= 0)
          {
             var g:Object = ghosts[i];
-            g.t--;
-            g.s.alpha = g.t / 30;
-            if (g.t <= 0)
+            if (g.t < 0)
             {
-               if (g.s.parent != null) g.s.parent.removeChild(g.s);
-               g.b.dispose();
-               ghosts.splice(i, 1);
+               // 无限残影（时停期间）：恒定低透明度，只在时停结束统一清除
+               g.s.alpha = Math.max(0.05, Math.min(1, cfgGhostAlpha / 100));
+            }
+            else
+            {
+               g.t--;
+               // 回放残影淡出：基准透明度 = ghostalpha（默认 60%），随寿命线性衰减
+               g.s.alpha = (g.t / (g.life != null && g.life > 0 ? g.life : 30)) * Math.max(0.05, Math.min(1, cfgGhostAlpha / 100));
+               if (g.t <= 0)
+               {
+                  if (g.s.parent != null) g.s.parent.removeChild(g.s);
+                  g.b.dispose();
+                  ghosts.splice(i, 1);
+               }
             }
             i--;
          }
@@ -888,8 +4282,42 @@ package
          catch (err:*) { }
       }
 
+      // 鼠标按住/按下脉冲状态（快速连点同帧 DOWN+UP 时按住状态会被立即清除，
+      // 用脉冲记录"本帧发生过按下"，供历史记录真实攻击意图）
+      private function onMouseDown(e:MouseEvent):void
+      {
+         try { mouseAtkDown = true; mouseAtkPulse = true; } catch (err:*) { }
+      }
+
+      private function onMouseUp(e:MouseEvent):void
+      {
+         try { mouseAtkDown = false; } catch (err:*) { }
+      }
+
       private function onKeyUp(e:KeyboardEvent):void
       {
+         // 输入法真卡键判定：UP 无对应 DOWN（2 秒内 >=2 次才算真卡键；
+         // 输入法切换瞬间会出现 1 次，属正常不警告）
+         if (e.keyCode > 0 && e.keyCode < 256)
+         {
+            var dt:* = keyDownSeen[e.keyCode];
+            if (dt == null)
+            {
+               var nowM:int = getTimer();
+               if (nowM - imeMissTime > 2000) { imeMissCount = 1; imeMissTime = nowM; }
+               else { imeMissCount++; }
+               if (imeMissCount >= 2)
+               {
+                  imeWarnT = 90;   // 3 秒警告
+                  if (cfgDiagLog) { try { log("[IME] miss x" + imeMissCount + " kc=" + e.keyCode); } catch (err:*) { } }
+               }
+               else if (cfgDiagLog)
+               {
+                  try { log("[IME] miss x1 kc=" + e.keyCode + " (switch transient, no warn)"); } catch (err:*) { }
+               }
+            }
+            keyDownSeen[e.keyCode] = null;
+         }
          if (cfgDiagLog)
          {
             try { log("[KEY] U " + e.keyCode); } catch (err:*) { }
@@ -907,17 +4335,26 @@ package
       // ==================== 输入 ====================
       private function onKey(e:KeyboardEvent):void
       {
-         // ===== 中文输入法（IME）检测：keyCode 229 = IME 截获按键 =====
-         // 输入法激活时字母键的 KEY_DOWN 被系统层吃掉（只发 229），游戏收不到，
-         // 导致键盘操作全部失效（鼠标/方向键中的个别键仍正常）。模组检测到后
-         // 在 HUD 提示用户切换输入法。
+         // ===== 中文输入法（IME）检测 =====
+         // 真卡键特征：字母键的 KEY_DOWN 被输入法在系统层截获（只发 229 或直接丢失），
+         // 随后只有 KEY_UP 到达。判定：
+         //   1) 收到 KEY_UP 但之前没有对应 KEY_DOWN → 该键 DOWN 被吃 → 真卡键 → 警告
+         //   2) 短时间内连续出现 229 事件（>=2 次/3秒）→ 输入法活跃 → 警告
+         // 单个 229 不警告（输入法切换瞬间/英文模式 Shift 等也会产生，属正常）
          if (e.keyCode == 229)
          {
-            imeWarnT = 150;   // 5 秒警告
-            if (cfgDiagLog)
+            var nowT:int = getTimer();
+            if (nowT - ime229Time > 3000) { ime229Count = 1; ime229Time = nowT; }
+            else { ime229Count++; }
+            if (ime229Count >= 2)
             {
-               try { log("[IME] detected, warning shown"); } catch (err:*) { }
+               imeWarnT = 150;
+               if (cfgDiagLog) { try { log("[IME] 229 x" + ime229Count); } catch (err:*) { } }
             }
+         }
+         else if (e.keyCode > 0 && e.keyCode < 256)
+         {
+            keyDownSeen[e.keyCode] = getTimer();
          }
 
          // ===== 按键诊断（diaglog=1 时记录按键事件与游戏状态，用于定位卡键）=====
@@ -967,6 +4404,16 @@ package
             panelKey(e.keyCode);
             e.stopPropagation();
             return;
+         }
+         // ===== 选项页模组设置面板（主菜单/游戏内 Options 页）=====
+         if (optPanelOn)
+         {
+            if (e.keyCode == Keyboard.UP) { optSel = (optSel + 8 - 1) % 8; return; }
+            if (e.keyCode == Keyboard.DOWN) { optSel = (optSel + 1) % 8; return; }
+            if (e.keyCode == Keyboard.LEFT) { optAdj(-1); return; }
+            if (e.keyCode == Keyboard.RIGHT) { optAdj(1); return; }
+            if (e.keyCode == Keyboard.ENTER) { saveConfigFile(); return; }
+            // 其它键放行（PipBuck 正常处理，如 TAB 关闭）
          }
          if (e.keyCode == cfgPanelKey)
          {
@@ -1041,7 +4488,7 @@ package
          if (imeWarnT > 0)
          {
             imeWarnT--;
-            txt = "⚠ 检测到中文输入法，键盘操作已失效！请按 Ctrl+Space 切换输入法";
+            txt = "⚠ 输入法已激活(可能按 Shift 误触)！请按 Ctrl+Space 切回英文";
          }
          else if (sandyActive)
          {
@@ -1071,7 +4518,7 @@ package
             else if (sandyActive) fg = 0x00FFFF;   // 激活: 青色
             else if (replaying) fg = 0xFFFF00; // 回放: 黄色
             hud.textColor = fg;
-            hud.text = (imeWarnT > 0) ? "⚠ 检测到中文输入法，键盘操作已失效！请按 Ctrl+Space 切换输入法" : hud.text;
+            hud.text = (imeWarnT > 0) ? "⚠ 输入法已激活(可能按 Shift 误触)！请按 Ctrl+Space 切回英文" : hud.text;
             hudBg.graphics.clear();
             hudBg.graphics.lineStyle(1, fg, 0.9);              // 荧光边框
             hudBg.graphics.beginFill(0x002211, 0.7);           // 深绿黑底
