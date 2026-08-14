@@ -1445,6 +1445,19 @@ package
                   if (oB["owner"] == world.gg && replayObjs[oB] == null
                       && flash.utils.getQualifiedClassName(oB).indexOf("fe.weapon::") == 0)
                   {
+                     // v1.97：重执行孪生体的录像原体已爆炸（vv=false）→ 不再步进
+                     // （其导火索若在此步耗尽会自然爆炸，与 boom 重叠成"两次
+                     // 爆炸动画"；位置本就由 reExecPin 循环按录像重钉）
+                     var twinB:Object = reExecPin[oB];
+                     if (twinB != null)
+                     {
+                        var arrB3:Array = replayObjs[twinB];
+                        if (arrB3 != null)
+                        {
+                           var stB3:Object = arrB3[Math.min(replayIdx, arrB3.length - 1)];
+                           if (stB3 != null && stB3.vv == false) { oB = nxB; continue; }
+                        }
+                     }
                      oB.step();
                   }
                }
@@ -2432,17 +2445,34 @@ package
                   }
                   catch (e:*) { }
                }
-               else if (wid.indexOf("it_") == 0)
-               {
-                  var tI:String = wid.substr(3);
-                  try
+                  else if (wid.indexOf("it_") == 0)
                   {
-                     var itR:* = world.invent.items[tI];
-                     // 只恢复"少了"的（回放中瞬时换弹扣背包），拾取增加的保留
-                     if (itR != null && itR.kol < sandyEndSnap[wid]) { itR.kol = sandyEndSnap[wid]; }
+                     var tI:String = wid.substr(3);
+                     try
+                     {
+                        var itR:* = world.invent.items[tI];
+                        // v1.97：**精确恢复**（不再只向上）——回放中武器切换+
+                        // 弹匣强制灌满若触发游戏的弹药返还（reloadWeapon 换弹
+                        // 型 / unloadWeapon）会把灌满的弹匣倒回背包，弹药反而
+                        // **增加**（"先开火再切换武器→回放后子弹有概率增加"
+                        // 根因）；回放期间玩家无操控不可能拾取，双向精确恢复
+                        // 安全（拾取不可能发生）
+                        if (itR != null && itR.kol != sandyEndSnap[wid])
+                        {
+                           var dKol:Number = sandyEndSnap[wid] - itR.kol;
+                           itR.kol = sandyEndSnap[wid];
+                           try
+                           {
+                              if (world.invent.mass != null && itR.mass != null)
+                              {
+                                 world.invent.mass[2] += dKol * itR.mass;
+                              }
+                           }
+                           catch (e:*) { }
+                        }
+                     }
+                     catch (e:*) { }
                   }
-                  catch (e:*) { }
-               }
             }
          }
          catch (e:*) { }
@@ -2756,6 +2786,14 @@ package
          // 清除时停期间玩家发射的冻结子弹（回放重演攻击，避免双倍火力；
          // 时停前已在飞的不清除——回放继续飞行）
          clearFrozenBullets();
+         // v1.97：清掉时停末期爆炸残留的粒子——粒子寿命以世界步计，时停
+         // 1/5 速下到结束时仍在中途，回放开头会在爆炸处继续播放（"回放
+         // 开始时爆炸动画鬼影"根因）。快速步进至全部自然完结。
+         try
+         {
+            for (var ffP:int = 0; ffP < 60; ffP++) { stepParticles(world.loc); }
+         }
+         catch (e:*) { }
          // 追踪器数组长度诊断（v1.88）：len=1 说明追加失败（对象"未重演"定位）
          try
          {
