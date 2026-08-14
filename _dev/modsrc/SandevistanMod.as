@@ -181,10 +181,11 @@ package
       private var twinDiagCnt:int = 0;                     // v1.98：孪生体惰性化诊断计数
       private var partDiagOnce:Boolean = false;            // v1.98：时停粒子视觉类型诊断（每轮一次）
       private var recPaired:Dictionary = new Dictionary(); // v1.99：已配对录像体去重（防同一录像体被多个孪生体配对）
-      private var cfgSwapRun:Boolean = false;          // v1.100：疾跑（按住Shift）中允许切枪开关
+      private var cfgSwapRun:Boolean = true;           // v1.100：疾跑（按住Shift）中允许切枪开关（默认开——用户要求的功能）
       private var leashLeft:int = 0;                   // v1.100：回放结束后弹药防泄漏钳制剩余帧数
       private var leashSnap:Object = null;             // v1.100：防泄漏钳制用的时停结束快照
       private var leashDiagCnt:int = 0;                // v1.100：防泄漏钳制诊断计数
+      private var swapRunDiagCnt:int = 0;              // v1.101：疾跑切枪拦截诊断计数
       private var reattached:Dictionary = new Dictionary(); // 回放中重挂过 vis 的对象（结束摘除，防残留画面）
       private function addEnemyAtk(u:Object, ev:Object):void
       {
@@ -265,6 +266,8 @@ package
          inst = new SandevistanMod();
          inst.log("[SandyMod] init called");
          inst.loadConfig();
+         // v1.101：版本标记——日志确认实际加载运行的构建版本与关键开关
+         inst.log("[SandyMod] v1.101 loaded swaprun=" + (inst.cfgSwapRun ? 1 : 0) + " projhits=" + (inst.cfgProjHits ? 1 : 0));
          if (main != null && main.stage != null)
          {
             main.stage.addEventListener(Event.ENTER_FRAME, inst.onFrame);
@@ -504,6 +507,12 @@ package
                      try { if (world.gg.visSel) { world.gui.unshowSelector(0); } } catch (e:*) { }
                      try { if (world.gg.currentSpell != null) { world.gg.currentSpell.active = false; } } catch (e:*) { }
                      try { world.ctr.keyDef = false; world.ctr.keyAttack = false; } catch (e:*) { }
+                     // v1.101：拦截诊断（确认开关生效与按键路由）
+                     if (cfgDiagLog && swapRunDiagCnt < 6)
+                     {
+                        swapRunDiagCnt++;
+                        log("[DIAG] swapRun: key=" + wn + " run=" + world.ctr.keyRun);
+                     }
                      break;
                   }
                }
@@ -1651,12 +1660,16 @@ package
                            try { if (kB.vis != null) { kB.vis.x = bm.x; kB.vis.y = bm.y; } } catch (e:*) { }
                            kB.isExpl = false;
                            kB.explosion();
-                           // v1.99：集束武器（explKol>1，如野火核弹）explosion() 后
-                           // expl_t 排定后续连爆——回放世界冻结不步进，回放结束后
-                           // 世界恢复才逐帧 explRun 喷出剩余连爆（"两次爆炸动画"
-                           // 根因之一；时停中录像体爆炸后下一世界步即移除、无连爆，
-                           // 回放只应重演一次）。清零即只爆一次。
-                           try { kB.expl_t = 0; } catch (e:*) { }
+                           // v1.101：爆炸后**移除**录像体——集束武器（explKol>1，
+                           // 如野火核弹）explosion() 会排定 expl_t 后续连爆，而
+                           // expl_t 是 internal（Bullet.as:131），模组子域无法赋值
+                           // （v1.99 的 kB.expl_t=0 静默失败）——回放世界冻结期间
+                           // 不步进，回放结束后世界恢复才逐帧 explRun 在爆炸位置
+                           // 喷出剩余连爆（"两个冲击波"+"时停爆炸位置鬼影"的
+                           // 同根因）。remObj 出链后连爆无从触发，只爆一次。
+                           // 时停中录像体爆炸后下一世界步即被移除（从无连爆），
+                           // 移除即与时停行为一致。
+                           try { world.loc.remObj(kB); } catch (e:*) { }
                            // v1.92：引爆即杀（回放结束后不再残留续飞）
                            try { kB.liv = 0; } catch (e:*) { }
                            // v1.94：隐藏残体精灵（游戏爆炸流程同款——防爆炸
@@ -2522,7 +2535,13 @@ package
                }
                catch (e:*) { }
             }
-            var ammE:* = world.invent.ammos;
+            // v1.101：快照直接遍历 **items**（id 键）——此前遍历 ammos（base 键）
+            // 且用 base 键读 items：换弹型武器（ammoTarg!=ammo）的变种弹药
+            // id≠base，其 kol 从未被快照/恢复覆盖——游戏侧返还发生在回放中时
+            // 变种弹药永远多出来（"切枪后武器A弹药增加"根因，与 ammoLeash 0 次
+            // 日志吻合）。items 含全部物品（弹药物/药水/杂物），双向精确恢复
+            // 对回放期间不可能变动的物品无副作用。
+            var ammE:* = world.invent.items;
             for (var aE:String in ammE)
             {
                try { sandyEndSnap["it_" + aE] = world.invent.items[aE].kol; } catch (e:*) { }
@@ -3007,13 +3026,15 @@ package
             {
                var oPK:Object = world.loc.firstObj;
                var gPK:int = 0;
+               var nPK:int = 0;
                while (oPK != null)
                {
                   var nxPK:Object = oPK.nobj;
-                  try { if (oPK is PartCls) { oPK.setNull(); } } catch (e:*) { }
+                  try { if (oPK is PartCls) { oPK.setNull(); nPK++; } } catch (e:*) { }
                   oPK = nxPK;
                   if (++gPK > 20000) break;
                }
+               log("[DIAG] partsKill: n=" + nPK);
             }
          }
          catch (e:*) { }
