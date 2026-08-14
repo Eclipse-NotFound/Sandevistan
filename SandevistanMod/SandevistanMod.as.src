@@ -186,6 +186,9 @@ package
       private var leashSnap:Object = null;             // v1.100：防泄漏钳制用的时停结束快照
       private var leashDiagCnt:int = 0;                // v1.100：防泄漏钳制诊断计数
       private var swapRunDiagCnt:int = 0;              // v1.101：疾跑切枪拦截诊断计数
+      private var partErrCnt:int = 0;                  // v1.105：回放粒子 step 异常计数
+      private var replayPartTick:int = 0;              // v1.105：回放粒子存活诊断计数
+      private var reattDiagCnt:int = 0;                // v1.105：重挂诊断计数
       private var reattached:Dictionary = new Dictionary(); // 回放中重挂过 vis 的对象（结束摘除，防残留画面）
       private function addEnemyAtk(u:Object, ev:Object):void
       {
@@ -1185,6 +1188,14 @@ package
                         {
                            gVis2.visObjs[oR.sloy].addChild(oR.vis);
                            reattached[oR] = true;
+                           // v1.105：重挂诊断——定位爆炸位置"火光"鬼影是否
+                           // 来自重挂的死亡对象视觉
+                           if (reattDiagCnt < 10)
+                           {
+                              reattDiagCnt++;
+                              log("[DIAG] reatt: cls=" + flash.utils.getQualifiedClassName(oR)
+                                  + " X=" + oR.X + " Y=" + oR.Y + " sloy=" + oR.sloy);
+                           }
                         }
                      }
                   }
@@ -1642,6 +1653,43 @@ package
                            try { world.loc.remObj(kB); } catch (e:*) { }
                            // v1.92：引爆即杀（回放结束后不再残留续飞）
                            try { kB.liv = 0; } catch (e:*) { }
+                           // v1.105：boom 粒子清单诊断——爆炸后立即清点爆炸
+                           // 半径内的粒子（视觉类/类型/寿命），定位"火光"
+                           // 鬼影的具体粒子
+                           try
+                           {
+                              var PartC4:Class = ApplicationDomain.currentDomain.getDefinition("fe.graph.Part") as Class;
+                              if (PartC4 != null)
+                              {
+                                 var oP4:Object = world.loc.firstObj;
+                                 var nP4:int = 0;
+                                 var gP4:int = 0;
+                                 while (oP4 != null && nP4 < 8)
+                                 {
+                                    try
+                                    {
+                                       if (oP4 is PartC4)
+                                       {
+                                          var ddx4:Number = oP4.X - kB.X;
+                                          var ddy4:Number = oP4.Y - kB.Y;
+                                          if (ddx4 * ddx4 + ddy4 * ddy4 <= 600 * 600)
+                                          {
+                                             nP4++;
+                                             log("[DIAG] boomPart: vis=" + flash.utils.getQualifiedClassName(oP4.vis)
+                                                 + " blit=" + (oP4.blitData != null ? 1 : 0)
+                                                 + " anim=" + (oP4.isAnim != null ? oP4.isAnim : -1)
+                                                 + " liv=" + (oP4.liv != null ? oP4.liv : -1)
+                                                 + " X=" + oP4.X + " Y=" + oP4.Y);
+                                          }
+                                       }
+                                    }
+                                    catch (e:*) { }
+                                    oP4 = oP4.nobj;
+                                    if (++gP4 > 20000) break;
+                                 }
+                              }
+                           }
+                           catch (e:*) { }
                            // v1.94：隐藏残体精灵（游戏爆炸流程同款——防爆炸
                            // 动画与飞行精灵重叠的"异常引爆动画"）
                            try { if (kB.vis != null) { kB.vis.visible = false; } } catch (e:*) { }
@@ -3357,8 +3405,21 @@ package
                // 并延伸到回放结束之后（用户实测"火光一直留到爆炸结束才消失"
                // =鬼影，v1.103 只杀了 MC 未管 Blit）。回放中所有粒子均为爆炸
                // 粒子（endSandy 已清空其它），钳到 20 帧内自然完结。
-               if (obj.liv > 20) { obj.liv = 20; }
-               obj.step();
+               try
+               {
+                  if (obj.liv > 20) { obj.liv = 20; }
+                  obj.step();
+               }
+               catch (e2:*)
+               {
+                  // v1.105：单粒子 step 异常不打断整链步进（异常=粒子冻结
+                  // 到回放结束才被世界步进=鬼影候选），记录首个异常
+                  if (partErrCnt < 3)
+                  {
+                     partErrCnt++;
+                     log("[DIAG] partErr: cls=" + flash.utils.getQualifiedClassName(obj) + " err=" + e2);
+                  }
+               }
             }
             obj = nxt;
             if (++guard > 20000) break;
@@ -3478,6 +3539,12 @@ package
          if (!replayDiagOnce)
          {
             replayDiagOnce = true;
+            // v1.105：回放阶段粒子诊断重置——parts 诊断（partDiagOnce）在
+            // 时停中已用过，重置后在回放首帧有粒子时再打一次（回放爆炸
+            // 粒子构成）；粒子存活计数与异常计数重置
+            partDiagOnce = false;
+            replayPartTick = 0;
+            partErrCnt = 0;
             try
             {
                var cntWp:int = 0, cntUn:int = 0, cntSc:int = 0, cntOt:int = 0;
@@ -4017,6 +4084,35 @@ package
          // "两个冲击波"候选根因；时停中 v1.98 同款修复已确认有效）。
          // 推进速率 1 帧/显示帧=正常速度不变，仅防循环。
          try { mcStepParts(world.loc, true); } catch (e:*) { }
+         // v1.105：回放粒子存活诊断（每 10 显示帧）——验证爆炸粒子在
+         // 20 帧钳制内自然完结（粒子冻结=火光滞留=鬼影候选；若 n 恒定
+         // 不降说明有粒子没被步进）
+         if (++replayPartTick % 10 == 0)
+         {
+            try
+            {
+               var PartC5:Class = ApplicationDomain.currentDomain.getDefinition("fe.graph.Part") as Class;
+               if (PartC5 != null)
+               {
+                  var oP5:Object = world.loc.firstObj;
+                  var nP5:int = 0;
+                  var mxP5:int = 0;
+                  var gP5:int = 0;
+                  while (oP5 != null)
+                  {
+                     try
+                     {
+                        if (oP5 is PartC5) { nP5++; if (oP5.liv > mxP5) { mxP5 = oP5.liv; } }
+                     }
+                     catch (e:*) { }
+                     oP5 = oP5.nobj;
+                     if (++gP5 > 20000) break;
+                  }
+                  log("[DIAG] partsAlive: n=" + nP5 + " maxliv=" + mxP5 + " idx=" + replayIdx);
+               }
+            }
+            catch (e:*) { }
+         }
          // 回放动画诊断（每 30 帧）：采样前 2 个重演单位的视觉像素哈希——
          // 哈希随帧变化=动画在播放；恒不变=渲染冻结（僵死根因判定）
          if (++replayAnimTick % 30 == 0)
