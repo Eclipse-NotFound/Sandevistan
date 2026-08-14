@@ -104,7 +104,7 @@ package
       private var lastGhostY:Number = 0;
       private var panelOpen:Boolean = false;
       private var optPanelOn:Boolean = false;      // 选项页模组设置面板
-      private var optSel:int = 0;                  // 0=生效 1=冷却 2=残影不透明度 3=残影频率 4=渐变门槛 5=回放残影间隔 6=回放残影寿命 7=投掷物可击落
+      private var optSel:int = 0;                  // 0=生效 1=冷却 2=残影不透明度 3=残影频率 4=渐变门槛 5=回放残影间隔 6=回放残影寿命 7=投掷物可击落 8=疾跑切枪
       private var optTf:TextField = null;
       private var optBg:Sprite = null;
       private var lastGgControl:Boolean = true;
@@ -181,6 +181,10 @@ package
       private var twinDiagCnt:int = 0;                     // v1.98：孪生体惰性化诊断计数
       private var partDiagOnce:Boolean = false;            // v1.98：时停粒子视觉类型诊断（每轮一次）
       private var recPaired:Dictionary = new Dictionary(); // v1.99：已配对录像体去重（防同一录像体被多个孪生体配对）
+      private var cfgSwapRun:Boolean = false;          // v1.100：疾跑（按住Shift）中允许切枪开关
+      private var leashLeft:int = 0;                   // v1.100：回放结束后弹药防泄漏钳制剩余帧数
+      private var leashSnap:Object = null;             // v1.100：防泄漏钳制用的时停结束快照
+      private var leashDiagCnt:int = 0;                // v1.100：防泄漏钳制诊断计数
       private var reattached:Dictionary = new Dictionary(); // 回放中重挂过 vis 的对象（结束摘除，防残留画面）
       private function addEnemyAtk(u:Object, ev:Object):void
       {
@@ -369,6 +373,7 @@ package
                   else if (k == "slowfactor") cfgSlowFactor = parseFloat(v);
                   else if (k == "colormode") cfgColorMode = parseInt(v);
                   else if (k == "edgethresh") cfgEdgeThresh = parseFloat(v);
+                  else if (k == "swaprun") cfgSwapRun = v.toLowerCase() == "1" || v.toLowerCase() == "true";
                }
             }
          }
@@ -471,6 +476,40 @@ package
          {
             --cooldownLeft;
          }
+
+         // v1.100：回放结束后弹药防泄漏钳制（4 秒窗口）
+         if (leashLeft > 0)
+         {
+            ammoLeashTick();
+         }
+
+         // v1.100：疾跑中切枪（cfgSwapRun）——游戏本体按住 Shift 疾跑时，
+         // 数字键映射到**第二组**快捷槽（fav[N+kolHK]，通常为空=无法切枪）。
+         // 开关开启时，疾跑中按下武器键按第一组槽位切枪（复制游戏自身的
+         // 处理：消费按键 + useFav + 关选择器/法术/攻击键），游戏 control()
+         // 稍后读到已消费的键不再重复处理。模组 ENTER_FRAME 先于游戏
+         // World.step，本拦截先于游戏按键处理生效。
+         try
+         {
+            if (cfgSwapRun && !replaying && !panelOpen && inGameplay()
+                && world.ctr != null && world.ctr.keyRun)
+            {
+               for (var wn:int = 1; wn <= 10; wn++)
+               {
+                  var wk:String = "keyWeapon" + wn;
+                  if (world.ctr[wk] == true)
+                  {
+                     world.ctr[wk] = false;
+                     try { world.invent.useFav(wn); } catch (e:*) { }
+                     try { if (world.gg.visSel) { world.gui.unshowSelector(0); } } catch (e:*) { }
+                     try { if (world.gg.currentSpell != null) { world.gg.currentSpell.active = false; } } catch (e:*) { }
+                     try { world.ctr.keyDef = false; world.ctr.keyAttack = false; } catch (e:*) { }
+                     break;
+                  }
+               }
+            }
+         }
+         catch (e:*) { }
 
          // v1.89：投掷物击落**独立化**——常规游戏（无时停/回放）中每帧
          // 也执行判定：射击手雷/导弹/榴弹至血量归零随时引爆（projhits
@@ -708,10 +747,15 @@ package
             // 回放残影寿命（显示帧，1-60）
             cfgReplayGhostLife = Math.max(1, Math.min(60, cfgReplayGhostLife + dir));
          }
-         else
+         else if (optSel == 7)
          {
             // 投掷物可击落开关（手雷/导弹/榴弹受击至 0 爆炸）
             cfgProjHits = !cfgProjHits;
+         }
+         else
+         {
+            // 疾跑中切枪开关（游戏本体按住 Shift 疾跑时数字键不支持切枪）
+            cfgSwapRun = !cfgSwapRun;
          }
       }
 
@@ -730,6 +774,7 @@ package
             lines.push((optSel == 5 ? "> " : "  ") + "回放残影间隔 " + cfgReplayGhost + "帧");
             lines.push((optSel == 6 ? "> " : "  ") + "回放残影寿命 " + cfgReplayGhostLife + "帧");
             lines.push((optSel == 7 ? "> " : "  ") + "投掷物可击落 " + (cfgProjHits ? "开" : "关"));
+            lines.push((optSel == 8 ? "> " : "  ") + "疾跑中切枪  " + (cfgSwapRun ? "开" : "关"));
             lines.push("");
             lines.push("上下选择 左右调值 Enter保存");
             optTf.text = lines.join(String.fromCharCode(10));
@@ -2567,6 +2612,76 @@ package
          sandyEndSnap = null;
       }
 
+      // ===== v1.100：回放结束后弹药防泄漏钳制 =====
+      // 回放中的弹匣强制灌满+武器切换可能触发游戏侧弹药返还（换弹型
+      // reloadWeapon / unloadWeapon 把弹匣倒回背包）——若返还发生在
+      // endReplay 的快照恢复之后，武器A的弹药会增加（用户实测：时停中
+      // 用A开火再切到B→回放后A弹药增加）。恢复后 120 帧内每帧对背包
+      // 弹药"多出快照"的部分钳回快照（正常开火/换弹是减少，不受影响；
+      // 4 秒窗口内拾取同型弹药会被钳掉——罕见场景，可接受）；非当前
+      // 武器的弹匣同样钳制（已收起武器无法被玩家操作，任何增加都来自
+      // 游戏侧返还）。当前武器不动（玩家可正常开火换弹）。
+      private function ammoLeashTick():void
+      {
+         try
+         {
+            leashLeft--;
+            if (leashSnap == null) { return; }
+            var wns:Object = world.invent != null ? world.invent.weapons : null;
+            var cwL:* = world.gg != null ? world.gg.currentWeapon : null;
+            for (var wid:String in leashSnap)
+            {
+               if (wid.indexOf("it_") == 0)
+               {
+                  var tI:String = wid.substr(3);
+                  try
+                  {
+                     var itL:* = world.invent.items[tI];
+                     if (itL != null && itL.kol > leashSnap[wid])
+                     {
+                        var dKol:Number = leashSnap[wid] - itL.kol;
+                        itL.kol = leashSnap[wid];
+                        try
+                        {
+                           if (world.invent.mass != null && itL.mass != null)
+                           {
+                              world.invent.mass[2] += dKol * itL.mass;
+                           }
+                        }
+                        catch (e:*) { }
+                        if (leashDiagCnt < 8)
+                        {
+                           leashDiagCnt++;
+                           log("[DIAG] ammoLeash: type=" + tI + " kol -> " + leashSnap[wid]);
+                        }
+                     }
+                  }
+                  catch (e:*) { }
+               }
+               else if (wid.indexOf("h_") == 0 && wns != null)
+               {
+                  var tW:String = wid.substr(2);
+                  try
+                  {
+                     var wL:* = wns[tW];
+                     if (wL != null && wL != cwL && wL.hold > leashSnap[wid])
+                     {
+                        wL.hold = leashSnap[wid];
+                        if (leashDiagCnt < 8)
+                        {
+                           leashDiagCnt++;
+                           log("[DIAG] ammoLeash: hold " + tW + " -> " + leashSnap[wid]);
+                        }
+                     }
+                  }
+                  catch (e:*) { }
+               }
+            }
+            if (leashLeft <= 0) { leashSnap = null; }
+         }
+         catch (e:*) { }
+      }
+
       // ==================== 参数面板 ====================
       private function togglePanel(open:Boolean):void
       {
@@ -2669,6 +2784,7 @@ package
             sb.push("ghostblend=" + cfgGhostBlend);
             sb.push("colormode=" + cfgColorMode);
             sb.push("edgethresh=" + cfgEdgeThresh);
+            sb.push("swaprun=" + (cfgSwapRun ? 1 : 0));
             sb.push("fxrun=" + (cfgFxRun ? 1 : 0));
             sb.push("showmark=" + (cfgShowMark ? 1 : 0));
             sb.push("panelkey=" + cfgPanelKey);
@@ -2878,52 +2994,25 @@ package
          // 清除时停期间玩家发射的冻结子弹（回放重演攻击，避免双倍火力；
          // 时停前已在飞的不清除——回放继续飞行）
          clearFrozenBullets();
-         // v1.97：清掉时停末期爆炸残留的粒子——粒子寿命以世界步计，时停
-         // 1/5 速下到结束时仍在中途，回放开头会在爆炸处继续播放（"回放
-         // 开始时爆炸动画鬼影"根因）。快速步进至全部自然完结。
-         try
-         {
-            for (var ffP:int = 0; ffP < 60; ffP++) { stepParticles(world.loc); mcStepParts(world.loc, true); }
-         }
-         catch (e:*) { }
-         // v1.99：时停爆炸残粒清除——FF 60 步杀不净大寿命爆炸粒子（liv 可达
-         // 100+，时停 1/5 速下到结束时仍在中途），回放中在爆炸位置继续播放
-         // =鬼影（MC 型停在中间帧冻结、Blit 型继续播放）。按爆炸记录位置
-         // （projBoom x/y）清除半径内残留粒子；远离爆炸点的环境粒子保留。
+         // v1.100：回放前清空**全部**粒子——爆炸粒子寿命以世界步计（liv 可达
+         // 100+，时停 1/5 速下到结束时仍在中途；快粒子可飞出 360px 半径），
+         // 残留粒子在回放中继续播放=鬼影/第二个冲击波环（v1.97 FF 60 步与
+         // v1.99 半径清除都杀不净）。回放世界冻结（无环境粒子重生），清空后
+         // 回放画面干净；回放中的爆炸粒子由 boom 新生成，回放结束后环境
+         // 粒子自然重生。
          try
          {
             var PartCls:Class = ApplicationDomain.currentDomain.getDefinition("fe.graph.Part") as Class;
             if (PartCls != null)
             {
-               for (var kB3:Object in projBoom)
+               var oPK:Object = world.loc.firstObj;
+               var gPK:int = 0;
+               while (oPK != null)
                {
-                  try
-                  {
-                     var bm3:Object = projBoom[kB3];
-                     if (bm3 == null) continue;
-                     var oP3:Object = world.loc.firstObj;
-                     var gP3:int = 0;
-                     while (oP3 != null)
-                     {
-                        var nxP3:Object = oP3.nobj;
-                        try
-                        {
-                           if (oP3 is PartCls)
-                           {
-                              var ddx3:Number = oP3.X - bm3.x;
-                              var ddy3:Number = oP3.Y - bm3.y;
-                              if (ddx3 * ddx3 + ddy3 * ddy3 <= 360 * 360)
-                              {
-                                 try { oP3.setNull(); } catch (e:*) { }
-                              }
-                           }
-                        }
-                        catch (e:*) { }
-                        oP3 = nxP3;
-                        if (++gP3 > 20000) break;
-                     }
-                  }
-                  catch (e:*) { }
+                  var nxPK:Object = oPK.nobj;
+                  try { if (oPK is PartCls) { oPK.setNull(); } } catch (e:*) { }
+                  oPK = nxPK;
+                  if (++gPK > 20000) break;
                }
             }
          }
@@ -4103,6 +4192,24 @@ package
                catch (e:*) { }
             }
             savedRapids = {};
+            // v1.100：弹药防泄漏绳——回放结束后的数帧内，若游戏侧弹药返还
+            // （换弹型 reloadWeapon / unloadWeapon 把弹匣倒回背包）发生在
+            // 快照恢复**之后**，武器A的弹药仍会增加（用户实测：时停中用A
+            // 开火再切到B→回放后A弹药增加）。恢复后 4 秒内每帧对背包弹药
+            // 超过快照值的部分按快照钳制（只钳"多出来的"——正常开火/换弹
+            // 是减少，不受影响），非当前武器的弹匣同样钳制（已收起武器
+            // 不可能被玩家操作）。restoreSandyEndSnap 末尾会置空
+            // sandyEndSnap，故先保存引用。
+            try
+            {
+               if (sandyEndSnap != null)
+               {
+                  leashSnap = sandyEndSnap;
+                  leashLeft = 120;
+                  leashDiagCnt = 0;
+               }
+            }
+            catch (e:*) { }
             switchToWeapon(endWeapon);
             restoreSandyEndSnap();
             // 恢复武器耐久/魔法值（回放重演不应二次消耗）
@@ -4532,8 +4639,8 @@ package
          // ===== 选项页模组设置面板（主菜单/游戏内 Options 页）=====
          if (optPanelOn)
          {
-            if (e.keyCode == Keyboard.UP) { optSel = (optSel + 8 - 1) % 8; return; }
-            if (e.keyCode == Keyboard.DOWN) { optSel = (optSel + 1) % 8; return; }
+            if (e.keyCode == Keyboard.UP) { optSel = (optSel + 9 - 1) % 9; return; }
+            if (e.keyCode == Keyboard.DOWN) { optSel = (optSel + 1) % 9; return; }
             if (e.keyCode == Keyboard.LEFT) { optAdj(-1); return; }
             if (e.keyCode == Keyboard.RIGHT) { optAdj(1); return; }
             if (e.keyCode == Keyboard.ENTER) { saveConfigFile(); return; }
