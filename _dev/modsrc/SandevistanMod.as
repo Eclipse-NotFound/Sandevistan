@@ -283,7 +283,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.87 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.88 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -1333,7 +1333,8 @@ package
                var nxB:Object = oB.nobj;
                try
                {
-                  if (oB["owner"] == world.gg && flash.utils.getQualifiedClassName(oB).indexOf("fe.weapon::") == 0)
+                  if (oB["owner"] == world.gg && replayObjs[oB] == null
+                      && flash.utils.getQualifiedClassName(oB).indexOf("fe.weapon::") == 0)
                   {
                      oB.step();
                   }
@@ -2393,9 +2394,10 @@ package
             projHp = new Dictionary();
             recDiagCnt = 0;
             recDoorCnt = 0;
-            // 时停开始时已在飞的攻击体：玩家方的快照（不清除——回放中继续
-            // 飞行并正常结算）；敌人方的直接登记录像（时停前已发射的攻击
-            // 不漏录——天角兽启动时停前已打出的闪电/蓄力完成后的攻击重演）
+            // 时停开始时已在飞的攻击体：**全部登记录像**（玩家方的也录——
+            // 时停前抛出的手雷/导弹在回放中重演其慢速飞行轨迹；v1.87 之前
+            // 只录敌人的，玩家的漏录导致"时停前在飞手雷未重演"）。玩家方
+            // 同时留 preExistB 快照（endSandy 不清除，回放后继续飞行）。
             preExistB = new Dictionary();
             try
             {
@@ -2405,8 +2407,9 @@ package
                {
                   try
                   {
-                     if (oP2["owner"] != world.gg && flash.utils.getQualifiedClassName(oP2).indexOf("fe.weapon::") == 0)
+                     if (flash.utils.getQualifiedClassName(oP2).indexOf("fe.weapon::") == 0)
                      {
+                        try { if (oP2["owner"] == world.gg) { preExistB[oP2] = true; } } catch (e:*) { }
                         registerAtk(oP2);
                      }
                   }
@@ -2501,6 +2504,18 @@ package
          // 清除时停期间玩家发射的冻结子弹（回放重演攻击，避免双倍火力；
          // 时停前已在飞的不清除——回放继续飞行）
          clearFrozenBullets();
+         // 追踪器数组长度诊断（v1.88）：len=1 说明追加失败（对象"未重演"定位）
+         try
+         {
+            for (var kE:Object in seenAtk)
+            {
+               var arrE:Array = replayObjs[kE];
+               log("[DIAG] recEnd: cls=" + flash.utils.getQualifiedClassName(kE)
+                   + " len=" + (arrE != null ? arrE.length : -1)
+                   + " inChain=" + (kE.in_chain != null ? kE.in_chain : -1));
+            }
+         }
+         catch (e:*) { }
          // 快照时停结束状态（回放结束后恢复：弹夹剩余=时停结束时，背包弹药不被回放消耗）
          buildSandyEndSnap();
          // 快照武器耐久/魔法值（回放重演会再次消耗——回放结束恢复，防双倍）
@@ -3026,7 +3041,7 @@ package
             if (h.fc != null && h.fc > 0)
             {
                fireCnt += h.fc;
-               firePts.push({ x: h.wx, y: h.wy, ax: h.ax != null ? h.ax : 0, ay: h.ay != null ? h.ay : 0 });
+               firePts.push({ f: replayIdx, x: h.wx, y: h.wy, ax: h.ax != null ? h.ax : 0, ay: h.ay != null ? h.ay : 0 });
             }
             prevGx = h.x;
             prevGy = h.y;
@@ -3160,6 +3175,25 @@ package
                         }
                         cwNow.rot = Math.atan2(world.celY - cwNow.Y, world.celX - cwNow.X);
                         cwNow.ready = true;
+                        // v1.88：开火帧到窗口末的位移修正——子弹在开火帧生成，
+                        // 世界显示在窗口末（Δ≤4 历史帧）→ 子弹沿飞行方向预推进
+                        // Δ×vel/slowfactor（时停显示帧速度），与窗口末的投掷物
+                        // 位置对齐——回放中射击手雷偏移的根源修正
+                        try
+                        {
+                           if (fp != null && fp.f != null && replayIdx > fp.f)
+                           {
+                              var preB:* = cwNow.b;
+                              if (preB != null && preB.vel != null && preB.rot != null)
+                              {
+                                 var dCorr:Number = (replayIdx - fp.f) * preB.vel / Math.max(1, cfgSlowFactor);
+                                 preB.X += Math.cos(preB.rot) * dCorr;
+                                 preB.Y += Math.sin(preB.rot) * dCorr;
+                                 try { if (preB.vis != null) { preB.vis.x = preB.X; preB.vis.y = preB.Y; } } catch (e:*) { }
+                              }
+                           }
+                        }
+                        catch (e:*) { }
                      }
                      catch (e:*) { }
                   }
