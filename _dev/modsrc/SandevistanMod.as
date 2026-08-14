@@ -1479,6 +1479,14 @@ package
                {
                   if (oB != world.gg && replayObjs[oB] == null)
                   {
+                     // v1.95：玩家方攻击体（回放重执行的子弹/魔法/投掷物）由
+                     // stepPlayerBullets 负责步进——此处再步一次=每显示帧
+                     // 双步（2 世界步/帧），子弹相对世界快 2 倍：扫掠段错位
+                     // 错过交叉点、后发子弹在更远处才命中（"回放引爆位置
+                     // 晚于时停"的根因）
+                     var isOwnB:Boolean = false;
+                     try { isOwnB = oB["owner"] == world.gg; } catch (e:*) { }
+                     if (isOwnB) { oB = nxB; continue; }
                      var qnB:String = flash.utils.getQualifiedClassName(oB);
                      // 被投掷的箱子不 step（v1.84：保留飞行惯性——时停结束时的
                      // 速度延续到回放结束后；step 会被 levit 阻尼逐帧消耗 dx）
@@ -1744,6 +1752,14 @@ package
                         {
                            projBoom[p] = { f: cfgDuration - sandyLeft, x: p.X, y: p.Y };
                         }
+                        // v1.95：时停命中位置诊断（与回放命中位置对比——
+                        // 定位"回放引爆位置晚于时停"）
+                        if (boomDiagCnt < 6)
+                        {
+                           boomDiagCnt++;
+                           log("[DIAG] sandyBoom: cls=" + flash.utils.getQualifiedClassName(p)
+                               + " f=" + (cfgDuration - sandyLeft) + " X=" + p.X + " Y=" + p.Y);
+                        }
                      }
                      else
                      {
@@ -1751,6 +1767,13 @@ package
                         // v1.92：引爆即杀——explosion() 不移除对象（babah 不置位、
                         // liv 尚余），否则常规游戏中爆炸后鬼影继续沿轨迹飞行
                         try { p.liv = 0; } catch (e:*) { }
+                        // v1.95：回放/常规命中位置诊断（与 sandyBoom 对比）
+                        if (replaying && boomDiagCnt < 6)
+                        {
+                           boomDiagCnt++;
+                           log("[DIAG] replayHit: cls=" + flash.utils.getQualifiedClassName(p)
+                               + " idx=" + replayIdx + " X=" + p.X + " Y=" + p.Y);
+                        }
                      }
                      }
                      else
