@@ -3426,20 +3426,29 @@ package
                            {
                               try { clsS += (clsS != "" ? "," : "") + flash.utils.getQualifiedClassName(objP.vis); } catch (e:*) { }
                            }
-                           try { objP.vis.stop(); } catch (e:*) { }
-                           if (advance)
+                     try { objP.vis.stop(); } catch (e:*) { }
+                     if (advance)
+                     {
+                        try
+                        {
+                           var otkP:* = objP.otklad;
+                           if ((otkP == null || otkP <= 0) && objP.vis.visible == true
+                               && objP.vis.currentFrame < objP.vis.totalFrames)
                            {
-                              try
+                              objP.vis.nextFrame();
+                              // v1.103：回放中爆炸 MC **播完即杀**——动画结束=
+                              // 火光消失。用户实测"火光一直留到爆炸结束才消失"：
+                              // MC 停在末帧后粒子 liv 仍余数十帧（回放仅 ~1.4 秒，
+                              // 火光滞留整个回放=鬼影）。时停中保持 v1.98 行为
+                              // （慢放+停末帧，已确认正常）。
+                              if (replaying && objP.vis.currentFrame >= objP.vis.totalFrames)
                               {
-                                 var otkP:* = objP.otklad;
-                                 if ((otkP == null || otkP <= 0) && objP.vis.visible == true
-                                     && objP.vis.currentFrame < objP.vis.totalFrames)
-                                 {
-                                    objP.vis.nextFrame();
-                                 }
+                                 try { objP.setNull(); } catch (e:*) { }
                               }
-                              catch (e:*) { }
                            }
+                        }
+                        catch (e:*) { }
+                     }
                         }
                         else
                         {
