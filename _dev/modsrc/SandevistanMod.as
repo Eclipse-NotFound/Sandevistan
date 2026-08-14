@@ -174,6 +174,7 @@ package
       private var cfgProjArmor:Number = 0;      // 投掷物护甲（预留接口：伤害先减护甲）
       private var projHp:Dictionary = new Dictionary();  // 投掷物 → 当前血量
       private var seenAtk:Dictionary = new Dictionary(); // 攻击体追踪器（v1.85：按引用录像，绕开链扫描之谜）
+      private var projBoom:Dictionary = new Dictionary(); // v1.91：时停中引爆的投掷物 → {f,x,y}（回放对应帧真实爆炸）
       private var reattached:Dictionary = new Dictionary(); // 回放中重挂过 vis 的对象（结束摘除，防残留画面）
       private function addEnemyAtk(u:Object, ev:Object):void
       {
@@ -762,7 +763,14 @@ package
                   if (qn.indexOf("fe.weapon::") == 0)
                   {
                      nFe++;
-                     if (obj.owner == world.gg && preExistB[obj] == null)
+                     // v1.91：投掷武器（G 键手雷）抛出的投掷物保留——回放
+                     // 不重执行抛掷（keyGrenad 不回喂），录像体=唯一实体，
+                     // 按记录重演轨迹，回放结束后继续自然飞行/爆炸。其余
+                     // 玩家攻击体（子弹/魔法/枪械投掷物）由回放重执行生成
+                     // 新体，冻结原体清除（防双倍火力）。
+                     var isThrownP:Boolean = false;
+                     try { isThrownP = obj.weap != null && obj.weap == world.gg["throwWeapon"]; } catch (e:*) { }
+                     if (obj.owner == world.gg && preExistB[obj] == null && !isThrownP)
                      {
                         loc.remObj(obj);
                         nRem++;
@@ -1020,6 +1028,21 @@ package
                            }
                         }
                         catch (e:*) { }
+                        // v1.91：自然爆炸（导火索到期/撞墙/被击落未走 stepProjHits）
+                        // 的投掷物——回放死亡帧真实爆炸（isExpl 判定排除
+                        // 飞出界/被清除）
+                        try
+                        {
+                           if (kA.isExpl == true && projBoom[kA] == null)
+                           {
+                              var qnA2:String = flash.utils.getQualifiedClassName(kA);
+                              if (qnA2 == "fe.weapon::PhisBullet" || qnA2 == "fe.weapon::SmartBullet")
+                              {
+                                 projBoom[kA] = { f: cfgDuration - sandyLeft, x: kA.X, y: kA.Y };
+                              }
+                           }
+                        }
+                        catch (e:*) { }
                         delete seenAtk[kA];
                         continue;
                      }
@@ -1063,6 +1086,24 @@ package
                   try { hasSP = oR["setPos"] != null; } catch (e:*) { }
                   var hasSVP:Boolean = false;
                   try { hasSVP = oR["setVisPos"] != null; } catch (e:*) { }
+                  // v1.91：被 clearFrozenBullets 清除的玩家攻击体（子弹/魔法/
+                  // 枪械投掷物——回放由重执行生成新体）——录像原体隐藏，
+                  // 否则与重执行体重叠成"鬼影"（投掷武器的手雷不重执行，
+                  // 录像体保留显示）
+                  if (!hasSP)
+                  {
+                     try
+                     {
+                        var isThrownB:Boolean = false;
+                        try { isThrownB = oR.weap != null && oR.weap == world.gg["throwWeapon"]; } catch (e:*) { }
+                        if (oR["owner"] == world.gg && oR.in_chain != true && !isThrownB)
+                        {
+                           try { if (oR.vis != null) { oR.vis.visible = false; } } catch (e:*) { }
+                           continue;
+                        }
+                     }
+                     catch (e:*) { }
+                  }
                   // 位置（setPos 更新碰撞边界——玩家子弹命中重演位置敌人正常结算）
                   if (hasSP) { oR.setPos(stR.x, stR.y); }
                   else { oR.X = stR.x; oR.Y = stR.y; }
@@ -1459,6 +1500,38 @@ package
       private function stepProjHits(locP:Object, isSandy:Boolean):void
       {
          if (!cfgProjHits) return;
+         // v1.91：时停中引爆的投掷物（射击击落/自然到期）在回放对应帧
+         // 真实爆炸（damageExpl 从武器恢复——时停中玩家攻击体伤害被清零）
+         if (replaying)
+         {
+            try
+            {
+               for (var kB:Object in projBoom)
+               {
+                  try
+                  {
+                     var bm:Object = projBoom[kB];
+                     if (bm == null) { delete projBoom[kB]; continue; }
+                     if (replayIdx >= bm.f)
+                     {
+                        try
+                        {
+                           if (kB.damageExpl != null && kB.damageExpl <= 0 && kB.weap != null && kB.weap.damageExpl != null)
+                           {
+                              kB.damageExpl = kB.weap.damageExpl;
+                           }
+                           kB.isExpl = false;
+                           kB.explosion();
+                        }
+                        catch (e:*) { }
+                        delete projBoom[kB];
+                     }
+                  }
+                  catch (e:*) { }
+               }
+            }
+            catch (e:*) { }
+         }
          try
          {
             var projs:Array = [];
@@ -1514,7 +1587,25 @@ package
                {
                   try
                   {
-                     if (b.owner == p.owner) continue;   // 同源不互击
+                     // v1.91：同源不再一刀切跳过（"射击自己的手雷不引爆"根因）
+                     // ——改为出生护手：同源且投掷物距其 owner <200px（刚出手/
+                     // 枪口附近）不判定，防止投掷+连射在自己面前引爆；飞出后
+                     // 常规游戏/时停/回放均可射击自己的手雷导弹（回放重执行
+                     // 的子弹与重演的手雷同源，必须放行）
+                     if (b.owner == p.owner)
+                     {
+                        try
+                        {
+                           var pown:Object = p.owner;
+                           if (pown != null)
+                           {
+                              var odx:Number = p.X - pown.X;
+                              var ody:Number = p.Y - pown.Y;
+                              if (odx * odx + ody * ody < 200 * 200) continue;
+                           }
+                        }
+                        catch (e:*) { }
+                     }
                      // 线段碰撞（v1.84）：子弹高速（~200px/步）会直接跳过
                      // 28px 判定半径——按"上一步位置→当前位置"线段到投掷物
                      // 的距离判定，途中擦过也算命中
@@ -1549,22 +1640,27 @@ package
                      if (hpP <= 0)
                      {
                         delete projHp[p];
-                        if (isSandy)
+                     if (isSandy)
+                     {
+                        // 时停中：爆炸仅视觉（伤害清零后爆炸，结束恢复原值；
+                        // 真实伤害由回放中重演结算）
+                        try
                         {
-                           // 时停中：爆炸仅视觉（伤害清零后爆炸，结束恢复原值；
-                           // 真实伤害由回放中重演结算）
-                           try
-                           {
-                              var svExpl:Number = p.damageExpl != null ? p.damageExpl : 0;
-                              var svDest:Number = p.destroy != null ? p.destroy : 0;
-                              p.damageExpl = 0;
-                              p.destroy = 0;
-                              p.explosion();
-                              p.damageExpl = svExpl;
-                              p.destroy = svDest;
-                           }
-                           catch (e:*) { }
+                           var svExpl:Number = p.damageExpl != null ? p.damageExpl : 0;
+                           var svDest:Number = p.destroy != null ? p.destroy : 0;
+                           p.damageExpl = 0;
+                           p.destroy = 0;
+                           p.explosion();
+                           p.damageExpl = svExpl;
+                           p.destroy = svDest;
                         }
+                        catch (e:*) { }
+                        // v1.91：记录引爆帧——回放中该帧真实爆炸
+                        if (projBoom[p] == null)
+                        {
+                           projBoom[p] = { f: cfgDuration - sandyLeft, x: p.X, y: p.Y };
+                        }
+                     }
                         else
                         {
                            try { p.explosion(); } catch (e:*) { }
@@ -2444,6 +2540,7 @@ package
             enemyAtks = new Dictionary();       // 敌人攻击事件记录重置
             gSnapKol = -1;
             seenAtk = new Dictionary();         // 攻击体追踪器重置
+            projBoom = new Dictionary();        // v1.91：时停引爆记录重置
             reattached = new Dictionary();
             doorPrevDop = new Dictionary();
             projHp = new Dictionary();
@@ -2539,15 +2636,19 @@ package
          // origDam 之前。
          try
          {
-            for (var kPB:Object in preExistB)
+            for (var kPB:Object in origDam)
             {
                try
                {
-                  if (kPB != null && origDam[kPB] != null && origDam[kPB] > 0)
-                  {
-                     kPB.damage = origDam[kPB];
-                     try { if (kPB.damageExpl != null && kPB.damageExpl <= 0 && kPB.weap != null && kPB.weap.damageExpl != null) { kPB.damageExpl = kPB.weap.damageExpl; } } catch (e:*) { }
-                  }
+                  if (kPB == null || origDam[kPB] == null || origDam[kPB] <= 0) continue;
+                  // v1.91：恢复对象=时停前在飞攻击体（preExistB）+ 投掷武器
+                  // 抛出的投掷物（时停中抛出、被保留续飞的——伤害被时停
+                  // 清零循环清零，必须恢复才能在回放后正常爆炸）
+                  var keepPB:Boolean = preExistB[kPB] != null;
+                  try { if (!keepPB && kPB.weap != null && kPB.weap == world.gg["throwWeapon"]) { keepPB = true; } } catch (e:*) { }
+                  if (!keepPB) continue;
+                  kPB.damage = origDam[kPB];
+                  try { if (kPB.damageExpl != null && kPB.damageExpl <= 0 && kPB.weap != null && kPB.weap.damageExpl != null) { kPB.damageExpl = kPB.weap.damageExpl; } } catch (e:*) { }
                }
                catch (e:*) { }
             }
@@ -3131,7 +3232,11 @@ package
             // 攻击键不再喂回 keyAttack（开火由 fireCnt 精确驱动，喂回会双发）
             world.ctr.keyAttack = false;
             world.ctr.keyPunch = punchOn;
-            world.ctr.keyGrenad = grenOn;
+            // v1.91：手雷不重执行——投掷物由录像按引用重演（同一对象，
+            // 位置逐帧重钉）；重执行会另生成一份实时飞行体，与录像体
+            // 重叠成"鬼影"且回放后出现双份（录像体保留，回放结束自然
+            // 续飞爆炸）。魔法保留重执行（其伤害依赖重执行结算）。
+            world.ctr.keyGrenad = false;
             world.ctr.keyMagic = magOn;
          }
          catch (e:*) { }
