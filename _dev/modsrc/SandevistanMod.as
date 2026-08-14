@@ -799,7 +799,10 @@ package
             try { if (oA.weap != null && oA.weap.sndShoot != null) { sndA = oA.weap.sndShoot; } } catch (e:*) { }
             for (var f:int = 0; f <= frameN; f++)
             {
-               arr.push({ x: oA.X, y: oA.Y, f: -1, s: (f == frameN ? sndA : ""), wx: 0, wy: 0, twx: 0, twy: 0, vv: true, sto: 1, wrot: -99 });
+               // v1.90：生成前补帧 vv=false——时停中新生成的攻击体（时停中
+               // 才出手的枪械/投掷）在回放开头不可见（否则冻结显示在生成
+               // 位置，表现为"回放开头凭空出现"）
+               arr.push({ x: oA.X, y: oA.Y, f: -1, s: (f == frameN ? sndA : ""), wx: 0, wy: 0, twx: 0, twy: 0, vv: f == frameN, sto: 1, wrot: -99 });
             }
             log("[DIAG] recAtk: cls=" + flash.utils.getQualifiedClassName(oA) + " X=" + oA.X + " Y=" + oA.Y + " frameN=" + frameN);
          }
@@ -829,8 +832,12 @@ package
                   {
                   var qnR:String = flash.utils.getQualifiedClassName(oR);
                   var isAtk:Boolean = qnR.indexOf("fe.weapon::") == 0;
-                  // 单位判断：fe.unit:: / fe.serv::（NPC 在 serv 包）/ 有 setPos 方法（Unit 子类）
-                  var isUnit:Boolean = qnR.indexOf("fe.unit::") == 0 || qnR.indexOf("fe.serv::") == 0 || oR["setPos"] != null;
+                  // 单位判断：fe.unit:: / fe.serv::（NPC 在 serv 包）/ 有 setPos 方法
+                  // （Unit 子类）。v1.90：setPos 括号探测改 try/catch——密封类
+                  // （Bullet/Box）上访问不存在成员抛 ReferenceError，此前整个
+                  // 链扫描体被吞（"链扫描之谜"：nPb 有值但录像恒 0 的真因）
+                  var isUnit:Boolean = qnR.indexOf("fe.unit::") == 0 || qnR.indexOf("fe.serv::") == 0;
+                  try { if (!isUnit && oR["setPos"] != null) { isUnit = true; } } catch (e:*) { }
                      // 敌人武器位置（回放中武器不 step，记录位置供回放恢复——否则武器
                      // 滞留在时停结束位置，与重演的身体脱节）
                      var wxR:Number = 0;
@@ -1002,6 +1009,17 @@ package
                      try { aliveA = kA.in_chain == true || kA["isThrow"] == true; } catch (e:*) { }
                      if (!aliveA)
                      {
+                        // v1.90：死亡帧补录 vv=false——回放中攻击体飞到死亡点后
+                        // 隐藏（否则重挂的 vis 在死亡位置冻结显示到回放结束）
+                        try
+                        {
+                           var arrA2:Array = replayObjs[kA];
+                           if (arrA2 != null)
+                           {
+                              arrA2.push({ x: kA.X, y: kA.Y, f: -1, s: "", wx: 0, wy: 0, twx: 0, twy: 0, vv: false, sto: 1, wrot: -99 });
+                           }
+                        }
+                        catch (e:*) { }
                         delete seenAtk[kA];
                         continue;
                      }
@@ -1037,13 +1055,21 @@ package
                   if (arrR == null || arrR.length == 0) continue;
                   var stR:Object = arrR[Math.min(idxR, arrR.length - 1)];
                   if (stR == null) continue;
+                  // v1.90：setPos/setVisPos 仅 Unit 拥有——对密封类（Box/Bullet/
+                  // PhisBullet 等）括号访问不存在成员会抛 ReferenceError，整段 try
+                  // 被吞 → 非单位对象"完全不重演"且 rFix 从不打印的根因。
+                  // try/catch 探测一次，后续全部用布尔判断。
+                  var hasSP:Boolean = false;
+                  try { hasSP = oR["setPos"] != null; } catch (e:*) { }
+                  var hasSVP:Boolean = false;
+                  try { hasSVP = oR["setVisPos"] != null; } catch (e:*) { }
                   // 位置（setPos 更新碰撞边界——玩家子弹命中重演位置敌人正常结算）
-                  if (oR["setPos"] != null) { oR.setPos(stR.x, stR.y); }
+                  if (hasSP) { oR.setPos(stR.x, stR.y); }
                   else { oR.X = stR.x; oR.Y = stR.y; }
                   // 重钉诊断（v1.89）：首个非单位对象——验证重钉是否应用
                   try
                   {
-                     if (rFixCnt < 2 && oR["setPos"] == null)
+                     if (rFixCnt < 2 && !hasSP)
                      {
                         rFixCnt++;
                         log("[DIAG] rFix: cls=" + flash.utils.getQualifiedClassName(oR)
@@ -1055,7 +1081,7 @@ package
                   // 视觉同步（setPos 不更新 vis——否则敌人视觉固定在时停结束位置）
                   try
                   {
-                     if (oR["setVisPos"] != null) { oR.setVisPos(); }
+                     if (hasSVP) { oR.setVisPos(); }
                      else if (oR.vis != null) { oR.vis.x = stR.x; oR.vis.y = stR.y; }
                   }
                   catch (e:*) { }
@@ -1066,7 +1092,7 @@ package
                   // 轨迹；单位（有 setPos）不走此路径（其 vis 未摘除）。
                   try
                   {
-                     if (oR["setPos"] == null && oR.vis != null && oR.vis.parent == null && oR.sloy != null)
+                     if (!hasSP && oR.vis != null && oR.vis.parent == null && oR.sloy != null)
                      {
                         var gVis2:Object = world["grafon"];
                         if (gVis2 != null && gVis2.visObjs != null && gVis2.visObjs[oR.sloy] != null)
@@ -1089,7 +1115,7 @@ package
                   // 按记录 gotoAndStop（帧动画逐帧恢复；仅非单位对象）
                   try
                   {
-                     if (oR["setPos"] == null && oR.vis != null && stR.vf != null && stR.vf >= 0)
+                     if (!hasSP && oR.vis != null && stR.vf != null && stR.vf >= 0)
                      {
                         oR.vis.gotoAndStop(stR.vf);
                      }
@@ -1100,7 +1126,7 @@ package
                   // 淡出；dop 变化=开合事件（doorPrevDop 防重复调用重播音效）
                   try
                   {
-                     if (oR["setPos"] == null && stR.dop != null && stR.dop >= 0
+                     if (!hasSP && stR.dop != null && stR.dop >= 0
                          && oR["setVisState"] != null && oR.door != null && oR.door > 0)
                      {
                         var prevDop:Number = doorPrevDop[oR] != null ? doorPrevDop[oR] : -1;
@@ -1116,7 +1142,7 @@ package
                   // 按记录恢复 opac + t_visi + visi（渲染路径三处全设，确保可见）
                   try
                   {
-                     if (oR["setPos"] == null && stR.dop != null && stR.dop >= 0
+                     if (!hasSP && stR.dop != null && stR.dop >= 0
                          && oR.tiles != null)
                      {
                         var tls:Array = oR.tiles;
@@ -1167,7 +1193,7 @@ package
                   // 是唯一路径（读 vis.osn.body 帧对怪物永远 -1，故不依赖帧记录）
                   try
                   {
-                     if (oR["setPos"] != null && oR["animate"] != null)
+                     if (hasSP && oR["animate"] != null)
                      {
                         var nxtR2:Object = arrR[Math.min(idxR + 1, arrR.length - 1)];
                         var mvx:Number = (nxtR2.x - stR.x) * cfgReplaySpeed;
@@ -1258,7 +1284,7 @@ package
                               try { oR.setPos(stR.x, stR.y); } catch (e:*) { }
                               try
                               {
-                                 if (oR["setVisPos"] != null) { oR.setVisPos(); }
+                                 if (hasSVP) { oR.setVisPos(); }
                                  else if (oR.vis != null) { oR.vis.x = stR.x; oR.vis.y = stR.y; }
                               }
                               catch (e:*) { }
@@ -1284,7 +1310,7 @@ package
                                  if (stR.sto != null) { oR.storona = stR.sto; }
                                  try
                                  {
-                                    if (oR["setVisPos"] != null) { oR.setVisPos(); }
+                                    if (hasSVP) { oR.setVisPos(); }
                                     else if (oR.vis != null) { oR.vis.scaleX = stR.sto != null ? stR.sto : 1; }
                                  }
                                  catch (e:*) { }
@@ -1465,6 +1491,10 @@ package
                   }
                   else if (qn.indexOf("fe.weapon::") == 0)
                   {
+                     // v1.90：近战攻击体（vel=0 静止在手上）不参与击落判定——
+                     // 否则手雷飞过近战范围会被"拳击"引爆并把攻击体 remObj
+                     // 出链（破坏近战）
+                     try { if (o.vel != null && o.vel < 1) { o = o.nobj; continue; } } catch (e:*) { }
                      objs.push(o);
                   }
                }
@@ -3201,25 +3231,12 @@ package
                         }
                         cwNow.rot = Math.atan2(world.celY - cwNow.Y, world.celX - cwNow.X);
                         cwNow.ready = true;
-                        // v1.88：开火帧到窗口末的位移修正——子弹在开火帧生成，
-                        // 世界显示在窗口末（Δ≤4 历史帧）→ 子弹沿飞行方向预推进
-                        // Δ×vel/slowfactor（时停显示帧速度），与窗口末的投掷物
-                        // 位置对齐——回放中射击手雷偏移的根源修正
-                        try
-                        {
-                           if (fp != null && fp.f != null && replayIdx > fp.f)
-                           {
-                              var preB:* = cwNow.b;
-                              if (preB != null && preB.vel != null && preB.rot != null)
-                              {
-                                 var dCorr:Number = (replayIdx - fp.f) * preB.vel / Math.max(1, cfgSlowFactor);
-                                 preB.X += Math.cos(preB.rot) * dCorr;
-                                 preB.Y += Math.sin(preB.rot) * dCorr;
-                                 try { if (preB.vis != null) { preB.vis.x = preB.X; preB.vis.y = preB.Y; } } catch (e:*) { }
-                              }
-                           }
-                        }
-                        catch (e:*) { }
+                        // v1.90：v1.88 预推进移除——与 stepPlayerBullets + 世界重钉
+                        // 双重计入，子弹超前最多 1 个世界步（~200px，用户实测
+                        // "手雷飞行状态提前/玩家射击延后"）。正确对齐：子弹生成于
+                        // 显示帧 m（世界时间 m），随后 stepPlayerBullets 步 1 次、
+                        // replayObjects 把世界重钉到 m+1——子弹与世界天然同步，
+                        // 无需修正（时停中两者同按世界节流步进，映射严格一致）。
                      }
                      catch (e:*) { }
                   }
