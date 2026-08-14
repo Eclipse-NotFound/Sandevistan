@@ -486,39 +486,9 @@ package
             ammoLeashTick();
          }
 
-         // v1.100：疾跑中切枪（cfgSwapRun）——游戏本体按住 Shift 疾跑时，
-         // 数字键映射到**第二组**快捷槽（fav[N+kolHK]，通常为空=无法切枪）。
-         // 开关开启时，疾跑中按下武器键按第一组槽位切枪（复制游戏自身的
-         // 处理：消费按键 + useFav + 关选择器/法术/攻击键），游戏 control()
-         // 稍后读到已消费的键不再重复处理。模组 ENTER_FRAME 先于游戏
-         // World.step，本拦截先于游戏按键处理生效。
-         try
-         {
-            if (cfgSwapRun && !replaying && !panelOpen && inGameplay()
-                && world.ctr != null && world.ctr.keyRun)
-            {
-               for (var wn:int = 1; wn <= 10; wn++)
-               {
-                  var wk:String = "keyWeapon" + wn;
-                  if (world.ctr[wk] == true)
-                  {
-                     world.ctr[wk] = false;
-                     try { world.invent.useFav(wn); } catch (e:*) { }
-                     try { if (world.gg.visSel) { world.gui.unshowSelector(0); } } catch (e:*) { }
-                     try { if (world.gg.currentSpell != null) { world.gg.currentSpell.active = false; } } catch (e:*) { }
-                     try { world.ctr.keyDef = false; world.ctr.keyAttack = false; } catch (e:*) { }
-                     // v1.101：拦截诊断（确认开关生效与按键路由）
-                     if (cfgDiagLog && swapRunDiagCnt < 6)
-                     {
-                        swapRunDiagCnt++;
-                        log("[DIAG] swapRun: key=" + wn + " run=" + world.ctr.keyRun);
-                     }
-                     break;
-                  }
-               }
-            }
-         }
-         catch (e:*) { }
+         // 注：疾跑切枪（swaprun）拦截在 KEY_DOWN 事件层（onKey）——游戏
+         // World.step 的 ENTER_FRAME 先于模组注册，帧层拦截永远晚于游戏
+         // 按键处理（v1.100 教训，见 onKey 内 v1.104 注释）。
 
          // v1.89：投掷物击落**独立化**——常规游戏（无时停/回放）中每帧
          // 也执行判定：射击手雷/导弹/榴弹至血量归零随时引爆（projhits
@@ -3382,6 +3352,12 @@ package
             var nxt:Object = obj.nobj;
             if (obj is PartClass)
             {
+               // v1.104：回放中爆炸粒子寿命钳制——野火核弹的 balefire（火光）
+               // Blit 粒子 minliv=60 帧，而整个回放只有 42 帧：火光贯穿回放
+               // 并延伸到回放结束之后（用户实测"火光一直留到爆炸结束才消失"
+               // =鬼影，v1.103 只杀了 MC 未管 Blit）。回放中所有粒子均为爆炸
+               // 粒子（endSandy 已清空其它），钳到 20 帧内自然完结。
+               if (obj.liv > 20) { obj.liv = 20; }
                obj.step();
             }
             obj = nxt;
@@ -4627,6 +4603,41 @@ package
          {
             keyDownSeen[e.keyCode] = getTimer();
          }
+
+         // v1.104：疾跑中切枪（swaprun）——事件层拦截。游戏 World.step 挂在
+         // MainMenu.mainStep 的 ENTER_FRAME 上（先于模组注册，MainMenu 在模组
+         // 加载前创建）——v1.100 的 onFrame 拦截永远晚于游戏按键处理（游戏
+         // control() 先按第二组快捷槽消费按键，实测无 swapRun 日志）；而模组
+         // 的 KEY_DOWN 先于游戏 Ctr 注册（Ctr 在 World 构造时才注册）。此处
+         // 直接消费按键+useFav 第一组槽位，并 stopImmediatePropagation 阻止
+         // 游戏 Ctr 收到该键（防第二组槽重复处理）。
+         try
+         {
+            if (cfgSwapRun && !replaying && !panelOpen && world != null && world.ctr != null
+                && world.ctr.keyRun && e.keyCode > 0 && e.keyCode < 256)
+            {
+               var kbS:* = keyMap[e.keyCode];
+               if (kbS != null && String(kbS).indexOf("keyWeapon") == 0 && inGameplay())
+               {
+                  var wnS:int = parseInt(String(kbS).substr(9));
+                  if (wnS >= 1 && wnS <= 10)
+                  {
+                     e.stopImmediatePropagation();
+                     try { world.invent.useFav(wnS); } catch (e2:*) { }
+                     try { if (world.gg.visSel) { world.gui.unshowSelector(0); } } catch (e2:*) { }
+                     try { if (world.gg.currentSpell != null) { world.gg.currentSpell.active = false; } } catch (e2:*) { }
+                     try { world.ctr.keyDef = false; world.ctr.keyAttack = false; } catch (e2:*) { }
+                     if (cfgDiagLog && swapRunDiagCnt < 6)
+                     {
+                        swapRunDiagCnt++;
+                        log("[DIAG] swapRun: key=" + wnS + " run=" + world.ctr.keyRun);
+                     }
+                     return;
+                  }
+               }
+            }
+         }
+         catch (e2:*) { }
 
          // ===== 按键诊断（diaglog=1 时记录按键事件与游戏状态，用于定位卡键）=====
          if (cfgDiagLog)
