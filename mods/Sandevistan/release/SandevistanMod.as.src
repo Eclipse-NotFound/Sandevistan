@@ -175,6 +175,20 @@ package
       private var projHp:Dictionary = new Dictionary();  // 投掷物 → 当前血量
       private var projHpOver:Object = null;     // v1.114：按武器 id 的血量覆盖（projhp_<id>）
       private var projArmorOver:Object = null;  // v1.114：按武器 id 的护甲覆盖（projarmor_<id>）
+      // ===== v1.115：敌人斯安维斯坦（Enemy Sandevistan）=====
+      // 触发=敌人 AI 看到玩家进入战斗（celUnit==gg 上升沿）后立即开启；
+      // 每房间最多 1 个（esRoomTaken 按 room.id 记录）；持续/冷却/倍率可配置。
+      private var cfgEnemySandy:String = "UnitRaider,UnitMerc,UnitAlicorn,UnitEncl,UnitRanger";
+      private var cfgESDur:int = 150;            // 持续帧（30帧=1秒 → 5秒）
+      private var cfgESCd:int = 300;             // 冷却帧（10秒）
+      private var cfgESSpd:int = 5;              // 加速倍率（每显示帧补 spd-1 次 step）
+      private var cfgESGhost:Boolean = true;     // 敌人残影（边缘行者配色）
+      private var cfgESMark:Boolean = true;      // 调试"S"徽标
+      private var esClasses:Array = [];          // 白名单类名（config enemysandy 解析）
+      private var esEnemies:Dictionary = new Dictionary(); // 敌人 → {st,left,cd,sawCel,px,py}
+      private var esRoomTaken:Object = {};       // roomId → 敌人（每房间 1 个）
+      private var esMarks:Dictionary = new Dictionary(); // 敌人 → 徽标 TextField
+      private var esDiagCnt:int = 0;
       private var seenAtk:Dictionary = new Dictionary(); // 攻击体追踪器（v1.85：按引用录像，绕开链扫描之谜）
       private var projBoom:Dictionary = new Dictionary(); // v1.91：时停中引爆的投掷物 → {f,x,y}（回放对应帧真实爆炸）
       private var reExecPin:Dictionary = new Dictionary(); // v1.94：重执行爆弹体 → 录像孪生体（回放钉到录像轨迹）
@@ -324,7 +338,7 @@ package
          // 死亡位置 = 鬼影真因。
          try { inst.slowPartClass = ApplicationDomain.currentDomain.getDefinition("fe.graph.Part") as Class; } catch (e:*) { }
          // v1.101：版本标记——日志确认实际加载运行的构建版本与关键开关
-         inst.log("[SandyMod] v1.114 loaded swaprun=" + (inst.cfgSwapRun ? 1 : 0) + " projhits=" + (inst.cfgProjHits ? 1 : 0));
+         inst.log("[SandyMod] v1.115 loaded swaprun=" + (inst.cfgSwapRun ? 1 : 0) + " projhits=" + (inst.cfgProjHits ? 1 : 0));
          if (main != null && main.stage != null)
          {
             main.stage.addEventListener(Event.ENTER_FRAME, inst.onFrame);
@@ -355,7 +369,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.114 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.115 已加载 (按 \ 触发斯安维斯坦)";
             t.autoSize = "left";   // v1.110：版本号此前显示不全（TextField 默认宽度截断）
             t.x = 10;
             t.y = 10;
@@ -454,6 +468,12 @@ package
                   else if (k == "colormode") cfgColorMode = parseInt(v);
                   else if (k == "edgethresh") cfgEdgeThresh = parseFloat(v);
                   else if (k == "swaprun") cfgSwapRun = v.toLowerCase() == "1" || v.toLowerCase() == "true";
+                  else if (k == "enemysandy") cfgEnemySandy = v;
+                  else if (k == "esandydur") cfgESDur = parseInt(v);
+                  else if (k == "esandycd") cfgESCd = parseInt(v);
+                  else if (k == "esandyspd") cfgESSpd = parseInt(v);
+                  else if (k == "esandyghost") cfgESGhost = v.toLowerCase() == "1" || v.toLowerCase() == "true";
+                  else if (k == "esandymark") cfgESMark = v.toLowerCase() == "1" || v.toLowerCase() == "true";
                }
             }
          }
@@ -473,6 +493,20 @@ package
          if (cfgProjHp > 1000) cfgProjHp = 1000;
          if (cfgProjArmor < 0) cfgProjArmor = 0;
          if (cfgProjArmor > 500) cfgProjArmor = 500;
+         // v1.115：敌人斯安维斯坦白名单与数值钳制
+         if (cfgESDur < 30) cfgESDur = 30;
+         if (cfgESDur > 3600) cfgESDur = 3600;
+         if (cfgESCd < 0) cfgESCd = 0;
+         if (cfgESCd > 7200) cfgESCd = 7200;
+         if (cfgESSpd < 2) cfgESSpd = 2;
+         if (cfgESSpd > 10) cfgESSpd = 10;
+         esClasses = [];
+         var arrES:Array = cfgEnemySandy.split(",");
+         for (var iES:int = 0; iES < arrES.length; iES++)
+         {
+            var cnES:String = String(arrES[iES]).replace(/^\s+|\s+$/g, "");
+            if (cnES.length > 0) { esClasses.push(cnES); }
+         }
          trace("[SandyMod] config hotkey=" + cfgHotkey + " dur=" + cfgDuration + " cd=" + cfgCooldown);
       }
 
@@ -575,6 +609,16 @@ package
             if (!sandyActive && !replaying && cfgProjHits && world != null && world.loc != null)
             {
                stepProjHits(world.loc, false);
+            }
+         }
+         catch (e:*) { }
+         // v1.115：敌人斯安维斯坦（常规游戏分支——场景 A：敌人 N× 补步；
+         // 场景 B 的挂钩在 stepSandy 内）
+         try
+         {
+            if (!sandyActive && !replaying && world != null && world.loc != null)
+            {
+               stepEnemySandy();
             }
          }
          catch (e:*) { }
@@ -2870,7 +2914,7 @@ package
       {
          if (panelTf == null) return;
          var lines:Array = [];
-         lines.push("== SandevistanMod v1.114 参数 ==");
+         lines.push("== SandevistanMod v1.115 参数 ==");
          lines.push((panelSel == 0 ? "> " : "  ") + "生效时长   " + (cfgDuration / 30).toFixed(1) + "s");
          lines.push((panelSel == 1 ? "> " : "  ") + "冷却       " + (cfgCooldown / 30).toFixed(1) + "s");
          lines.push((panelSel == 2 ? "> " : "  ") + "回放速度   x" + cfgReplaySpeed);
@@ -2928,6 +2972,12 @@ package
             sb.push("colormode=" + cfgColorMode);
             sb.push("edgethresh=" + cfgEdgeThresh);
             sb.push("swaprun=" + (cfgSwapRun ? 1 : 0));
+            sb.push("enemysandy=" + cfgEnemySandy);
+            sb.push("esandydur=" + cfgESDur);
+            sb.push("esandycd=" + cfgESCd);
+            sb.push("esandyspd=" + cfgESSpd);
+            sb.push("esandyghost=" + (cfgESGhost ? 1 : 0));
+            sb.push("esandymark=" + (cfgESMark ? 1 : 0));
             sb.push("fxrun=" + (cfgFxRun ? 1 : 0));
             sb.push("showmark=" + (cfgShowMark ? 1 : 0));
             sb.push("panelkey=" + cfgPanelKey);
@@ -3271,6 +3321,11 @@ package
             mouseAtkPulse = false;   // 脉冲每帧消费一次
             var loc:Object = world.loc;
             loc.gg.step();   // 玩家全速手动 step
+            // v1.115：敌人斯安维斯坦（场景 B）——活跃 Sandy 敌人与玩家同权
+            // 每帧全速 step（敌我"正常关系"，其余世界 1/N 慢放）；节流帧的
+            // loc.step 会再步到它一次（1/N 慢步）——与玩家"自由物理步"同款
+            // 现象（净 ~1.2×），接受并记录。
+            try { stepEnemySandyB(); } catch (e:*) { }
             // 单步后的武器状态（节流帧第二遍步会再递减一次——用单步值做开火检测，
             // 否则小攻速武器（rapid 1-2）的开火帧记录值与上一帧相同，上升沿检测不到）
             var tAManual:int = world.gg.currentWeapon != null ? world.gg.currentWeapon.t_attack : 0;
@@ -3774,6 +3829,274 @@ package
          catch (e:*) { }
          var nV:int = sweepOrphanPartVis();
          log("[DIAG] partsResumeE: resumed=" + nR + " vis=" + nV);
+      }
+      // ===== v1.115：敌人斯安维斯坦（Enemy Sandevistan）=====
+      // 触发：敌人 AI 看到玩家进入战斗（celUnit==world.gg 上升沿——aiState 是
+      // internal 读不到，celUnit 是 public 的"已锁定玩家为目标"信号）后立即
+      // 开启；持续 cfgESDur 帧、冷却 cfgESCd 帧；白名单类名配置；每房间最多
+      // 1 个（esRoomTaken 按 loc.room.id 记录，死亡后房间名额释放）。
+      // 场景 A（玩家未开）：世界正常，模组在游戏步进后给活跃敌人补
+      // (spd-1) 次 step() → AI/移动/攻击 N×；敌人子弹 1×（世界步进）。
+      // 场景 B（玩家同时开）：stepSandy 内活跃敌人与玩家同权每帧 step 一次。
+      // 调试徽标："S"（待机绿/激活黄/冷却灰）挂在 visObjs[3]，非 goldstar
+      // （不设 hero，不影响精英怪判定）。
+      private function stepEnemySandy():void
+      {
+         var locE:Object = world.loc;
+         if (locE == null) return;
+         // ---- 1. 扫描登记 + 战斗触发检测 + 状态推进 ----
+         try
+         {
+            var oE:Object = locE.firstObj;
+            var gE:int = 0;
+            while (oE != null)
+            {
+               var nxE:Object = oE.nobj;
+               try
+               {
+                  if (oE != world.gg)
+                  {
+                     var qnE:String = flash.utils.getQualifiedClassName(oE);
+                     if (qnE.indexOf("fe.unit::") == 0 && oE["currentWeapon"] != null
+                         && esClasses.indexOf(qnE) >= 0)
+                     {
+                        var recE:Object = esEnemies[oE];
+                        if (recE == null)
+                        {
+                           // 每房间 1 个（房间名额被其它敌人占用则跳过注册）
+                           var rIdE:String = "";
+                           try { if (locE.room != null && locE.room.id != null) { rIdE = String(locE.room.id); } } catch (e:*) { }
+                           if (rIdE != "" && esRoomTaken[rIdE] != null && esRoomTaken[rIdE] != oE)
+                           {
+                              oE = nxE;
+                              if (++gE > 20000) break;
+                              continue;
+                           }
+                           recE = { st: 0, left: 0, cd: 0, sawCel: false, px: 0, py: 0 };
+                           esEnemies[oE] = recE;
+                           if (rIdE != "") { esRoomTaken[rIdE] = oE; }
+                           try { recE.px = oE.X; recE.py = oE.Y; } catch (e:*) { }
+                        }
+                        // 战斗信号：celUnit==gg 上升沿且待机 → 立即触发
+                        var celE:* = null;
+                        try { celE = oE["celUnit"]; } catch (e:*) { }
+                        var inCombatE:Boolean = (celE == world.gg);
+                        if (inCombatE && !recE.sawCel && recE.st == 0)
+                        {
+                           recE.st = 1;
+                           recE.left = cfgESDur;
+                           if (cfgDiagLog && esDiagCnt < 12)
+                           {
+                              esDiagCnt++;
+                              log("[DIAG] esandy: cls=" + qnE + " room=" + rIdE + " ON dur=" + cfgESDur + " spd=" + cfgESSpd);
+                           }
+                        }
+                        recE.sawCel = inCombatE;
+                        esTick(oE, recE);
+                        updateESMark(oE, recE.st);
+                     }
+                  }
+               }
+               catch (e:*) { }
+               oE = nxE;
+               if (++gE > 20000) break;
+            }
+         }
+         catch (e:*) { }
+         // ---- 2. 清理死亡/出链的注册敌人（先收集后删除）----
+         try
+         {
+            var rmE:Array = [];
+            for (var kC:Object in esEnemies)
+            {
+               try
+               {
+                  if (kC == null || kC.in_chain != true)
+                  {
+                     rmE.push(kC);
+                  }
+               }
+               catch (e:*) { }
+            }
+            for each (var kR:Object in rmE)
+            {
+               try { removeESMark(kR); } catch (e:*) { }
+               try { delete esEnemies[kR]; } catch (e:*) { }
+               try
+               {
+                  var rIdC:String = "";
+                  if (locE.room != null && locE.room.id != null) { rIdC = String(locE.room.id); }
+                  if (rIdC != "" && esRoomTaken[rIdC] == kR) { delete esRoomTaken[rIdC]; }
+               }
+               catch (e:*) { }
+            }
+         }
+         catch (e:*) { }
+         // ---- 3. 场景 A：活跃敌人补步（游戏已步 1 次，再补 spd-1 次）+ 残影 ----
+         try
+         {
+            for (var kA:Object in esEnemies)
+            {
+               try
+               {
+                  var recA:Object = esEnemies[kA];
+                  if (recA == null || recA.st != 1 || kA == null || kA.in_chain != true) continue;
+                  for (var iE:int = 1; iE < cfgESSpd; iE++)
+                  {
+                     try { kA.step(); } catch (e:*) { }
+                  }
+                  esGhostFor(kA, recA, cfgESSpd);
+               }
+               catch (e:*) { }
+            }
+         }
+         catch (e:*) { }
+      }
+      // 状态推进（场景 A/B 共用）
+      private function esTick(oE:Object, recE:Object):void
+      {
+         if (recE.st == 1)
+         {
+            recE.left--;
+            if (recE.left <= 0)
+            {
+               recE.st = 2;
+               recE.cd = cfgESCd;
+               if (cfgDiagLog && esDiagCnt < 24)
+               {
+                  esDiagCnt++;
+                  log("[DIAG] esandy: cls=" + flash.utils.getQualifiedClassName(oE) + " OFF cd=" + cfgESCd);
+               }
+            }
+         }
+         else if (recE.st == 2)
+         {
+            recE.cd--;
+            if (recE.cd <= 0) { recE.st = 0; }
+         }
+      }
+      // 场景 B：玩家时停中活跃敌人与玩家同权（每帧 step + 计时 + 徽标 + 残影）
+      private function stepEnemySandyB():void
+      {
+         try
+         {
+            for (var kE:Object in esEnemies)
+            {
+               try
+               {
+                  var recE:Object = esEnemies[kE];
+                  if (recE == null || kE == null || kE.in_chain != true) continue;
+                  if (recE.st == 1)
+                  {
+                     esTick(kE, recE);
+                     try { kE.step(); } catch (e:*) { }
+                     esGhostFor(kE, recE, 1);
+                  }
+                  updateESMark(kE, recE.st);
+               }
+               catch (e:*) { }
+            }
+         }
+         catch (e:*) { }
+      }
+      // 敌人残影（边缘行者配色，速度映射——快=绿、慢=蓝紫）
+      private function esGhostFor(oE:Object, recE:Object, mul:Number):void
+      {
+         if (!cfgESGhost) return;
+         try
+         {
+            var spdE:Number = Math.abs(oE.X - recE.px) + Math.abs(oE.Y - recE.py);
+            recE.px = oE.X;
+            recE.py = oE.Y;
+            var sIdxE:int = speedToEdgeIdx(spdE * mul);
+            spawnEnemyGhost(oE, edgePalette(sIdxE));
+         }
+         catch (e:*) { }
+      }
+      // 敌人残影快照（与 spawnGhostAt 同款绘制管线，但画的是敌人 vis 而非玩家）
+      private function spawnEnemyGhost(oE:Object, ct:ColorTransform):void
+      {
+         try
+         {
+            var visE:* = oE.vis;
+            if (visE == null) return;
+            var wE:Number = visE.width;
+            var hE:Number = visE.height;
+            if (wE < 1 || hE < 1) return;
+            var bmpE:BitmapData = new BitmapData(wE, hE, true, 0);
+            var mE:Matrix = new Matrix();
+            var bE:Rectangle = visE.getBounds(visE);
+            mE.tx = -bE.left;
+            mE.ty = -bE.top;
+            var sE:Number = 1;
+            try { sE = oE.storona; } catch (e:*) { }
+            var dmE:Matrix = mE;
+            if (sE < 0) { dmE = new Matrix(-1, 0, 0, 1, bE.right, mE.ty); }
+            var savedParentE:Object = visE.parent;
+            var savedIdxE:int = -1;
+            if (savedParentE != null)
+            {
+               try { savedIdxE = savedParentE.getChildIndex(visE); } catch (e:*) { }
+               try { savedParentE.removeChild(visE); } catch (e:*) { }
+            }
+            bmpE.draw(visE as IBitmapDrawable, dmE, ct, "normal", null, true);
+            if (savedParentE != null)
+            {
+               try { savedParentE.addChildAt(visE, savedIdxE); } catch (e:*) { }
+            }
+            var bitE:Bitmap = new Bitmap(bmpE, "auto", true);
+            var sprE:Sprite = new Sprite();
+            try { sprE.x = oE.X + bE.left; sprE.y = oE.Y + bE.top; } catch (e:*) { }
+            sprE.addChild(bitE);
+            bitE.blendMode = cfgGhostBlend == 0 ? "add" : "normal";
+            ghostLayer.addChild(sprE);
+            ghosts.push({ s: sprE, t: Math.max(1, cfgReplayGhostLife), life: Math.max(1, cfgReplayGhostLife), b: bmpE });
+         }
+         catch (e:*) { }
+      }
+      // 调试"S"徽标：待机绿 / 激活黄 / 冷却灰（visObjs[3]，世界坐标，非精英 goldstar）
+      private function updateESMark(oE:Object, st:int):void
+      {
+         if (!cfgESMark) { removeESMark(oE); return; }
+         try
+         {
+            var t:TextField = esMarks[oE];
+            if (t == null)
+            {
+               t = new TextField();
+               var tf:TextFormat = new TextFormat();
+               tf.font = "Consolas";
+               tf.size = 14;
+               tf.bold = true;
+               t.defaultTextFormat = tf;
+               t.selectable = false;
+               t.mouseEnabled = false;
+               t.autoSize = "left";
+               t.text = "S";
+               esMarks[oE] = t;
+               var gVisE:Object = world["grafon"];
+               if (gVisE != null && gVisE.visObjs != null && gVisE.visObjs[3] != null)
+               {
+                  gVisE.visObjs[3].addChild(t);
+               }
+            }
+            t.textColor = st == 1 ? 0xFFD040 : (st == 0 ? 0x00FF88 : 0x888888);
+            try { t.x = oE.X - 8; t.y = oE.Y - 60; } catch (e:*) { }
+         }
+         catch (e:*) { }
+      }
+      private function removeESMark(oE:Object):void
+      {
+         try
+         {
+            var t:Object = esMarks[oE];
+            if (t != null)
+            {
+               if (t.parent != null) { t.parent.removeChild(t); }
+               delete esMarks[oE];
+            }
+         }
+         catch (e:*) { }
       }
       private function stepReplay():void
       {

@@ -7,21 +7,25 @@
 
 ## 0. 当前状态（2026-08-15）
 
-- **当前版本 v1.114**（git master），已按**镜像部署**运行：仓库 `C:\RemainsMod` 为
+- **当前版本 v1.115**（git master），已按**镜像部署**运行：仓库 `C:\RemainsMod` 为
   唯一事实源；游戏目录是**多 agent 共享工作区**——`mods\Sandevistan` 全镜像
   （同步脚本 `C:\RemainsMod\sync-to-game.bat`，排除 build 与 config.txt），
   `shared-knowledge\`/`game-reference\` 增补式同步，**不删除其他 agent 的文件**。
   游戏通过补丁直接从
   `<游戏目录>\mods\Sandevistan\release\SandevistanMod.swf` 加载模组，
   config.txt 也在此目录（F9 面板直接写这里，同步脚本不覆盖）。
-- **已解决（用户确认 ✓）**：鬼影（v1.110，用户实测确认）；启动标记版本号显示完整；
-  回放结束爆炸动画自然播完（v1.111/1.112）；爆炸动画原生速度（v1.113 移除寿命钳制）。
-- **v1.114 内容**：投掷物血量/护甲可按武器 id 覆盖（projhp_<id>/projarmor_<id>）。
-- **待用户实测确认**：v1.113 野火核弹速度；v1.114 按武器覆盖（如 projhp_bel=120
-  后野火核弹要多枪才爆）。
+  **多开发者注意**：改动游戏本体文件（pfe.swf 等）前必须先做哈希比对，
+  他人已改则合并（流程见 `build/README.md` §2）。
+- **已解决（用户确认 ✓）**：鬼影（v1.110）；启动标记版本号显示完整；
+  回放结束爆炸动画自然播完（v1.111/1.112）；爆炸动画原生速度（v1.113）；
+  投掷物血量/护甲按武器覆盖（v1.114）。
+- **v1.115 内容**：敌人斯安维斯坦（掠夺者/狮鹫/天角兽/英克雷/铁骑卫，每房间 1 个；
+  战斗触发；场景 A 敌人 5× 加速+残影；场景 B 敌我全速+世界慢放；S 调试徽标）。
+- **待用户实测确认**：①敌人看到玩家后 S 徽标变黄、加速移动/攻击 ②玩家时停时
+  该敌人保持全速对抗 ③回放中敌人轨迹正常 ④残影/徽标观感。
 - **日志**：`C:\Users\micha\AppData\Roaming\pfe\Local Store\sandy_modlog.txt`
-  （启动有 `v1.114 loaded swaprun=1` 标记；诊断行 grep -a 取：
-  ghostScan/partsKillDeep/partsResumeE/reatt/boom/twinKill/swapRun）。
+  （启动有 `v1.115 loaded swaprun=1` 标记；诊断行 grep -a 取：
+  esandy/ghostScan/partsKillDeep/partsResumeE/reatt/boom/twinKill/swapRun）。
 
 ## 1. 已知问题与待办
 

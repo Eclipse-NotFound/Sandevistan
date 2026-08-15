@@ -1,4 +1,4 @@
-# 斯安维斯坦模组配置 (Sandevistan Mod config)
+﻿# 斯安维斯坦模组配置 (Sandevistan Mod config)
 # 修改后保存，重启游戏生效；也可在游戏中按 F9 打开参数面板实时调节
 
 # 触发热键（键码）：
@@ -75,3 +75,13 @@ edgethresh=15
 # 疾跑中切枪（1=开 0=关，默认 1）：按住 Shift 疾跑时按数字键切换武器
 # （游戏本体疾跑时数字键映射到第二组快捷槽，通常为空=无法切枪）
 swaprun=1
+
+# ===== v1.115：敌人斯安维斯坦（Enemy Sandevistan）=====
+# 装备名单（逗号分隔的类名；默认：掠夺者/狮鹫(佣兵)/天角兽/英克雷/铁骑卫）
+# 触发：敌人 AI 看到玩家进入战斗后立即开启；每个房间最多 1 个
+enemysandy=UnitRaider,UnitMerc,UnitAlicorn,UnitEncl,UnitRanger
+esandydur=150     # 敌人斯安维斯坦持续帧（30帧=1秒 → 5秒）
+esandycd=300      # 冷却帧（10秒）
+esandyspd=5       # 加速倍率
+esandyghost=1     # 敌人残影（边缘行者配色）
+esandymark=1      # 调试"S"徽标（绿=待机 黄=激活 灰=冷却）

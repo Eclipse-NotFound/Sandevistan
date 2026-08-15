@@ -44,9 +44,24 @@ AIR_HOME="C:\RemainsMod\mods\Sandevistan\build\tools\flexsdk" \
 
 ## 2. 打游戏补丁（MainFE）
 
+**⚠️ 多开发者协作检查（2026-08-15 起，改动游戏本体文件前必做）**：
+游戏目录由多个 agent/开发者共享——覆盖 `pfe.swf`/`DLC\*` 前必须确认当前文件
+没有被其他人改过：
+
+1. 算当前游戏文件的 MD5，与 `release\patched\`（我们上次部署）和
+   `release\backup\`（原版）比对：
+   - 等于我们上次部署 → 我们最后改的，可直接覆盖；
+   - 等于原版 → 被 Steam 还原了，可直接覆盖；
+   - **其它任何值 → 有其他人改过，禁止直接覆盖**，走合并：
+2. 合并流程：把**对方当前的游戏文件**当作新的输入（而不是 backup 原版），
+   对其运行 importScript（对方改的是 MainFE 之外的部分会保留）；若对方也
+   改过 MainFE（出现冲突），把我们的 `loadSandevistanMod` 注入逻辑合并进
+   对方的 MainFE 源码后再导入，并记录合并说明。
+3. 部署前把对方版本的 MD5 记入提交信息，便于回溯。
+
 ```
 java -Xmx3g -Xms256m -jar build\tools\ffdec\ffdec.jar \
-  -importScript <原版.swf> <输出.swf> C:\RemainsMod\mods\Sandevistan\src\patch
+  -importScript <输入.swf> <输出.swf> C:\RemainsMod\mods\Sandevistan\src\patch
 ```
 
 - 参数顺序：**输入、输出、脚本目录**（目录内含 `scripts/` 子目录）。
@@ -99,6 +114,14 @@ projarmor=0      投掷物护甲（伤害先减护甲，预留接口）
 #   projhp_<武器id> / projarmor_<武器id>
 #   例：projhp_grenade=60  projhp_bel=120  projhp_aglau=45  projarmor_aglau=10
 #   常用 id：grenade=手雷 bel=野火核弹 aglau=榴弹发射器 mlau=导弹发射器
+# v1.115 敌人斯安维斯坦：
+enemysandy=UnitRaider,UnitMerc,UnitAlicorn,UnitEncl,UnitRanger
+                  # 装备名单（类名；默认=掠夺者/狮鹫(佣兵)/天角兽/英克雷/铁骑卫）
+esandydur=150     # 持续帧（30帧=1秒 → 5秒）
+esandycd=300      # 冷却帧（10秒）
+esandyspd=5       # 加速倍率
+esandyghost=1     # 敌人残影（边缘行者配色）
+esandymark=1      # 调试"S"徽标（绿=待机 黄=激活 灰=冷却）
 showmark=1       加载标记
 panelkey=120     F9 参数面板
 diaglog=0        诊断日志（AppData\Roaming\pfe\Local Store\sandy_modlog.txt）
