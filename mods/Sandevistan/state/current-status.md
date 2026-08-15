@@ -45,7 +45,9 @@
 
 ## 2. 下一步
 
-1. 等用户实测 v1.109（镜像部署）+ v1.108（鬼影是否消失）。
-2. 若确认：更新本文件 + `decisions/changelog.md` + `release/说明.txt`，提交 git；
+1. **规划中**：敌人斯安维斯坦（场景 A 敌人加速 / 场景 B 敌我全速+世界慢放）——
+   探索完成、方案见 `design/enemy-sandevistan-plan.md`，等用户确认待决策点后实施
+   （未改任何代码）。
+2. 待用户实测 v1.113/v1.114（爆炸原生速度、按武器血量覆盖）。
+3. 若确认：更新本文件 + `decisions/changelog.md` + `release/说明.txt`，提交 git；
    并删除游戏目录旧 `SandevistanMod\` 回退副本。
-3. 若未解决：按对应诊断（partsKillDeep vis 计数 / ghostScan）继续定位，改后重复 2。
