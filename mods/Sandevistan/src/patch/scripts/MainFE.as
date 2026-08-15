@@ -66,7 +66,7 @@ package
             var _loc1_:LoaderContext = new LoaderContext(false);
             this.sandyLoader.contentLoaderInfo.addEventListener(Event.COMPLETE,this.onSandevistanModLoaded);
             this.sandyLoader.contentLoaderInfo.addEventListener(IOErrorEvent.IO_ERROR,this.onSandevistanModError);
-            this.sandyLoader.load(new URLRequest("app:/SandevistanMod/SandevistanMod.swf"),_loc1_);
+            this.sandyLoader.load(new URLRequest("app:/mods/Sandevistan/release/SandevistanMod.swf"),_loc1_);
             trace("SandyMod: load issued");
          }
          catch(err:*)

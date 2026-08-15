@@ -1,7 +1,17 @@
 ==========================================================
-  斯安维斯坦模组 (Sandevistan Mod) v1.108
+  斯安维斯坦模组 (Sandevistan Mod) v1.109
   for Fallout Equestria: REMAINS
 ==========================================================
+
+【v1.109 更新内容】（模组迁入 mods/ 目录——镜像部署）
+  · 模组改为从游戏目录的 mods\Sandevistan\release\ 加载（补丁 MainFE 的
+    app:/ 路径已改并重打三个游戏 SWF）；config.txt 也改从该目录读写
+  · 仓库（C:\RemainsMod）为唯一事实源；游戏目录放镜像副本，
+    C:\RemainsMod\sync-to-game.bat 一键同步（不覆盖游戏内 F9 面板写的
+    config.txt）
+  · 安装/卸载脚本适配新目录层级（mods\Sandevistan\release\..\..\.. = 游戏根）；
+    卸载时优先还原 Steam 更新后的 v2 原版（旧脚本会还原旧版，已修）
+  · 旧 SandevistanMod\ 文件夹暂留作回退，确认新布局稳定后可删
 
 【v1.108 更新内容】（鬼影根治——"回放开始到爆炸结束"钉死在爆炸位置的亮光）
   · 鬼影真根因：游戏 Part.setNull（粒子死亡路径）从不摘除粒子 vis——

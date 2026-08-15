@@ -5,6 +5,7 @@
 
 | 版本 | 内容 |
 |---|---|
+| v1.109 | **模组迁入 mods/ 目录（镜像部署，方案 B）**：①补丁 MainFE 加载路径 `app:/SandevistanMod/SandevistanMod.swf` → `app:/mods/Sandevistan/release/SandevistanMod.swf`（重打 pfe.swf/DLC/pfe.swf/DLC/pfeUI.swf，1.03/1.04 用 v2 原版，三版输出仅 +10 字节）；②模组 config/modlog 路径改为 `mods/Sandevistan/release/...`（loadConfig/saveConfigFile/modlog 三处）；③安装/卸载.bat GAMEDIR 改 `%MODDIR%..\..\..`，卸载优先还原 v2 原版（旧脚本会还原旧版，修复）；④仓库留守 C:\RemainsMod，游戏目录放镜像（sync-to-game.bat，/MIR 排除 build 与 config.txt——config 由游戏内 F9 面板直接写，不覆盖）；旧 SandevistanMod\ 暂留作回退 |
 | v1.108 | **鬼影根治（killPartsDeep）**：真根因=游戏 `Part.setNull`（Part.as:66）死亡路径从不摘除粒子 vis（`Pt.remVisual` 存在但没人调）——时停中爆炸粒子自然死亡/被 partsKill 杀死后 vis 冻结在爆炸位置=钉死鬼影；正常游戏靠 `Grafon.setLight→drawAllObjs`（Grafon.as:681/703）重建图层抹掉孤儿 vis，时停+回放世界冻结期间无重建、回放 boom 爆炸破坏瓦片触发重建才消失（与用户"回放开始到爆炸结束"时段完全吻合）。v1.107 ghostScan 的 visdefwave/visaglau 是误报（R50/R100 证明已跟随玩家），真身=爆炸坐标钉死的 visualFlare+2MC（partsAlive≈0 非粒子本体）。修复：①链上 Part 先 `remVisual()` 再 `setNull()`（endSandy/endReplay 两处 partsKill 改 killPartsDeep）；②显示树扫除自然死亡粒子的孤儿 vis（AllData `<part vis='...'>` 类名清单，倒序遍历）；③mcStepParts 播完即杀补 remVisual。诊断 partsKillDeepS/E: killed=N vis=M；版本标记 v1.108 |
 | v1.107 | ①**ghostScan 显示树扫描（定位鬼影候选）**：回放开始+每 50 帧扫 projBoom 位置 300px 内 visObjs 各图层所有视觉（类名/坐标/可见性）。命中：回放开始时刻爆炸位置附近有**两个可见武器视觉**——`visdefwave`（defwave 法术武器 tip=5，AllData.as:3629）与 `visaglau`（榴弹发射器武器）钉在原地（sloy=2 vis=1 alpha=1）。已排除粒子/录像体/孪生体/重挂/连爆/MC循环。**鬼影未修完**——待确认归属+修复（v1.108 澄清为误报） |
 | v1.106 | ①**鬼影尾焰修复**：v1.105 实证回放末段爆炸粒子寿命未耗尽（idx=200 仍存活 22 个、回放 210 结束）——endReplay **清空全部残留粒子**（partsKillEnd 诊断，实测 n=125） |

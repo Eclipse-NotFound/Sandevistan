@@ -61,12 +61,22 @@ java -Xmx3g -Xms256m -jar build\tools\ffdec\ffdec.jar \
 - 部署：把输出 SWF 复制到游戏目录（`pfe.swf`、`DLC/pfe.swf`、`DLC/pfeUI.swf`），
   同步 `release\patched\`。
 
-## 3. 部署与恢复
+## 3. 部署与恢复（v1.109 起：镜像部署，方案 B）
 
-- 把 `release\` 整个文件夹复制到游戏根目录，**重命名为 `SandevistanMod\`**，
-  运行 `安装.bat`：备份原版（backup 不存在时）→ 复制补丁。**纯 ASCII**（中文会乱码）。
-- `卸载.bat`：从 backup 还原。
-- **Steam 会校验并还原被修改的 DLC 文件**（启动时）——用户重跑安装.bat 即可。
+- **模型**：仓库 `C:\RemainsMod` 是唯一事实源；游戏目录放镜像副本：
+  - `<游戏目录>\mods\`（除 build/）+ `<游戏目录>\shared-knowledge\`
+  - 同步脚本：`C:\RemainsMod\sync-to-game.bat`（robocopy /MIR；排除 build/ 与
+    **config.txt**——游戏内 F9 面板直接写游戏目录里的 config，同步不覆盖）。
+- **运行路径（已写进补丁与模组）**：
+  - 模组加载：`app:/mods/Sandevistan/release/SandevistanMod.swf`
+  - 配置读写：`<游戏目录>\mods\Sandevistan\release\config.txt`
+- **改代码后的完整流程**：改 src → 编译（§1）→ 拷贝到 `release\` → 跑
+  `sync-to-game.bat` →（若改了补丁或游戏 SWF）重打补丁（§2）→ 运行游戏目录
+  `mods\Sandevistan\release\安装.bat`（备份原版+安装 patched/）。
+- `安装.bat`/`卸载.bat` 已适配新层级（GAMEDIR=`%MODDIR%..\..\..`=游戏根）；
+  卸载优先还原 Steam 更新后的 v2 原版。
+- **Steam 会校验并还原被修改的 DLC 文件**（启动时）——重跑 安装.bat 即可。
+- 回退：游戏目录旧 `SandevistanMod\` 保留一轮（含旧补丁与旧 config）。
 - 详细恢复流程见 `state/recovery-guide.md`。
 
 ## 4. 配置（`release\config.txt`）

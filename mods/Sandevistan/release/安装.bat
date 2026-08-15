@@ -7,11 +7,11 @@ echo ============================================
 echo.
 setlocal
 set "MODDIR=%~dp0"
-set "GAMEDIR=%MODDIR%.."
+set "GAMEDIR=%MODDIR%..\..\.."
 
 if not exist "%GAMEDIR%\pfe.swf" (
     echo [ERROR] pfe.swf not found!
-    echo         Put the SandevistanMod folder into the game root directory.
+    echo         This folder must live at mods\Sandevistan\release inside the game root.
     echo         The game root must contain pfe.swf, Remains.exe, etc.
     pause
     exit /b 1
@@ -41,6 +41,6 @@ if exist "%MODDIR%patched\pfe_1.04.swf"     copy /y "%MODDIR%patched\pfe_1.04.sw
 echo.
 echo Done! Start the game via Steam as usual.
 echo Press "\" (backslash) in game to trigger Sandevistan.
-echo Config: SandevistanMod\config.txt  (F9 opens in-game panel)
+echo Config: mods\Sandevistan\release\config.txt  (F9 opens in-game panel)
 echo.
 pause

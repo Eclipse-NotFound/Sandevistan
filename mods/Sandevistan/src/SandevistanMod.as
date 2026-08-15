@@ -317,7 +317,7 @@ package
          inst.log("[SandyMod] init called");
          inst.loadConfig();
          // v1.101：版本标记——日志确认实际加载运行的构建版本与关键开关
-         inst.log("[SandyMod] v1.108 loaded swaprun=" + (inst.cfgSwapRun ? 1 : 0) + " projhits=" + (inst.cfgProjHits ? 1 : 0));
+         inst.log("[SandyMod] v1.109 loaded swaprun=" + (inst.cfgSwapRun ? 1 : 0) + " projhits=" + (inst.cfgProjHits ? 1 : 0));
          if (main != null && main.stage != null)
          {
             main.stage.addEventListener(Event.ENTER_FRAME, inst.onFrame);
@@ -348,7 +348,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.108 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.109 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -376,7 +376,7 @@ package
          catch (e:*) { err = String(e); }
          try
          {
-            var f2:File = File.applicationDirectory.resolvePath("SandevistanMod/modlog.txt");
+            var f2:File = File.applicationDirectory.resolvePath("mods/Sandevistan/release/modlog.txt");
             var s2:FileStream = new FileStream();
             s2.open(f2, FileMode.APPEND);
             s2.writeUTFBytes(msg + String.fromCharCode(13, 10) + (err != "" ? " [appDirErr: " + err + "]" : "") + String.fromCharCode(13, 10));
@@ -390,7 +390,7 @@ package
       {
          try
          {
-            var cfg:File = File.applicationDirectory.resolvePath("SandevistanMod/config.txt");
+            var cfg:File = File.applicationDirectory.resolvePath("mods/Sandevistan/release/config.txt");
             if (cfg.exists)
             {
                var stream:FileStream = new FileStream();
@@ -2851,7 +2851,7 @@ package
       {
          try
          {
-            var f:File = File.applicationDirectory.resolvePath("SandevistanMod/config.txt");
+            var f:File = File.applicationDirectory.resolvePath("mods/Sandevistan/release/config.txt");
             var stream:FileStream = new FileStream();
             stream.open(f, FileMode.WRITE);
             var NL:String = String.fromCharCode(13, 10);
