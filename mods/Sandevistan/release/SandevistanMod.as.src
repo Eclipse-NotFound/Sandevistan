@@ -322,7 +322,7 @@ package
          // 死亡位置 = 鬼影真因。
          try { inst.slowPartClass = ApplicationDomain.currentDomain.getDefinition("fe.graph.Part") as Class; } catch (e:*) { }
          // v1.101：版本标记——日志确认实际加载运行的构建版本与关键开关
-         inst.log("[SandyMod] v1.111 loaded swaprun=" + (inst.cfgSwapRun ? 1 : 0) + " projhits=" + (inst.cfgProjHits ? 1 : 0));
+         inst.log("[SandyMod] v1.112 loaded swaprun=" + (inst.cfgSwapRun ? 1 : 0) + " projhits=" + (inst.cfgProjHits ? 1 : 0));
          if (main != null && main.stage != null)
          {
             main.stage.addEventListener(Event.ENTER_FRAME, inst.onFrame);
@@ -353,7 +353,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.111 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.112 已加载 (按 \ 触发斯安维斯坦)";
             t.autoSize = "left";   // v1.110：版本号此前显示不全（TextField 默认宽度截断）
             t.x = 10;
             t.y = 10;
@@ -2841,7 +2841,7 @@ package
       {
          if (panelTf == null) return;
          var lines:Array = [];
-         lines.push("== SandevistanMod v1.111 参数 ==");
+         lines.push("== SandevistanMod v1.112 参数 ==");
          lines.push((panelSel == 0 ? "> " : "  ") + "生效时长   " + (cfgDuration / 30).toFixed(1) + "s");
          lines.push((panelSel == 1 ? "> " : "  ") + "冷却       " + (cfgCooldown / 30).toFixed(1) + "s");
          lines.push((panelSel == 2 ? "> " : "  ") + "回放速度   x" + cfgReplaySpeed);
@@ -3629,12 +3629,38 @@ package
          var nV:int = sweepOrphanPartVis();
          log("[DIAG] partsKillDeep" + tag + ": killed=" + nK + " vis=" + nV);
       }
-      // 显示树扫除（倒序遍历，边遍历边移除）：自然死亡粒子的孤儿 vis
-      // （游戏 Part.setNull 不摘除 vis——正常游戏靠 drawAllObjs 图层重建抹掉，
-      // 冻结/慢速世界里需要显式扫除）
+      // 显示树扫除（倒序遍历，边遍历边移除）：**孤儿**粒子 vis——
+      // 类名属于粒子视觉类、且**不属于任何活粒子**的 vis（游戏 Part.setNull
+      // 不摘除 vis——正常游戏靠 drawAllObjs 图层重建抹掉，冻结/慢速世界里
+      // 需要显式扫除）。
+      // v1.112：先收集活粒子的 vis 集合、扫除时跳过——v1.111 的扫除把
+      // 回放末段**活粒子**的 vis 也摘了=爆炸动画在回放结束瞬间消失
+      // （日志实证：partsAlive n=17 且 boom 在 replIdx=210，partsResumeE
+      // vis=6——活粒子丢 vis 后无声死亡）。
       private function sweepOrphanPartVis():int
       {
          buildPartVisSet();
+         var liveVis:Dictionary = new Dictionary();
+         try
+         {
+            var PartCls:Class = ApplicationDomain.currentDomain.getDefinition("fe.graph.Part") as Class;
+            if (PartCls != null)
+            {
+               var oL:Object = world.loc.firstObj;
+               var gL:int = 0;
+               while (oL != null)
+               {
+                  try
+                  {
+                     if (oL is PartCls && oL.vis != null) { liveVis[oL.vis] = true; }
+                  }
+                  catch (e:*) { }
+                  oL = oL.nobj;
+                  if (++gL > 20000) break;
+               }
+            }
+         }
+         catch (e:*) { }
          var nV:int = 0;
          try
          {
@@ -3653,7 +3679,7 @@ package
                         if (chK == null) continue;
                         var qnK:String = "";
                         try { qnK = flash.utils.getQualifiedClassName(chK); } catch (e:*) { }
-                        if (partVisSet[qnK] == true)
+                        if (partVisSet[qnK] == true && liveVis[chK] != true)
                         {
                            try { layK.removeChild(chK); nV++; } catch (e:*) { }
                         }

@@ -7,7 +7,7 @@
 
 ## 0. 当前状态（2026-08-15）
 
-- **当前版本 v1.111**（git master），已按**镜像部署**运行：仓库 `C:\RemainsMod` 为
+- **当前版本 v1.112**（git master），已按**镜像部署**运行：仓库 `C:\RemainsMod` 为
   唯一事实源；游戏目录是**多 agent 共享工作区**——`mods\Sandevistan` 全镜像
   （同步脚本 `C:\RemainsMod\sync-to-game.bat`，排除 build 与 config.txt），
   `shared-knowledge\`/`game-reference\` 增补式同步，**不删除其他 agent 的文件**。
@@ -16,12 +16,13 @@
   config.txt 也在此目录（F9 面板直接写这里，同步脚本不覆盖）。
 - **已解决（用户确认 ✓）**：鬼影（v1.110 slowPartClass+reatt 修复，用户实测确认）；
   启动标记版本号显示完整；F9 面板标题带版本号。
-- **v1.111 内容**：回放结束不再瞬间清空粒子——未播完的爆炸动画自然播完
-  （resumePartsAtEnd：MC 恢复 play() + 孤儿 vis 扫除保留；liv 已钳 ≤20，尾焰 ≤0.7 秒）。
+- **v1.111-1.112 内容**：回放结束不再瞬间清空粒子——未播完的爆炸动画自然播完
+  （resumePartsAtEnd：MC 恢复 play()；孤儿 vis 扫除只摘"无活主人的孤儿"——
+  v1.111 误摘活粒子 vis 已在 v1.112 修正，日志实证 partsResumeE vis=6 即此）。
 - **待用户实测确认**：回放末段爆炸（回放即将结束时爆炸）在回放结束后动画
   自然播完、不突兀消失、也不长时间残留。
 - **日志**：`C:\Users\micha\AppData\Roaming\pfe\Local Store\sandy_modlog.txt`
-  （启动有 `v1.111 loaded swaprun=1` 标记；诊断行 grep -a 取：
+  （启动有 `v1.112 loaded swaprun=1` 标记；诊断行 grep -a 取：
   ghostScan/partsKillDeep/partsResumeE/reatt/boom/twinKill/swapRun）。
 
 ## 1. 已知问题与待办
