@@ -189,6 +189,53 @@ package
       private var partErrCnt:int = 0;                  // v1.105：回放粒子 step 异常计数
       private var replayPartTick:int = 0;              // v1.105：回放粒子存活诊断计数
       private var reattDiagCnt:int = 0;                // v1.105：重挂诊断计数
+
+      // ===== v1.107：爆炸位置视觉清点——定位"回放开始到爆炸结束时段"的鬼影 =====
+      // 扫描显示树（grafon.visObjs 各图层）中爆炸记录位置附近的视觉
+      // （类名/坐标/可见性）——直接点名鬼影本体（粒子/对象/重挂 vis/瓦片
+      // 贴花都不放过）。
+      private function ghostScan(tag:String):void
+      {
+         try
+         {
+            var gVis:Object = world["grafon"];
+            if (gVis == null || gVis.visObjs == null) return;
+            var nB:int = 0;
+            for (var kBx:Object in projBoom)
+            {
+               if (nB >= 2) break;
+               var bmx:Object = projBoom[kBx];
+               if (bmx == null) continue;
+               nB++;
+               for (var sl:int = 0; sl < 8; sl++)
+               {
+                  var lay:Object = gVis.visObjs[sl];
+                  if (lay == null) continue;
+                  try
+                  {
+                     var nc:int = lay.numChildren;
+                     var found:int = 0;
+                     for (var ci:int = 0; ci < nc && found < 4; ci++)
+                     {
+                        var ch:* = lay.getChildAt(ci);
+                        if (ch == null) continue;
+                        var ddxG:Number = ch.x - bmx.x;
+                        var ddyG:Number = ch.y - bmx.y;
+                        if (ddxG * ddxG + ddyG * ddyG <= 300 * 300)
+                        {
+                           found++;
+                           log("[DIAG] ghostScan" + tag + ": sloy=" + sl + " cls=" + flash.utils.getQualifiedClassName(ch)
+                               + " x=" + ch.x + " y=" + ch.y + " vis=" + (ch.visible != false ? 1 : 0)
+                               + " alpha=" + (ch.alpha != null ? ch.alpha : -1));
+                        }
+                     }
+                  }
+                  catch (e:*) { }
+               }
+            }
+         }
+         catch (e:*) { }
+      }
       private var reattached:Dictionary = new Dictionary(); // 回放中重挂过 vis 的对象（结束摘除，防残留画面）
       private function addEnemyAtk(u:Object, ev:Object):void
       {
@@ -3545,6 +3592,8 @@ package
             partDiagOnce = false;
             replayPartTick = 0;
             partErrCnt = 0;
+            // v1.107：回放开始时刻的爆炸位置视觉清点（鬼影本体点名）
+            ghostScan("S");
             try
             {
                var cntWp:int = 0, cntUn:int = 0, cntSc:int = 0, cntOt:int = 0;
@@ -4112,6 +4161,8 @@ package
                }
             }
             catch (e:*) { }
+            // v1.107：每 10 显示帧同扫爆炸位置视觉（跟踪鬼影何时出现/消失）
+            if (replayIdx % 50 == 0) { ghostScan("R" + replayIdx); }
          }
          // 回放动画诊断（每 30 帧）：采样前 2 个重演单位的视觉像素哈希——
          // 哈希随帧变化=动画在播放；恒不变=渲染冻结（僵死根因判定）
