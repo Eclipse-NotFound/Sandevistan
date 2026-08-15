@@ -316,8 +316,13 @@ package
          inst = new SandevistanMod();
          inst.log("[SandyMod] init called");
          inst.loadConfig();
+         // v1.110：初始化粒子类引用——recordReplayObjects 的"粒子跳过"分支
+         // 依赖它，但此前从未赋值（oR is null 恒 false）→ 时停中粒子被误
+         // 录像 → 回放 v1.87 reatt 把已死粒子的 vis 重新挂回显示树、钉在
+         // 死亡位置 = 鬼影真因。
+         try { inst.slowPartClass = ApplicationDomain.currentDomain.getDefinition("fe.graph.Part") as Class; } catch (e:*) { }
          // v1.101：版本标记——日志确认实际加载运行的构建版本与关键开关
-         inst.log("[SandyMod] v1.109 loaded swaprun=" + (inst.cfgSwapRun ? 1 : 0) + " projhits=" + (inst.cfgProjHits ? 1 : 0));
+         inst.log("[SandyMod] v1.110 loaded swaprun=" + (inst.cfgSwapRun ? 1 : 0) + " projhits=" + (inst.cfgProjHits ? 1 : 0));
          if (main != null && main.stage != null)
          {
             main.stage.addEventListener(Event.ENTER_FRAME, inst.onFrame);
@@ -348,7 +353,8 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.109 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.110 已加载 (按 \ 触发斯安维斯坦)";
+            t.autoSize = "left";   // v1.110：版本号此前显示不全（TextField 默认宽度截断）
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -1228,7 +1234,12 @@ package
                   // 轨迹；单位（有 setPos）不走此路径（其 vis 未摘除）。
                   try
                   {
-                     if (!hasSP && oR.vis != null && oR.vis.parent == null && oR.sloy != null)
+                     // v1.110：排除粒子对象——时停中死亡/被清除的粒子其 vis
+                     // 已在 endSandy 被 killPartsDeep 摘除，reatt 把它们挂回
+                     // 显示树 = 回放中钉在死亡位置的鬼影（v1.109 日志实证：
+                     // reatt fe.graph::Part 钉在爆炸点，R50-R150 全程可见）。
+                     if (!hasSP && !(slowPartClass != null && oR is slowPartClass)
+                         && oR.vis != null && oR.vis.parent == null && oR.sloy != null)
                      {
                         var gVis2:Object = world["grafon"];
                         if (gVis2 != null && gVis2.visObjs != null && gVis2.visObjs[oR.sloy] != null)
@@ -2830,7 +2841,7 @@ package
       {
          if (panelTf == null) return;
          var lines:Array = [];
-         lines.push("== SandevistanMod 参数 ==");
+         lines.push("== SandevistanMod v1.110 参数 ==");
          lines.push((panelSel == 0 ? "> " : "  ") + "生效时长   " + (cfgDuration / 30).toFixed(1) + "s");
          lines.push((panelSel == 1 ? "> " : "  ") + "冷却       " + (cfgCooldown / 30).toFixed(1) + "s");
          lines.push((panelSel == 2 ? "> " : "  ") + "回放速度   x" + cfgReplaySpeed);

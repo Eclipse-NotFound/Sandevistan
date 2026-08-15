@@ -4,20 +4,20 @@
 
 ## 0. 当前状态（2026-08-15）
 
-- **当前版本 v1.109**（git master），已按**镜像部署**运行：仓库 `C:\RemainsMod` 为
+- **当前版本 v1.110**（git master），已按**镜像部署**运行：仓库 `C:\RemainsMod` 为
   唯一事实源；游戏目录放镜像（`mods/` 除 build + `shared-knowledge/`，同步脚本
   `C:\RemainsMod\sync-to-game.bat`）。游戏通过补丁直接从
   `<游戏目录>\mods\Sandevistan\release\SandevistanMod.swf` 加载模组，
   config.txt 也在此目录（F9 面板直接写这里，同步脚本不覆盖）。
-- **v1.109 内容**：补丁加载路径 + 模组 config/modlog 路径改到 mods/ 布局；
-  三个游戏 SWF 已重打并部署；安装/卸载.bat 适配新层级（卸载优先还原 v2 原版）。
-  旧 `SandevistanMod\` 文件夹暂留作回退，确认稳定后可删。
-- **待用户实测确认**：①v1.109 加载标记（左上角 "SandevistanMod v1.109 已加载"）；
-  ②触发时停/回放正常、F9 面板保存 config 生效（写入 mods\Sandevistan\release\config.txt）；
-  ③v1.108 鬼影修复是否生效（回放开始到爆炸前不再有钉死亮光）。
+- **v1.110 内容**：鬼影真根因修复（slowPartClass 未初始化→粒子误录像→v1.87
+  reatt 复活死粒子 vis 钉在爆炸点；修复=初始化 slowPartClass + reatt 排除 Part）；
+  启动标记版本号 autoSize 显示完整；F9 面板标题带版本号。
+- **待用户实测确认**：①启动标记完整显示 "SandevistanMod v1.110 已加载"；
+  ②触发时停（最好带爆炸）→ 回放，确认爆炸点不再有钉死亮光（v1.108/v1.110 鬼影）；
+  ③F9 面板保存 config 生效（写入 mods\Sandevistan\release\config.txt）。
 - **日志**：`C:\Users\micha\AppData\Roaming\pfe\Local Store\sandy_modlog.txt`
-  （启动有 `v1.109 loaded swaprun=1` 标记；诊断行 grep -a 取：
-  ghostScan/partsKillDeep/boom/twinKill/swapRun）。
+  （启动有 `v1.110 loaded swaprun=1` 标记；诊断行 grep -a 取：
+  ghostScan/partsKillDeep/reatt/boom/twinKill/swapRun）。
 
 ## 1. 已知问题与待办
 
