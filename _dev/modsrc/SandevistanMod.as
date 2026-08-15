@@ -317,7 +317,7 @@ package
          inst.log("[SandyMod] init called");
          inst.loadConfig();
          // v1.101：版本标记——日志确认实际加载运行的构建版本与关键开关
-         inst.log("[SandyMod] v1.101 loaded swaprun=" + (inst.cfgSwapRun ? 1 : 0) + " projhits=" + (inst.cfgProjHits ? 1 : 0));
+         inst.log("[SandyMod] v1.108 loaded swaprun=" + (inst.cfgSwapRun ? 1 : 0) + " projhits=" + (inst.cfgProjHits ? 1 : 0));
          if (main != null && main.stage != null)
          {
             main.stage.addEventListener(Event.ENTER_FRAME, inst.onFrame);
@@ -348,7 +348,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.89 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.108 已加载 (按 \ 触发斯安维斯坦)";
             t.x = 10;
             t.y = 10;
             t.selectable = false;
@@ -3089,25 +3089,12 @@ package
          // v1.99 半径清除都杀不净）。回放世界冻结（无环境粒子重生），清空后
          // 回放画面干净；回放中的爆炸粒子由 boom 新生成，回放结束后环境
          // 粒子自然重生。
-         try
-         {
-            var PartCls:Class = ApplicationDomain.currentDomain.getDefinition("fe.graph.Part") as Class;
-            if (PartCls != null)
-            {
-               var oPK:Object = world.loc.firstObj;
-               var gPK:int = 0;
-               var nPK:int = 0;
-               while (oPK != null)
-               {
-                  var nxPK:Object = oPK.nobj;
-                  try { if (oPK is PartCls) { oPK.setNull(); nPK++; } } catch (e:*) { }
-                  oPK = nxPK;
-                  if (++gPK > 20000) break;
-               }
-               log("[DIAG] partsKill: n=" + nPK);
-            }
-         }
-         catch (e:*) { }
+         // v1.108：改走 killPartsDeep——游戏 Part.setNull 不摘除 vis（Part.as:66
+         // 只 remObj，从不调 Pt.remVisual），被杀的粒子 vis 遗留在 visObjs 层、
+         // 钉在爆炸位置=回放鬼影（"从回放开始到爆炸结束"的亮光——visualFlare
+         // 等爆炸视觉，R50/R100 扫描实证钉死不动）。深层清除=先 remVisual
+         // 再 setNull + 显示树扫除自然死亡粒子的孤儿 vis。
+         killPartsDeep(world.loc, "S");
          // 追踪器数组长度诊断（v1.88）：len=1 说明追加失败（对象"未重演"定位）
          try
          {
@@ -3527,6 +3514,9 @@ package
                               // （慢放+停末帧，已确认正常）。
                               if (replaying && objP.vis.currentFrame >= objP.vis.totalFrames)
                               {
+                                 // v1.108：先摘 vis 再杀——setNull 不摘除 vis
+                                 //（Part.as:66），播完即杀的 MC vis 会遗留在图层
+                                 try { objP.remVisual(); } catch (e:*) { }
                                  try { objP.setNull(); } catch (e:*) { }
                               }
                            }
@@ -3557,6 +3547,106 @@ package
       }
 
       // ==================== 回放 ====================
+      // ===== v1.108：粒子深层清除（鬼影根治）=====
+      // 根因：游戏 Part.setNull（Part.as:66）只 loc.remObj 出链，**从不摘除 vis**
+      // （Pt.remVisual 存在但死亡路径不调用）——正常游戏中这些孤儿 vis 由
+      // Grafon.setLight→drawAllObjs（Grafon.as:681/703，爆炸破坏瓦片触发光照
+      // 重算）重建图层时抹掉；时停+回放世界冻结期间没有重建：时停中爆炸粒子
+      // 自然死亡或被 partsKill 杀死后，vis 冻结在爆炸位置（visualFlare 亮光等）
+      // =用户所见"回放开始到爆炸结束"的钉死鬼影（v1.107 ghostScan R50/R100
+      // 实证：爆炸坐标 (1028.8,299.3) 上 visualFlare+2MC 全程可见，boom 爆炸
+      // 破坏瓦片→drawAllObjs 重建图层才消失——与用户"爆炸结束后鬼影消失"
+      // 完全吻合）。
+      // 修复：①链上每个 Part 先 remVisual 再 setNull（被杀粒子的 vis 一并摘除）；
+      // ②显示树扫除——时停中**自然死亡**粒子的 vis（其 Part 已出链，①够不到），
+      // 按已知粒子视觉类名集合（AllData <part vis='...'> 清单，v1.02 静态数据）
+      // 从 visObjs 各图层移除。
+      private var partVisSet:Object = null;
+      private function buildPartVisSet():void
+      {
+         if (partVisSet != null) return;
+         partVisSet = {};
+         var arrP:Array = ["visualFlare", "visualBum", "visualBumAcid", "visualBumNecro", "visualBlast",
+            "visualPlaExpl", "visualImpExpl", "visualIceExpl", "visualSparkleExpl", "visualBaleblast",
+            "visualAcidExpl", "visualEclipse", "visualMiniexpl", "visualThrow", "visualBloodblast",
+            "visualBloodblast2", "visualNecrblast", "visualNecrblast2", "visualNecrblast3",
+            "visualGilza", "visualFlame", "visualTeleFlare", "visualIceFlare", "visualGas",
+            "visualPinkGas", "visualKusok", "visualKusokB", "visualKusokD", "visualSteklo",
+            "visualKusoch", "visualKusochB", "visualSchep", "visualSchepoch", "visualMetal",
+            "visualPole", "visualPole2", "visualBur", "visualPlav", "visualFake", "visualGwall",
+            "visualSnow", "visualAcid", "visualSteam", "visualDischarge", "visualShmatok",
+            "visualBlack", "visualPoison", "visualStun", "visualSlow", "visualBlind", "visualTele",
+            "visualRadioblast", "visualQuake", "visualNecroNoise", "visualZzz", "visualRedRay",
+            "visualVsos", "visualBubble", "visualElectro", "visualNoise", "visualSign1",
+            "visualMarker", "visualNumb", "visualMagSymbol", "flPlasma", "flPlasma2", "flLaser",
+            "flLaser2", "flSpark", "flSparkl", "flDray", "flPlevok", "flPinkPlevok", "flUnlock",
+            "flMoln", "flGreen", "flRed", "PlasmaKap", "die_spark", "bloat_kap", "purple_spark",
+            "green_spark", "gold_spark", "blue_spark", "orange_spark", "visReplic", "visReplic2",
+            "visBulb"];
+         for (var iP:int = 0; iP < arrP.length; iP++) { partVisSet[arrP[iP]] = true; }
+      }
+      private function killPartsDeep(locP:Object, tag:String):void
+      {
+         buildPartVisSet();
+         var nK:int = 0;
+         var nV:int = 0;
+         try
+         {
+            var PartCls:Class = ApplicationDomain.currentDomain.getDefinition("fe.graph.Part") as Class;
+            if (PartCls != null)
+            {
+               var oPK:Object = locP.firstObj;
+               var gPK:int = 0;
+               while (oPK != null)
+               {
+                  var nxPK:Object = oPK.nobj;
+                  try
+                  {
+                     if (oPK is PartCls)
+                     {
+                        try { oPK.remVisual(); } catch (e:*) { }
+                        try { oPK.setNull(); } catch (e:*) { }
+                        nK++;
+                     }
+                  }
+                  catch (e:*) { }
+                  oPK = nxPK;
+                  if (++gPK > 20000) break;
+               }
+            }
+         }
+         catch (e:*) { }
+         // 显示树扫除（倒序遍历，边遍历边移除）：自然死亡粒子的孤儿 vis
+         try
+         {
+            var gVisK:Object = world["grafon"];
+            if (gVisK != null && gVisK.visObjs != null)
+            {
+               for (var slK:int = 0; slK < 8; slK++)
+               {
+                  var layK:Object = gVisK.visObjs[slK];
+                  if (layK == null) continue;
+                  try
+                  {
+                     for (var ciK:int = layK.numChildren - 1; ciK >= 0; ciK--)
+                     {
+                        var chK:* = layK.getChildAt(ciK);
+                        if (chK == null) continue;
+                        var qnK:String = "";
+                        try { qnK = flash.utils.getQualifiedClassName(chK); } catch (e:*) { }
+                        if (partVisSet[qnK] == true)
+                        {
+                           try { layK.removeChild(chK); nV++; } catch (e:*) { }
+                        }
+                     }
+                  }
+                  catch (e:*) { }
+               }
+            }
+         }
+         catch (e:*) { }
+         log("[DIAG] partsKillDeep" + tag + ": killed=" + nK + " vis=" + nV);
+      }
       private function stepReplay():void
       {
          try
@@ -4319,25 +4409,9 @@ package
          // 210 结束），火光尾焰溢出到回放结束之后（"火光一直留着，回放
          // 结束后才消失"=鬼影）。清空后火光随回放一起结束；回放结束后的
          // 世界正常运行时环境粒子自然重生。
-         try
-         {
-            var PartC6:Class = ApplicationDomain.currentDomain.getDefinition("fe.graph.Part") as Class;
-            if (PartC6 != null)
-            {
-               var oP6:Object = world.loc.firstObj;
-               var gP6:int = 0;
-               var nP6:int = 0;
-               while (oP6 != null)
-               {
-                  var nxP6:Object = oP6.nobj;
-                  try { if (oP6 is PartC6) { oP6.setNull(); nP6++; } } catch (e:*) { }
-                  oP6 = nxP6;
-                  if (++gP6 > 20000) break;
-               }
-               log("[DIAG] partsKillEnd: n=" + nP6);
-            }
-         }
-         catch (e:*) { }
+         // v1.108：改走 killPartsDeep（remVisual+setNull+孤儿 vis 扫除——与
+         // endSandy 同款，防回放爆炸粒子死亡后 vis 遗留在爆炸位置）。
+         killPartsDeep(world.loc, "E");
          // v1.98：恢复回放中惰性化的重执行爆炸体——仍存活在飞的（录像原体
          // 时停末未爆/未配对孪生体）回放结束后继续自然飞行/爆炸；已被 boom
          // 终止或已 babah/出链的不恢复（防第二次爆炸）。
