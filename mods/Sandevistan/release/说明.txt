@@ -1,7 +1,16 @@
 ==========================================================
-  斯安维斯坦模组 (Sandevistan Mod) v1.113
+  斯安维斯坦模组 (Sandevistan Mod) v1.114
   for Fallout Equestria: REMAINS
 ==========================================================
+
+【v1.114 更新内容】（投掷物血量/护甲可按武器单独设置）
+  · 可击落爆炸物是血量机制（默认 30 血，伤害先减护甲，血量到 0 才引爆）
+  · 新增按武器 id 的覆盖项：config.txt 写 projhp_<武器id> /
+    projarmor_<武器id>（如 projhp_grenade=60、projhp_bel=120、
+    projhp_aglau=45、projarmor_aglau=10）；没写覆盖项的沿用全局
+    projhp/projarmor
+  · 常用 id：grenade=手雷、bel=野火核弹、aglau=榴弹发射器、mlau=导弹发射器
+  · F9 面板保存 config 时会保留这些自定义覆盖项（自动回写）
 
 【v1.113 更新内容】（爆炸动画按原生速度播完）
   · 移除回放中的粒子寿命钳制（v1.104 曾把寿命压到 20 帧）——野火核弹

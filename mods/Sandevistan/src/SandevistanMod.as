@@ -173,6 +173,8 @@ package
       private var cfgProjHp:Number = 30;        // 投掷物血量
       private var cfgProjArmor:Number = 0;      // 投掷物护甲（预留接口：伤害先减护甲）
       private var projHp:Dictionary = new Dictionary();  // 投掷物 → 当前血量
+      private var projHpOver:Object = null;     // v1.114：按武器 id 的血量覆盖（projhp_<id>）
+      private var projArmorOver:Object = null;  // v1.114：按武器 id 的护甲覆盖（projarmor_<id>）
       private var seenAtk:Dictionary = new Dictionary(); // 攻击体追踪器（v1.85：按引用录像，绕开链扫描之谜）
       private var projBoom:Dictionary = new Dictionary(); // v1.91：时停中引爆的投掷物 → {f,x,y}（回放对应帧真实爆炸）
       private var reExecPin:Dictionary = new Dictionary(); // v1.94：重执行爆弹体 → 录像孪生体（回放钉到录像轨迹）
@@ -322,7 +324,7 @@ package
          // 死亡位置 = 鬼影真因。
          try { inst.slowPartClass = ApplicationDomain.currentDomain.getDefinition("fe.graph.Part") as Class; } catch (e:*) { }
          // v1.101：版本标记——日志确认实际加载运行的构建版本与关键开关
-         inst.log("[SandyMod] v1.113 loaded swaprun=" + (inst.cfgSwapRun ? 1 : 0) + " projhits=" + (inst.cfgProjHits ? 1 : 0));
+         inst.log("[SandyMod] v1.114 loaded swaprun=" + (inst.cfgSwapRun ? 1 : 0) + " projhits=" + (inst.cfgProjHits ? 1 : 0));
          if (main != null && main.stage != null)
          {
             main.stage.addEventListener(Event.ENTER_FRAME, inst.onFrame);
@@ -353,7 +355,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.113 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.114 已加载 (按 \ 触发斯安维斯坦)";
             t.autoSize = "left";   // v1.110：版本号此前显示不全（TextField 默认宽度截断）
             t.x = 10;
             t.y = 10;
@@ -404,6 +406,9 @@ package
                var txt:String = stream.readUTFBytes(stream.bytesAvailable);
                stream.close();
                var lines:Array = txt.split(/\r?\n/);
+               // v1.114：按武器 id 的投掷物血量/护甲覆盖（projhp_<id>/projarmor_<id>）
+               projHpOver = {};
+               projArmorOver = {};
                for each (var line:String in lines)
                {
                   line = line.replace(/^\s+|\s+$/g, "");
@@ -429,6 +434,22 @@ package
                   else if (k == "projhits") cfgProjHits = v.toLowerCase() == "1" || v.toLowerCase() == "true";
                   else if (k == "projhp") cfgProjHp = parseInt(v);
                   else if (k == "projarmor") cfgProjArmor = parseInt(v);
+                  // v1.114：按武器 id 的覆盖项（projhp_aglau=45 / projarmor_bel=10 等；
+                  // 键已 toLowerCase，武器 id 均为小写，直接匹配）
+                  else if (k.indexOf("projhp_") == 0 && k.length > 7)
+                  {
+                     var hpOv:int = parseInt(v);
+                     if (hpOv < 1) hpOv = 1;
+                     if (hpOv > 1000) hpOv = 1000;
+                     try { projHpOver[k.substr(7)] = hpOv; } catch (e:*) { }
+                  }
+                  else if (k.indexOf("projarmor_") == 0 && k.length > 10)
+                  {
+                     var armOv:int = parseInt(v);
+                     if (armOv < 0) armOv = 0;
+                     if (armOv > 500) armOv = 500;
+                     try { projArmorOver[k.substr(10)] = armOv; } catch (e:*) { }
+                  }
                   else if (k == "slowfactor") cfgSlowFactor = parseFloat(v);
                   else if (k == "colormode") cfgColorMode = parseInt(v);
                   else if (k == "edgethresh") cfgEdgeThresh = parseFloat(v);
@@ -1944,10 +1965,18 @@ package
                      // 时停中玩家子弹伤害被清零——用捕获的原始伤害
                      if (dmg <= 0 && b.owner == world.gg && origDam[b] != null) { dmg = origDam[b]; }
                      if (dmg <= 0) continue;
-                     dmg -= cfgProjArmor;   // 护甲（预留接口）
+                     // v1.114：按发射武器 id 的护甲/血量覆盖（projarmor_<id>/projhp_<id>，
+                     // 无覆盖项用全局 projarmor/projhp）
+                     var wIdP:String = "";
+                     try { if (p.weap != null && p.weap.id != null) { wIdP = String(p.weap.id); } } catch (e:*) { }
+                     var armP:Number = cfgProjArmor;
+                     if (wIdP != "" && projArmorOver != null && projArmorOver[wIdP] != null) { armP = projArmorOver[wIdP]; }
+                     dmg -= armP;   // 护甲（伤害先减护甲）
                      if (dmg <= 0) continue;
                      try { locP.remObj(b); } catch (e:*) { }   // 命中子弹弹出
-                     var hpP:Number = projHp[p] != null ? projHp[p] : cfgProjHp;
+                     var baseHpP:Number = cfgProjHp;
+                     if (wIdP != "" && projHpOver != null && projHpOver[wIdP] != null) { baseHpP = projHpOver[wIdP]; }
+                     var hpP:Number = projHp[p] != null ? projHp[p] : baseHpP;
                      hpP -= dmg;
                      if (hpP <= 0)
                      {
@@ -2841,7 +2870,7 @@ package
       {
          if (panelTf == null) return;
          var lines:Array = [];
-         lines.push("== SandevistanMod v1.113 参数 ==");
+         lines.push("== SandevistanMod v1.114 参数 ==");
          lines.push((panelSel == 0 ? "> " : "  ") + "生效时长   " + (cfgDuration / 30).toFixed(1) + "s");
          lines.push((panelSel == 1 ? "> " : "  ") + "冷却       " + (cfgCooldown / 30).toFixed(1) + "s");
          lines.push((panelSel == 2 ? "> " : "  ") + "回放速度   x" + cfgReplaySpeed);
@@ -2880,6 +2909,20 @@ package
             sb.push("projhits=" + (cfgProjHits ? 1 : 0));
             sb.push("projhp=" + cfgProjHp);
             sb.push("projarmor=" + cfgProjArmor);
+            // v1.114：回写按武器 id 的覆盖项——F9 面板保存时重写整个 config，
+            // 不写回会丢用户自定义的 projhp_<id>/projarmor_<id>
+            try
+            {
+               if (projHpOver != null)
+               {
+                  for (var kOH:String in projHpOver) { sb.push("projhp_" + kOH + "=" + projHpOver[kOH]); }
+               }
+               if (projArmorOver != null)
+               {
+                  for (var kOA:String in projArmorOver) { sb.push("projarmor_" + kOA + "=" + projArmorOver[kOA]); }
+               }
+            }
+            catch (e:*) { }
             sb.push("ghostalpha=" + cfgGhostAlpha);
             sb.push("ghostblend=" + cfgGhostBlend);
             sb.push("colormode=" + cfgColorMode);

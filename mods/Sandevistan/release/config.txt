@@ -43,6 +43,14 @@ projhp=30
 # 投掷物护甲（默认 0；预留接口——伤害先减护甲再扣血量）
 projarmor=0
 
+# ===== v1.114：按武器 id 单独设置血量/护甲（可选，不写=用上面的全局值）=====
+# 键格式：projhp_<武器id> / projarmor_<武器id>
+# 常用武器 id：grenade=手雷  bel=野火核弹  aglau=榴弹发射器  mlau=导弹发射器
+# projhp_grenade=60
+# projhp_bel=120
+# projhp_aglau=45
+# projarmor_aglau=10
+
 # 启动时在左上角显示"模组已加载"标记（1=显示 0=隐藏，默认 1）
 showmark=1
 

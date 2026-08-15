@@ -95,6 +95,10 @@ swaprun=1        疾跑中切枪开关（1=疾跑时数字键按第一组快捷�
 projhits=1       投掷物可击落开关（独立于时停，常规游戏也生效）
 projhp=30        投掷物血量（受击至 0 引爆）
 projarmor=0      投掷物护甲（伤害先减护甲，预留接口）
+# v1.114 按武器 id 单独设置（可选，不写=用全局值）：
+#   projhp_<武器id> / projarmor_<武器id>
+#   例：projhp_grenade=60  projhp_bel=120  projhp_aglau=45  projarmor_aglau=10
+#   常用 id：grenade=手雷 bel=野火核弹 aglau=榴弹发射器 mlau=导弹发射器
 showmark=1       加载标记
 panelkey=120     F9 参数面板
 diaglog=0        诊断日志（AppData\Roaming\pfe\Local Store\sandy_modlog.txt）

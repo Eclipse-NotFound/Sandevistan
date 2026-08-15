@@ -5,6 +5,7 @@
 
 | 版本 | 内容 |
 |---|---|
+| v1.114 | **投掷物血量/护甲按武器 id 覆盖**：可击落爆炸物=血量机制（默认 30，伤害先减护甲，血量≤0 才引爆）——新增 config `projhp_<武器id>`/`projarmor_<武器id>`（读配置动态收集进 projHpOver/projArmorOver，判定时按 p.weap.id 取覆盖值，无覆盖沿用全局；键小写匹配武器 id）；saveConfigFile 回写覆盖项（防 F9 面板保存丢用户自定义）；config.txt 附注释示例 |
 | v1.113 | **爆炸动画按原生速度播完**：移除 v1.104 的回放粒子寿命钳制（liv>20 压到 20）——钳制把长寿命爆炸粒子压缩播放：野火核弹 balefire 60 帧压成 20 帧=3 倍速（用户实测"播放速度有些快，野火核弹尤为明显"；baleblast 30→20=1.5 倍）。v1.111/1.112 已让未播完爆炸在回放后自然续播，钳制失去意义——回放中按原生 liv 以 1 世界步/显示帧播放，剩余部分回放后由世界恢复步进自然播完（原生速度/原生时长） |
 | v1.112 | **回放结束爆炸动画自然播完（修正版）**：v1.111 的 sweepOrphanPartVis 扫除不分死活——类名命中即摘，把回放末段**活粒子**的 vis 也摘了（日志实证：partsAlive n=17 且 boom 在 replIdx=210、partsResumeE vis=6——活粒子丢 vis 后无声死亡=动画在回放结束瞬间消失）。修复：扫除前先遍历 firstObj 链收集活粒子的 vis 集合（liveVis），仅摘除不在集合中的孤儿 vis |
 | v1.111 | **回放结束爆炸动画自然播完**：endReplay 不再瞬间清空粒子（killPartsDeep→resumePartsAtEnd）——用户实测"未播完的爆炸动画回放结束后直接被清除"。现在回放结束后世界恢复步进，粒子按剩余 liv（回放中已钳 ≤20）自然播放至死亡；MC 型粒子恢复 play()（回放中 mcStepParts 曾 stop+手动推帧，不恢复会冻在末帧）；孤儿 vis 扫除（sweepOrphanPartVis，从 killPartsDeep 抽出）保留。v1.106 的"火光长留"不会重现：当时 balefire liv 60 未钳制，现钳 ≤20 → 尾焰 ≤0.7 秒。诊断 partsResumeE: resumed=N vis=M |
