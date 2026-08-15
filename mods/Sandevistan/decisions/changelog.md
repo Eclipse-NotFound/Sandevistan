@@ -5,6 +5,7 @@
 
 | 版本 | 内容 |
 |---|---|
+| v1.116 | **S 徽标图层重建兼容**：其它模组（RealisticVision 每帧 setLight→drawAllObjs）重建 visObjs 层会把徽标摘出显示树——updateESMark 改为 parent==null 时重挂（v1.115 徽标创建后永不重挂，多模组环境下会消失） |
 | v1.115 | **敌人斯安维斯坦（Enemy Sandevistan）**：①配置 `enemysandy`（类名白名单，默认 UnitRaider/UnitMerc(狮鹫)/UnitAlicorn/UnitEncl/UnitRanger）+ esandydur=150/esandycd=300/esandyspd=5/esandyghost/esandymark ②触发=敌人 AI 锁定玩家（`celUnit==world.gg` 上升沿——aiState 是 internal 读不到，celUnit 是 public 战斗信号）后立即开启 ③**每房间最多 1 个**（esRoomTaken 按 loc.room.id，死亡释放名额）④场景 A（玩家未开）：常规分支在游戏步进后给活跃敌人补 spd-1 次 step() → AI/移动/攻击 N×，敌人子弹 1×（世界步进）；残影 spawnEnemyGhost（边缘行者配色，画敌人 vis 的独立管线——spawnGhostAt 画的是玩家 vis）⑤场景 B（玩家同时开）：stepSandy 内活跃敌人与玩家同权每帧 step（stepEnemySandyB；节流帧 loc.step 的重复步=与玩家"自由物理步"同款 1.2× 现象，接受）⑥调试"S"徽标（visObjs[3] TextField，绿待机/黄激活/灰冷却；不设 hero、不碰 goldstar）⑦诊断 esandy ON/OFF |
 | v1.114 | **投掷物血量/护甲按武器 id 覆盖**：可击落爆炸物=血量机制（默认 30，伤害先减护甲，血量≤0 才引爆）——新增 config `projhp_<武器id>`/`projarmor_<武器id>`（读配置动态收集进 projHpOver/projArmorOver，判定时按 p.weap.id 取覆盖值，无覆盖沿用全局；键小写匹配武器 id）；saveConfigFile 回写覆盖项（防 F9 面板保存丢用户自定义）；config.txt 附注释示例 |
 | v1.113 | **爆炸动画按原生速度播完**：移除 v1.104 的回放粒子寿命钳制（liv>20 压到 20）——钳制把长寿命爆炸粒子压缩播放：野火核弹 balefire 60 帧压成 20 帧=3 倍速（用户实测"播放速度有些快，野火核弹尤为明显"；baleblast 30→20=1.5 倍）。v1.111/1.112 已让未播完爆炸在回放后自然续播，钳制失去意义——回放中按原生 liv 以 1 世界步/显示帧播放，剩余部分回放后由世界恢复步进自然播完（原生速度/原生时长） |
