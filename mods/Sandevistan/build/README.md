@@ -56,10 +56,13 @@ java -Xmx3g -Xms256m -jar build\tools\ffdec\ffdec.jar \
 
 ## 3. 部署与恢复（v1.109 起：镜像部署，方案 B）
 
-- **模型**：仓库 `C:\RemainsMod` 是唯一事实源；游戏目录放镜像副本：
-  - `<游戏目录>\mods\`（除 build/）+ `<游戏目录>\shared-knowledge\`
-  - 同步脚本：`C:\RemainsMod\sync-to-game.bat`（robocopy /MIR；排除 build/ 与
-    **config.txt**——游戏内 F9 面板直接写游戏目录里的 config，同步不覆盖）。
+- **模型**：仓库 `C:\RemainsMod` 是唯一事实源；游戏目录是**多 agent 共享工作区**
+  （其他 agent 的模组并存于 `mods\` 下）。同步脚本 `C:\RemainsMod\sync-to-game.bat`：
+  - `mods\Sandevistan` → **全镜像**（/MIR；排除 build/ 与 **config.txt**——游戏内
+    F9 面板直接写游戏目录里的 config，同步不覆盖）；
+  - `shared-knowledge\`、`game-reference\` → **增补式同步**（/E，不删除其他
+    agent 贡献的文件）。
+  - 脚本**绝不触碰** `mods\` 下的其他模组目录。
 - **运行路径（已写进补丁与模组）**：
   - 模组加载：`app:/mods/Sandevistan/release/SandevistanMod.swf`
   - 配置读写：`<游戏目录>\mods\Sandevistan\release\config.txt`

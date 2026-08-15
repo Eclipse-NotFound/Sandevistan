@@ -8,8 +8,10 @@
 ## 0. 当前状态（2026-08-15）
 
 - **当前版本 v1.110**（git master），已按**镜像部署**运行：仓库 `C:\RemainsMod` 为
-  唯一事实源；游戏目录放镜像（`mods/` 除 build + `shared-knowledge/`，同步脚本
-  `C:\RemainsMod\sync-to-game.bat`）。游戏通过补丁直接从
+  唯一事实源；游戏目录是**多 agent 共享工作区**——`mods\Sandevistan` 全镜像
+  （同步脚本 `C:\RemainsMod\sync-to-game.bat`，排除 build 与 config.txt），
+  `shared-knowledge\`/`game-reference\` 增补式同步，**不删除其他 agent 的文件**。
+  游戏通过补丁直接从
   `<游戏目录>\mods\Sandevistan\release\SandevistanMod.swf` 加载模组，
   config.txt 也在此目录（F9 面板直接写这里，同步脚本不覆盖）。
 - **v1.110 内容**：鬼影真根因修复（slowPartClass 未初始化→粒子误录像→v1.87
