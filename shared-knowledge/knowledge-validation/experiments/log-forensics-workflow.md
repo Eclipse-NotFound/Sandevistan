@@ -1,15 +1,22 @@
-# 日志取证工作流（本游戏的模组诊断方法）
-
 ---
 domain: knowledge-validation
 type: experiments
-source: Sandevistan mod 长期诊断实践（diaglog 体系）
-game-version: 1.02
-mod: Sandevistan
+
+game-version:
+  - "1.02"
+
 confidence: medium
 verified: true
-date: 2026-08-15
+
+discovered-by: Sandevistan
+
+evidence:
+  - kind: runtime-experiment
+    summary: "Sandevistan diaglog 体系长期实践（版本标记/三方对照/限制计数/grep -a 取证）"
+
+date-updated: 2026-08-15
 ---
+
 
 ## 基础装备
 

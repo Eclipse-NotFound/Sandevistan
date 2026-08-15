@@ -1,15 +1,24 @@
-# 粒子孤儿 vis = 冻结世界里的"钉死鬼影"
-
 ---
 domain: rendering
 type: discoveries
-source: Sandevistan mod v1.107-1.108 排查（ghostScan 日志 + 用户三方确认）
-game-version: 1.02
-mod: Sandevistan
+
+game-version:
+  - "1.02"
+
 confidence: high
 verified: true
-date: 2026-08-15
+
+discovered-by: Sandevistan
+
+evidence:
+  - kind: runtime-experiment
+    summary: "Sandevistan ghostScan R50/R100 显示树扫描 + 用户三方确认（形态/位置/行为）"
+  - kind: decompiled-game-code
+    symbol: "fe.graph::Part.setNull"
+
+date-updated: 2026-08-15
 ---
+
 
 > ⚠️ **v1.110 修正**：孤儿机制属实，但该 mod 的鬼影**主因**是另一条路径——模组自己的
 > 录像/重挂逻辑把**已死粒子**的 vis 复活（slowPartClass 未初始化→粒子被误录像；

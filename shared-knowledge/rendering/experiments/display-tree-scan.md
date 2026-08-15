@@ -1,15 +1,22 @@
-# 显示树扫描法（定位"画面上的东西是什么"）
-
 ---
 domain: rendering
 type: experiments
-source: Sandevistan mod v1.107 ghostScan 实现与复盘
-game-version: 1.02
-mod: Sandevistan
+
+game-version:
+  - "1.02"
+
 confidence: medium
 verified: true
-date: 2026-08-15
+
+discovered-by: Sandevistan
+
+evidence:
+  - kind: runtime-experiment
+    summary: "Sandevistan v1.107 ghostScan 实现与 v1.109 复盘（锚点 Dictionary 迭代序、found<4 截断、对象链≠显示树）"
+
+date-updated: 2026-08-15
 ---
+
 
 ## 方法
 

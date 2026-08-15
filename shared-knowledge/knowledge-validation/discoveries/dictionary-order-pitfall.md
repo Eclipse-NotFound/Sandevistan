@@ -1,15 +1,22 @@
-# Dictionary 对象键迭代顺序陷阱
-
 ---
 domain: knowledge-validation
 type: discoveries
-source: Sandevistan mod v1.107 ghostScan 误报复盘
-game-version: 1.02（AVM2 行为，跨版本适用）
-mod: -
+
+game-version:
+  - "1.02"
+
 confidence: medium
 verified: true
-date: 2026-08-15
+
+discovered-by: Sandevistan
+
+evidence:
+  - kind: runtime-experiment
+    summary: "Sandevistan v1.107 ghostScan S 帧 vs R50 扫描差异复盘（Dictionary 对象键迭代序≠插入序）"
+
+date-updated: 2026-08-15
 ---
+
 
 ## 发现
 

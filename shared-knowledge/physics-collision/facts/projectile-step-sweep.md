@@ -1,15 +1,24 @@
-# 抛射物步进与扫掠碰撞
-
 ---
 domain: physics-collision
 type: facts
-source: Sandevistan mod v1.83-1.92（stepProjHits 实现与调试）+ Bullet.as step
-game-version: 1.02
-mod: Sandevistan
+
+game-version:
+  - "1.02"
+
 confidence: high
 verified: true
-date: 2026-08-15
+
+discovered-by: Sandevistan
+
+evidence:
+  - kind: runtime-experiment
+    summary: "Sandevistan v1.83-1.92 stepProjHits 实现与调试（相对速度扫掠 R(t)=O+t·RV）"
+  - kind: decompiled-game-code
+    symbol: "fe.weapon::Bullet.step"
+
+date-updated: 2026-08-15
 ---
+
 
 ## 步进粒度问题
 

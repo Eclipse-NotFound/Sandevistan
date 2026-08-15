@@ -1,15 +1,24 @@
-# 显示层（visObjs）体系
-
 ---
 domain: rendering
 type: facts
-source: Grafon.as（1.02 反编译 build/game-src/src102/scripts/fe/graph/Grafon.as）
-game-version: 1.02
-mod: -
+
+game-version:
+  - "1.02"
+
 confidence: high
 verified: true
-date: 2026-08-15
+
+discovered-by: Sandevistan
+
+evidence:
+  - kind: decompiled-game-code
+    symbol: "fe.graph::Grafon.drawAllObjs / setLight / visObjs; fe.Pt.addVisual / remVisual"
+  - kind: runtime-experiment
+    summary: "Sandevistan ghostScan 显示树扫描实测图层用途（武器 sloy=2、特效 sloy=3、UI sloy=4/5）"
+
+date-updated: 2026-08-15
 ---
+
 
 ## 图层结构
 

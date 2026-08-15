@@ -1,15 +1,24 @@
-# 粒子（Part）生命周期
-
 ---
 domain: rendering
 type: facts
-source: Part.as / Pt.as / Emitter.as（1.02 反编译 build/game-src/src102）
-game-version: 1.02
-mod: -
+
+game-version:
+  - "1.02"
+
 confidence: high
 verified: true
-date: 2026-08-15
+
+discovered-by: Sandevistan
+
+evidence:
+  - kind: decompiled-game-code
+    symbol: "fe.graph::Part.setNull / Part.step / Pt.remVisual / Emitter.cast"
+  - kind: runtime-experiment
+    summary: "Sandevistan v1.108 killPartsDeep 实测：Part.setNull 后 vis 仍留在显示树（需自行 remVisual）"
+
+date-updated: 2026-08-15
 ---
+
 
 ## 类结构与生成
 

@@ -23,7 +23,7 @@
 | `mods/Sandevistan/src/patch/scripts/MainFE.as` | **游戏补丁源码**（MainFE 文档类补丁，importScript 布局：目录下含 scripts/） |
 | `mods/Sandevistan/src/patch/MainFE.original.as` | 原版 MainFE（未打补丁，对照参考） |
 | `mods/Sandevistan/src/archive/` | 旧源码/旧构建备份（SandevistanMod.as.bak、SandevistanMod_bak.swf） |
-| `mods/Sandevistan/build/game-src/` | 反编译的游戏源码（只读参考；见 `build/README.md` 的映射表） |
+| `game-reference/decompiled/` | 反编译的游戏源码（**公共只读**；映射表见 `game-reference/README.md`） |
 | `mods/Sandevistan/build/tools/` | 构建工具链 flexsdk/airsdk/ffdec（**已 gitignore**，需要重新下载） |
 | `mods/Sandevistan/release/` | **模组分发物**（部署时复制为游戏目录下的 `SandevistanMod\`） |
 | `C:\Program Files (x86)\Steam\steamapps\common\Remains\` | **游戏安装目录**（模组已部署在此） |

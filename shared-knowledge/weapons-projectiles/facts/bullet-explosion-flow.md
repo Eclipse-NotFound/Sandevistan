@@ -1,15 +1,24 @@
-# 子弹/爆炸体流程（Bullet 核心）
-
 ---
 domain: weapons-projectiles
 type: facts
-source: Bullet.as / PhisBullet.as（1.02 反编译 build/game-src/src102）
-game-version: 1.02
-mod: -
+
+game-version:
+  - "1.02"
+
 confidence: high
 verified: true
-date: 2026-08-15
+
+discovered-by: Sandevistan
+
+evidence:
+  - kind: decompiled-game-code
+    symbol: "fe.weapon::Bullet.explosion / explRun / explBlast / explVis"
+  - kind: runtime-experiment
+    summary: "Sandevistan v1.91-1.101 boom 重演机制实测（isExpl 守卫一步全禁；expl_t internal 无法赋值）"
+
+date-updated: 2026-08-15
 ---
+
 
 ## 类族
 

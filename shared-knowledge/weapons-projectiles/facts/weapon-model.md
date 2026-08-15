@@ -1,15 +1,24 @@
-# 武器模型（Weapon 类核心）
-
 ---
 domain: weapons-projectiles
 type: facts
-source: Weapon.as / UnitPlayer.as（1.02 反编译 build/game-src/src102）
-game-version: 1.02
-mod: -
+
+game-version:
+  - "1.02"
+
 confidence: high
 verified: true
-date: 2026-08-15
+
+discovered-by: Sandevistan
+
+evidence:
+  - kind: decompiled-game-code
+    symbol: "fe.weapon::Weapon.actions / step / animate / shoot"
+  - kind: runtime-experiment
+    summary: "Sandevistan 回放武器驱动调试：改逻辑 X/Y 不调用 step/animate 时 vis 不动"
+
+date-updated: 2026-08-15
 ---
+
 
 ## tip 语义（AllData `<weapon tip=...>`）
 

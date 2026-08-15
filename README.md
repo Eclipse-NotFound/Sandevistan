@@ -6,9 +6,12 @@
 mods/               各模组项目（源码/分发/构建/模组自身知识）
 └─ Sandevistan/     斯安维斯坦模组 —— 入口：mods/Sandevistan/交接文档.md
 shared-knowledge/   跨模组共享的游戏本体知识库 —— 使用规范：shared-knowledge/README.md
+game-reference/     公共只读研究资料（反编译源码等）—— 见 game-reference/README.md
 ```
 
-- 开发/构建模组：先读 `mods/Sandevistan/交接文档.md`。
+- 开发/构建模组：先读 `mods/Sandevistan/AGENT_SCOPE.md`（权限模型）与
+  `mods/Sandevistan/交接文档.md`。
 - 引用游戏机制知识：先读 `shared-knowledge/README.md`，再按领域查 facts/discoveries。
+- 查反编译源码：`game-reference/decompiled/1.02/src102`（grep 首选）。
 - 大体积工具链（flexsdk/airsdk/ffdec）与编译产物不入库（见 .gitignore），
   重新下载/构建步骤见 `mods/Sandevistan/build/README.md`。

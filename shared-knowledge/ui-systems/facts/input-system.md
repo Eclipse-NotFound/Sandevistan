@@ -1,15 +1,24 @@
-# 输入系统（Ctr 与事件层时序）
-
 ---
 domain: ui-systems
 type: facts
-source: Ctr.as/World.as/MainMenu.as（1.02 反编译）+ Sandevistan mod v1.4-1.11/1.104
-game-version: 1.02
-mod: -
+
+game-version:
+  - "1.02"
+
 confidence: high
 verified: true
-date: 2026-08-15
+
+discovered-by: Sandevistan
+
+evidence:
+  - kind: decompiled-game-code
+    symbol: "fe.inter::Ctr / MainMenu.mainStep"
+  - kind: runtime-experiment
+    summary: "Sandevistan v1.4-1.11/1.104（IME 229 卡键、事件层时序：模组 KEY_DOWN 先于 Ctr）"
+
+date-updated: 2026-08-15
 ---
+
 
 ## Ctr
 

@@ -1,15 +1,24 @@
-# 武器切换流程（changeWeapon/changeWeaponNow）
-
 ---
 domain: weapons-projectiles
 type: facts
-source: UnitPlayer.as:3587/3670、control:2401、:442、:686、:1210（1.02 反编译）
-game-version: 1.02
-mod: -
+
+game-version:
+  - "1.02"
+
 confidence: high
 verified: true
-date: 2026-08-15
+
+discovered-by: Sandevistan
+
+evidence:
+  - kind: decompiled-game-code
+    symbol: "fe.unit::UnitPlayer.changeWeaponNow / control / useFav"
+  - kind: runtime-experiment
+    summary: "Sandevistan 时停武器切换日志序列（switchToWeapon 诊断行）"
+
+date-updated: 2026-08-15
 ---
+
 
 ## 切换流程
 

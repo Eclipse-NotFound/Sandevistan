@@ -1,15 +1,22 @@
-# 诊断采样规则（避免被自己的数据误导）
-
 ---
 domain: knowledge-validation
 type: facts
-source: Sandevistan mod v1.50-1.53 复盘与 v1.107 ghostScan 复盘
-game-version: 1.02
-mod: -
+
+game-version:
+  - "1.02"
+
 confidence: high
 verified: true
-date: 2026-08-15
+
+discovered-by: Sandevistan
+
+evidence:
+  - kind: runtime-experiment
+    summary: "Sandevistan v1.50-1.53 复盘（炮塔采样偏差）与 v1.107 ghostScan 复盘（锚点迭代序）"
+
+date-updated: 2026-08-15
 ---
+
 
 ## 采样规则
 

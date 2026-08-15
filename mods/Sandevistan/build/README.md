@@ -9,7 +9,6 @@
 build/
 ├─ tools/        工具链（已 gitignore，可重新下载）：flexsdk（含 AIR SDK 合并）、
 │                airsdk（原始解压）、ffdec、archives/（三个原始 zip）
-├─ game-src/     反编译的游戏源码（只读参考；映射表见下）
 ├─ out/          模组 SWF 编译产物（已 gitignore）
 ├─ patch_out/    importScript 打补丁产物（已 gitignore）
 ├─ scripts/      辅助脚本（python：SWF 提取/解析、一次性源码补丁）
@@ -17,17 +16,11 @@ build/
 └─ logs/         编译/诊断日志与下载临时文件（已 gitignore）
 ```
 
-### game-src/ 映射表（查游戏机制先 grep 这里）
+### 反编译源码（查游戏机制先 grep 这里）
 
-| 目录 | 内容 |
-|---|---|
-| `game-src/src102` | **1.02 反编译主参考**（完整 fe 包：AllData/Weapon/Bullet/Part/…，gitignored） |
-| `game-src/src_pfe` | 1.02 另一份完整反编译（部分 weapon 类缺失，已入库） |
-| `game-src/src_pfe2` | 1.02 关键类补全（unit：Unit/UnitPlayer/Mine/VirtualUnit；weapon：Weapon/Bullet/PhisBullet/SmartBullet/WClub/WThrow/WMagic/…） |
-| `game-src/src_pfe3` | 1.02 再一版（Unit/UnitPlayer/Weapon） |
-| `game-src/src_pfe4` | 1.02 的 MainFE |
-| `game-src/src_103, src_103v2, src_104, src_104v2` | 1.03/1.04 各版本 MainFE（原版与 Steam 更新后 v2） |
-| `game-src/src_frame` | 视觉截图参考（gitignored） |
+已迁至公共只读研究区 **`game-reference/decompiled/{1.02,1.03,1.04}`**——
+映射表与使用规则见 `game-reference/README.md`（默认 REFERENCE-ONLY，见
+`../AGENT_SCOPE.md` §4）。
 
 ## 1. 编译模组 SWF
 

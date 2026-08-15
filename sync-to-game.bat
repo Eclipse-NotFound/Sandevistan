@@ -15,11 +15,14 @@ if not exist "%GAME%\Remains.exe" (
     exit /b 1
 )
 
-echo [1/2] Syncing mods\  (excluding build\ and config.txt) ...
+echo [1/3] Syncing mods\  (excluding build\ and config.txt) ...
 robocopy "%REPO%mods" "%GAME%\mods" /MIR /XD build /XF config.txt /NFL /NDL /NJH /NJS
 
-echo [2/2] Syncing shared-knowledge\ ...
+echo [2/3] Syncing shared-knowledge\ ...
 robocopy "%REPO%shared-knowledge" "%GAME%\shared-knowledge" /MIR /NFL /NDL /NJH /NJS
+
+echo [3/3] Syncing game-reference\ ...
+robocopy "%REPO%game-reference" "%GAME%\game-reference" /MIR /NFL /NDL /NJH /NJS
 
 echo.
 echo Mirror updated.

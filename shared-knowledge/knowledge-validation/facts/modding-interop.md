@@ -1,15 +1,22 @@
-# 模组与游戏运行时交互规则（子域开发约束）
-
 ---
 domain: knowledge-validation
 type: facts
-source: Sandevistan mod 长期实践（#1069、internal 静默失败、密封类陷阱）
-game-version: 1.02（AIR 31 通用行为）
-mod: -
+
+game-version:
+  - "1.02"
+
 confidence: high
 verified: true
-date: 2026-08-15
+
+discovered-by: Sandevistan
+
+evidence:
+  - kind: runtime-experiment
+    summary: "Sandevistan 长期实践（子域 #1069、internal 赋值静默失败、帧/事件时序、键空间 base vs id）"
+
+date-updated: 2026-08-15
 ---
+
 
 ## 注入模型
 

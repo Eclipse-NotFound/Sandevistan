@@ -1,15 +1,24 @@
-# 单位核心（Unit）
-
 ---
 domain: entities
 type: facts
-source: Unit.as/UnitPlayer.as（1.02 反编译 build/game-src/src102）+ Sandevistan mod
-game-version: 1.02
-mod: -
+
+game-version:
+  - "1.02"
+
 confidence: high
 verified: true
-date: 2026-08-15
+
+discovered-by: Sandevistan
+
+evidence:
+  - kind: decompiled-game-code
+    symbol: "fe.unit::Unit.control / setPos / setVisPos"
+  - kind: runtime-experiment
+    summary: "Sandevistan v1.50-1.76 敌人动画驱动/预判死亡实测"
+
+date-updated: 2026-08-15
 ---
+
 
 ## 状态与 AI
 

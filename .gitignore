@@ -10,5 +10,5 @@ mods/Sandevistan/build/logs/
 
 # ===== 临时调试文件（可重新反编译/生成，不入库）=====
 mods/Sandevistan/build/tests/tiny.swf
-mods/Sandevistan/build/game-src/src_frame/
-mods/Sandevistan/build/game-src/src102/
+game-reference/decompiled/1.02/src_frame/
+game-reference/decompiled/1.02/src102/

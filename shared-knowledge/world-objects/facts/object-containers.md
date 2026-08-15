@@ -1,15 +1,24 @@
-# 世界对象容器与链
-
 ---
 domain: world-objects
 type: facts
-source: Location.as/Obj.as（1.02 反编译）+ Sandevistan mod v1.69/1.90
-game-version: 1.02
-mod: -
+
+game-version:
+  - "1.02"
+
 confidence: high
 verified: true
-date: 2026-08-15
+
+discovered-by: Sandevistan
+
+evidence:
+  - kind: decompiled-game-code
+    symbol: "fe.loc::Location.remObj / fe.Obj.vse"
+  - kind: runtime-experiment
+    summary: "Sandevistan v1.69/1.90（Box 在 loc.objs 不在 firstObj；密封类 bracket 访问抛 #1069）"
+
+date-updated: 2026-08-15
 ---
+
 
 ## 三个容器，别混
 

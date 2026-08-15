@@ -1,15 +1,24 @@
-# 玩家单位（UnitPlayer）
-
 ---
 domain: entities
 type: facts
-source: UnitPlayer.as（1.02 反编译 build/game-src/src102）
-game-version: 1.02
-mod: -
+
+game-version:
+  - "1.02"
+
 confidence: high
 verified: true
-date: 2026-08-15
+
+discovered-by: Sandevistan
+
+evidence:
+  - kind: decompiled-game-code
+    symbol: "fe.unit::UnitPlayer.control / setWeaponPos"
+  - kind: runtime-experiment
+    summary: "Sandevistan 回放玩家驱动（gg.step 手动驱动）实测"
+
+date-updated: 2026-08-15
 ---
+
 
 ## 驱动
 

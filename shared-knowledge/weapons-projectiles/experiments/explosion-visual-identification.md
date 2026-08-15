@@ -1,15 +1,24 @@
-# 爆炸视觉成分识别法
-
 ---
 domain: weapons-projectiles
 type: experiments
-source: Sandevistan mod v1.98/1.105/1.108 排查流程
-game-version: 1.02
-mod: Sandevistan
+
+game-version:
+  - "1.02"
+
 confidence: medium
 verified: true
-date: 2026-08-15
+
+discovered-by: Sandevistan
+
+evidence:
+  - kind: runtime-experiment
+    summary: "Sandevistan v1.98/1.105/1.108 排查流程（boomPart 对象链清点 + 显示树交叉验证）"
+  - kind: decompiled-game-code
+    symbol: "fe.weapon::Bullet.explRun"
+
+date-updated: 2026-08-15
 ---
+
 
 ## 目标
 

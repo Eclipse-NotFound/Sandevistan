@@ -1,15 +1,24 @@
-# 冻结世界里的武器视觉不跟随
-
 ---
 domain: weapons-projectiles
 type: discoveries
-source: Sandevistan mod 回放武器调试（v1.32-1.65、v1.108 日志分析）
-game-version: 1.02
-mod: Sandevistan
+
+game-version:
+  - "1.02"
+
 confidence: high
 verified: true
-date: 2026-08-15
+
+discovered-by: Sandevistan
+
+evidence:
+  - kind: runtime-experiment
+    summary: "Sandevistan v1.32-1.65 回放武器调试 + v1.108 日志分析（visaglau 钉在时停结束位置）"
+  - kind: decompiled-game-code
+    symbol: "fe.weapon::Weapon.step"
+
+date-updated: 2026-08-15
 ---
+
 
 ## 发现
 

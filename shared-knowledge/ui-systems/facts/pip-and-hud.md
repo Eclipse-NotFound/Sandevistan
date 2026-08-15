@@ -1,15 +1,24 @@
-# PipBuck / HUD / 界面组件
-
 ---
 domain: ui-systems
 type: facts
-source: PipBuck.as/PipPageOpt.as/GUI.as（1.02 反编译）+ Sandevistan mod v1.15/1.67
-game-version: 1.02
-mod: -
+
+game-version:
+  - "1.02"
+
 confidence: high
 verified: true
-date: 2026-08-15
+
+discovered-by: Sandevistan
+
+evidence:
+  - kind: decompiled-game-code
+    symbol: "fe.inter::PipBuck / PipPageOpt / GUI.setWeapon"
+  - kind: runtime-experiment
+    summary: "Sandevistan v1.15/1.67 选项页叠加设置面板实测"
+
+date-updated: 2026-08-15
 ---
+
 
 ## PipBuck（Pip-Boy 面板）
 
