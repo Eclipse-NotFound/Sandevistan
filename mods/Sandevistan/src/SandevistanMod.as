@@ -322,7 +322,7 @@ package
          // 死亡位置 = 鬼影真因。
          try { inst.slowPartClass = ApplicationDomain.currentDomain.getDefinition("fe.graph.Part") as Class; } catch (e:*) { }
          // v1.101：版本标记——日志确认实际加载运行的构建版本与关键开关
-         inst.log("[SandyMod] v1.110 loaded swaprun=" + (inst.cfgSwapRun ? 1 : 0) + " projhits=" + (inst.cfgProjHits ? 1 : 0));
+         inst.log("[SandyMod] v1.111 loaded swaprun=" + (inst.cfgSwapRun ? 1 : 0) + " projhits=" + (inst.cfgProjHits ? 1 : 0));
          if (main != null && main.stage != null)
          {
             main.stage.addEventListener(Event.ENTER_FRAME, inst.onFrame);
@@ -353,7 +353,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.110 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.111 已加载 (按 \ 触发斯安维斯坦)";
             t.autoSize = "left";   // v1.110：版本号此前显示不全（TextField 默认宽度截断）
             t.x = 10;
             t.y = 10;
@@ -2841,7 +2841,7 @@ package
       {
          if (panelTf == null) return;
          var lines:Array = [];
-         lines.push("== SandevistanMod v1.110 参数 ==");
+         lines.push("== SandevistanMod v1.111 参数 ==");
          lines.push((panelSel == 0 ? "> " : "  ") + "生效时长   " + (cfgDuration / 30).toFixed(1) + "s");
          lines.push((panelSel == 1 ? "> " : "  ") + "冷却       " + (cfgCooldown / 30).toFixed(1) + "s");
          lines.push((panelSel == 2 ? "> " : "  ") + "回放速度   x" + cfgReplaySpeed);
@@ -3600,7 +3600,6 @@ package
       {
          buildPartVisSet();
          var nK:int = 0;
-         var nV:int = 0;
          try
          {
             var PartCls:Class = ApplicationDomain.currentDomain.getDefinition("fe.graph.Part") as Class;
@@ -3627,7 +3626,16 @@ package
             }
          }
          catch (e:*) { }
-         // 显示树扫除（倒序遍历，边遍历边移除）：自然死亡粒子的孤儿 vis
+         var nV:int = sweepOrphanPartVis();
+         log("[DIAG] partsKillDeep" + tag + ": killed=" + nK + " vis=" + nV);
+      }
+      // 显示树扫除（倒序遍历，边遍历边移除）：自然死亡粒子的孤儿 vis
+      // （游戏 Part.setNull 不摘除 vis——正常游戏靠 drawAllObjs 图层重建抹掉，
+      // 冻结/慢速世界里需要显式扫除）
+      private function sweepOrphanPartVis():int
+      {
+         buildPartVisSet();
+         var nV:int = 0;
          try
          {
             var gVisK:Object = world["grafon"];
@@ -3656,7 +3664,46 @@ package
             }
          }
          catch (e:*) { }
-         log("[DIAG] partsKillDeep" + tag + ": killed=" + nK + " vis=" + nV);
+         return nV;
+      }
+      // ===== v1.111：回放结束不再清空粒子——未播完的爆炸动画自然播完 =====
+      // 此前 endReplay 走 killPartsDeep：回放末段 boom 生成的爆炸粒子被瞬间
+      // 清除（用户实测"未播完的爆炸动画回放结束后直接被清除"）。现在回放
+      // 结束后世界恢复步进，粒子按剩余 liv 自然死亡；MC 型粒子恢复 play()
+      // （回放中 mcStepParts 曾 stop+手动推帧，不恢复会冻在末帧）。
+      // liv 在回放中已被 stepParticles 钳到 ≤20——尾焰 ≤0.7 秒自然完结，
+      // 不会重现 v1.106 的"火光长留"（当时 balefire liv 60 且未钳制）。
+      // 孤儿 vis 扫除保留（回放中自然死亡粒子的 vis 清理）。
+      private function resumePartsAtEnd():void
+      {
+         var nR:int = 0;
+         try
+         {
+            var PartCls:Class = ApplicationDomain.currentDomain.getDefinition("fe.graph.Part") as Class;
+            if (PartCls != null)
+            {
+               var oPK:Object = world.loc.firstObj;
+               var gPK:int = 0;
+               while (oPK != null)
+               {
+                  var nxPK:Object = oPK.nobj;
+                  try
+                  {
+                     if (oPK is PartCls && oPK.vis != null && oPK.blitData == null
+                         && oPK.isAnim != null && oPK.isAnim > 0)
+                     {
+                        try { oPK.vis.play(); nR++; } catch (e:*) { }
+                     }
+                  }
+                  catch (e:*) { }
+                  oPK = nxPK;
+                  if (++gPK > 20000) break;
+               }
+            }
+         }
+         catch (e:*) { }
+         var nV:int = sweepOrphanPartVis();
+         log("[DIAG] partsResumeE: resumed=" + nR + " vis=" + nV);
       }
       private function stepReplay():void
       {
@@ -4422,7 +4469,12 @@ package
          // 世界正常运行时环境粒子自然重生。
          // v1.108：改走 killPartsDeep（remVisual+setNull+孤儿 vis 扫除——与
          // endSandy 同款，防回放爆炸粒子死亡后 vis 遗留在爆炸位置）。
-         killPartsDeep(world.loc, "E");
+         // v1.111：改为 resumePartsAtEnd——不再瞬间清空（用户实测"未播完的
+         // 爆炸动画回放结束后直接被清除"）：世界恢复步进后粒子按剩余 liv
+         // （已被回放钳到 ≤20）自然播完死亡；MC 型恢复 play() 防冻帧；
+         // 孤儿 vis 扫除保留。v1.106 的火光长留不会重现（当时 balefire
+         // liv 60 未钳制，现回放中已钳 ≤20 → 尾焰 ≤0.7 秒自然完结）。
+         resumePartsAtEnd();
          // v1.98：恢复回放中惰性化的重执行爆炸体——仍存活在飞的（录像原体
          // 时停末未爆/未配对孪生体）回放结束后继续自然飞行/爆炸；已被 boom
          // 终止或已 babah/出链的不恢复（防第二次爆炸）。
