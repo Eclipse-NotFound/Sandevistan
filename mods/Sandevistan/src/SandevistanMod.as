@@ -322,7 +322,7 @@ package
          // 死亡位置 = 鬼影真因。
          try { inst.slowPartClass = ApplicationDomain.currentDomain.getDefinition("fe.graph.Part") as Class; } catch (e:*) { }
          // v1.101：版本标记——日志确认实际加载运行的构建版本与关键开关
-         inst.log("[SandyMod] v1.112 loaded swaprun=" + (inst.cfgSwapRun ? 1 : 0) + " projhits=" + (inst.cfgProjHits ? 1 : 0));
+         inst.log("[SandyMod] v1.113 loaded swaprun=" + (inst.cfgSwapRun ? 1 : 0) + " projhits=" + (inst.cfgProjHits ? 1 : 0));
          if (main != null && main.stage != null)
          {
             main.stage.addEventListener(Event.ENTER_FRAME, inst.onFrame);
@@ -353,7 +353,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.112 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.113 已加载 (按 \ 触发斯安维斯坦)";
             t.autoSize = "left";   // v1.110：版本号此前显示不全（TextField 默认宽度截断）
             t.x = 10;
             t.y = 10;
@@ -2841,7 +2841,7 @@ package
       {
          if (panelTf == null) return;
          var lines:Array = [];
-         lines.push("== SandevistanMod v1.112 参数 ==");
+         lines.push("== SandevistanMod v1.113 参数 ==");
          lines.push((panelSel == 0 ? "> " : "  ") + "生效时长   " + (cfgDuration / 30).toFixed(1) + "s");
          lines.push((panelSel == 1 ? "> " : "  ") + "冷却       " + (cfgCooldown / 30).toFixed(1) + "s");
          lines.push((panelSel == 2 ? "> " : "  ") + "回放速度   x" + cfgReplaySpeed);
@@ -3445,14 +3445,15 @@ package
             var nxt:Object = obj.nobj;
             if (obj is PartClass)
             {
-               // v1.104：回放中爆炸粒子寿命钳制——野火核弹的 balefire（火光）
-               // Blit 粒子 minliv=60 帧，而整个回放只有 42 帧：火光贯穿回放
-               // 并延伸到回放结束之后（用户实测"火光一直留到爆炸结束才消失"
-               // =鬼影，v1.103 只杀了 MC 未管 Blit）。回放中所有粒子均为爆炸
-               // 粒子（endSandy 已清空其它），钳到 20 帧内自然完结。
+               // v1.113：移除 v1.104 的寿命钳制（liv>20 压到 20）——钳制把
+               // 长寿命爆炸粒子压缩播放：野火核弹 balefire 60 帧压成 20 帧
+               // =3 倍速（用户实测"播放速度有些快，野火核弹尤为明显"；
+               // baleblast 30→20=1.5 倍）。v1.111/1.112 起未播完的爆炸在
+               // 回放结束后自然续播，长寿命粒子不再需要压缩到回放内完结——
+               // 回放中按原生 liv 以 1 世界步/显示帧正常播放，剩余部分在
+               // 回放后由世界恢复步进自然播完（原生速度、原生时长）。
                try
                {
-                  if (obj.liv > 20) { obj.liv = 20; }
                   obj.step();
                }
                catch (e2:*)
@@ -3697,8 +3698,8 @@ package
       // 清除（用户实测"未播完的爆炸动画回放结束后直接被清除"）。现在回放
       // 结束后世界恢复步进，粒子按剩余 liv 自然死亡；MC 型粒子恢复 play()
       // （回放中 mcStepParts 曾 stop+手动推帧，不恢复会冻在末帧）。
-      // liv 在回放中已被 stepParticles 钳到 ≤20——尾焰 ≤0.7 秒自然完结，
-      // 不会重现 v1.106 的"火光长留"（当时 balefire liv 60 且未钳制）。
+      // v1.113：回放中不再钳制 liv——长寿命粒子（野火核弹 balefire 60）按
+      // 原生时长播放，回放后自然续播至完结（原生速度）。
       // 孤儿 vis 扫除保留（回放中自然死亡粒子的 vis 清理）。
       private function resumePartsAtEnd():void
       {
@@ -4497,9 +4498,9 @@ package
          // endSandy 同款，防回放爆炸粒子死亡后 vis 遗留在爆炸位置）。
          // v1.111：改为 resumePartsAtEnd——不再瞬间清空（用户实测"未播完的
          // 爆炸动画回放结束后直接被清除"）：世界恢复步进后粒子按剩余 liv
-         // （已被回放钳到 ≤20）自然播完死亡；MC 型恢复 play() 防冻帧；
-         // 孤儿 vis 扫除保留。v1.106 的火光长留不会重现（当时 balefire
-         // liv 60 未钳制，现回放中已钳 ≤20 → 尾焰 ≤0.7 秒自然完结）。
+         // 自然播完死亡；MC 型恢复 play() 防冻帧；孤儿 vis 扫除保留。
+         // v1.113：回放中 liv 钳制已移除——爆炸按原生速度/原生时长播完
+         // （野火核弹 balefire 60 帧不再被压成 20 帧 3 倍速）。
          resumePartsAtEnd();
          // v1.98：恢复回放中惰性化的重执行爆炸体——仍存活在飞的（录像原体
          // 时停末未爆/未配对孪生体）回放结束后继续自然飞行/爆炸；已被 boom

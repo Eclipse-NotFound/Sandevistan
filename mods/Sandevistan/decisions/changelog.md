@@ -5,6 +5,7 @@
 
 | 版本 | 内容 |
 |---|---|
+| v1.113 | **爆炸动画按原生速度播完**：移除 v1.104 的回放粒子寿命钳制（liv>20 压到 20）——钳制把长寿命爆炸粒子压缩播放：野火核弹 balefire 60 帧压成 20 帧=3 倍速（用户实测"播放速度有些快，野火核弹尤为明显"；baleblast 30→20=1.5 倍）。v1.111/1.112 已让未播完爆炸在回放后自然续播，钳制失去意义——回放中按原生 liv 以 1 世界步/显示帧播放，剩余部分回放后由世界恢复步进自然播完（原生速度/原生时长） |
 | v1.112 | **回放结束爆炸动画自然播完（修正版）**：v1.111 的 sweepOrphanPartVis 扫除不分死活——类名命中即摘，把回放末段**活粒子**的 vis 也摘了（日志实证：partsAlive n=17 且 boom 在 replIdx=210、partsResumeE vis=6——活粒子丢 vis 后无声死亡=动画在回放结束瞬间消失）。修复：扫除前先遍历 firstObj 链收集活粒子的 vis 集合（liveVis），仅摘除不在集合中的孤儿 vis |
 | v1.111 | **回放结束爆炸动画自然播完**：endReplay 不再瞬间清空粒子（killPartsDeep→resumePartsAtEnd）——用户实测"未播完的爆炸动画回放结束后直接被清除"。现在回放结束后世界恢复步进，粒子按剩余 liv（回放中已钳 ≤20）自然播放至死亡；MC 型粒子恢复 play()（回放中 mcStepParts 曾 stop+手动推帧，不恢复会冻在末帧）；孤儿 vis 扫除（sweepOrphanPartVis，从 killPartsDeep 抽出）保留。v1.106 的"火光长留"不会重现：当时 balefire liv 60 未钳制，现钳 ≤20 → 尾焰 ≤0.7 秒。诊断 partsResumeE: resumed=N vis=M |
 | v1.110 | **鬼影真根因修复**：①`slowPartClass` 从未赋值（声明=null 后无初始化）——recordReplayObjects 的"粒子跳过"分支（oR is slowPartClass）恒 false → 时停中移动/首见的粒子被误录像进 replayObjs（v1.109 日志实证：reatt 行 cls=fe.graph::Part ×4，其一钉在爆炸点 1268.33,243.58）→ 回放中 v1.87 的 vis 重挂把**已死粒子**（endSandy killPartsDeep 已摘除 vis）的 vis 重新 addChild 回显示层、按录像末帧钉在死亡位置=鬼影（R50-R150 全程可见；boom 的 explDestroy→drawAllObjs 重建图层才抹掉=用户"爆炸后消失"）。修复：init 里初始化 slowPartClass + reatt 条件排除 Part 对象（双保险）②启动标记版本号显示不全（TextField 默认宽度截断）——加 autoSize；F9 面板标题带版本号 |
