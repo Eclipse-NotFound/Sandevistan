@@ -178,7 +178,7 @@ package
       // ===== v1.115：敌人斯安维斯坦（Enemy Sandevistan）=====
       // 触发=敌人 AI 看到玩家进入战斗（celUnit==gg 上升沿）后立即开启；
       // 每房间最多 1 个（esRoomTaken 按 room.id 记录）；持续/冷却/倍率可配置。
-      private var cfgEnemySandy:String = "UnitRaider,UnitMerc,UnitAlicorn,UnitEncl,UnitRanger";
+      private var cfgEnemySandy:String = "UnitRaider,UnitMerc,UnitAlicorn,UnitEncl,UnitRanger,UnitZebra";
       private var cfgESDur:int = 150;            // 持续帧（30帧=1秒 → 5秒）
       private var cfgESCd:int = 300;             // 冷却帧（10秒）
       private var cfgESSpd:int = 5;              // 加速倍率（每显示帧补 spd-1 次 step）
@@ -189,6 +189,8 @@ package
       private var esRoomTaken:Object = {};       // roomId → 敌人（每房间 1 个）
       private var esMarks:Dictionary = new Dictionary(); // 敌人 → 徽标 TextField
       private var esDiagCnt:int = 0;
+      private var projDiagTick:int = 0;      // v1.117：常规玩法击落诊断计数
+      private var projHitDiagCnt:int = 0;    // v1.117：常规玩法命中诊断计数
       private var seenAtk:Dictionary = new Dictionary(); // 攻击体追踪器（v1.85：按引用录像，绕开链扫描之谜）
       private var projBoom:Dictionary = new Dictionary(); // v1.91：时停中引爆的投掷物 → {f,x,y}（回放对应帧真实爆炸）
       private var reExecPin:Dictionary = new Dictionary(); // v1.94：重执行爆弹体 → 录像孪生体（回放钉到录像轨迹）
@@ -338,7 +340,7 @@ package
          // 死亡位置 = 鬼影真因。
          try { inst.slowPartClass = ApplicationDomain.currentDomain.getDefinition("fe.graph.Part") as Class; } catch (e:*) { }
          // v1.101：版本标记——日志确认实际加载运行的构建版本与关键开关
-         inst.log("[SandyMod] v1.116 loaded swaprun=" + (inst.cfgSwapRun ? 1 : 0) + " projhits=" + (inst.cfgProjHits ? 1 : 0));
+         inst.log("[SandyMod] v1.117 loaded swaprun=" + (inst.cfgSwapRun ? 1 : 0) + " projhits=" + (inst.cfgProjHits ? 1 : 0));
          if (main != null && main.stage != null)
          {
             main.stage.addEventListener(Event.ENTER_FRAME, inst.onFrame);
@@ -369,7 +371,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.116 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.117 已加载 (按 \ 触发斯安维斯坦)";
             t.autoSize = "left";   // v1.110：版本号此前显示不全（TextField 默认宽度截断）
             t.x = 10;
             t.y = 10;
@@ -505,7 +507,14 @@ package
          for (var iES:int = 0; iES < arrES.length; iES++)
          {
             var cnES:String = String(arrES[iES]).replace(/^\s+|\s+$/g, "");
-            if (cnES.length > 0) { esClasses.push(cnES); }
+            if (cnES.length > 0)
+            {
+               // v1.117：getQualifiedClassName 返回 "fe.unit::UnitRaider" 全名——
+               // 裸类名与全名比较永远不匹配（v1.115 无人注册/S 徽标不出现的
+               // 根因）。统一存全名（已带前缀的照存）。
+               if (cnES.indexOf("fe.unit::") == 0) { esClasses.push(cnES); }
+               else { esClasses.push("fe.unit::" + cnES); }
+            }
          }
          trace("[SandyMod] config hotkey=" + cfgHotkey + " dur=" + cfgDuration + " cd=" + cfgCooldown);
       }
@@ -1946,6 +1955,17 @@ package
             {
                try { if (projs.indexOf(kH) < 0) { delete projHp[kH]; } } catch (e:*) { }
             }
+            // v1.117：常规玩法击落诊断——定位"敌人手雷/导弹无法击落"
+            // （projs 表是否收录 + 命中是否发生；diaglog=1 时每 60 帧一条）
+            if (cfgDiagLog && !isSandy && !replaying && ++projDiagTick % 60 == 0)
+            {
+               var pds:String = "";
+               for (var pdi:int = 0; pdi < projs.length && pdi < 3; pdi++)
+               {
+                  try { pds += (pds != "" ? "," : "") + flash.utils.getQualifiedClassName(projs[pdi]) + "@" + Math.round(projs[pdi].X) + "," + Math.round(projs[pdi].Y); } catch (e:*) { }
+               }
+               log("[DIAG] projScan: projs=" + projs.length + " objs=" + objs.length + " [" + pds + "]");
+            }
             if (projs.length == 0 || objs.length == 0) return;
             for each (var p:Object in projs)
             {
@@ -2005,6 +2025,15 @@ package
                         }
                      }
                      if (!hitOK) continue;
+                     // v1.117：常规玩法命中诊断（定位"无法击落"）
+                     if (cfgDiagLog && !isSandy && !replaying && projHitDiagCnt < 12)
+                     {
+                        projHitDiagCnt++;
+                        log("[DIAG] projHit: cls=" + flash.utils.getQualifiedClassName(p)
+                            + " bullet=" + flash.utils.getQualifiedClassName(b)
+                            + " dmg=" + (b.damage != null ? b.damage : -1)
+                            + " P=" + Math.round(p.X) + "," + Math.round(p.Y));
+                     }
                      var dmg:Number = b.damage != null ? b.damage : 0;
                      // 时停中玩家子弹伤害被清零——用捕获的原始伤害
                      if (dmg <= 0 && b.owner == world.gg && origDam[b] != null) { dmg = origDam[b]; }
@@ -2914,7 +2943,7 @@ package
       {
          if (panelTf == null) return;
          var lines:Array = [];
-         lines.push("== SandevistanMod v1.116 参数 ==");
+         lines.push("== SandevistanMod v1.117 参数 ==");
          lines.push((panelSel == 0 ? "> " : "  ") + "生效时长   " + (cfgDuration / 30).toFixed(1) + "s");
          lines.push((panelSel == 1 ? "> " : "  ") + "冷却       " + (cfgCooldown / 30).toFixed(1) + "s");
          lines.push((panelSel == 2 ? "> " : "  ") + "回放速度   x" + cfgReplaySpeed);
