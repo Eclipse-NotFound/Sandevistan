@@ -345,7 +345,9 @@ package
          // 死亡位置 = 鬼影真因。
          try { inst.slowPartClass = ApplicationDomain.currentDomain.getDefinition("fe.graph.Part") as Class; } catch (e:*) { }
          // v1.101：版本标记——日志确认实际加载运行的构建版本与关键开关
-         inst.log("[SandyMod] v1.120 loaded swaprun=" + (inst.cfgSwapRun ? 1 : 0) + " projhits=" + (inst.cfgProjHits ? 1 : 0));
+         // v1.121：追加 esmark/esper/espd——排查"徽标不可见"类问题的第一手数据
+         inst.log("[SandyMod] v1.121 loaded swaprun=" + (inst.cfgSwapRun ? 1 : 0) + " projhits=" + (inst.cfgProjHits ? 1 : 0)
+             + " esmark=" + (inst.cfgESMark ? 1 : 0) + " esghost=" + (inst.cfgESGhost ? 1 : 0) + " esper=" + inst.cfgESPer);
          if (main != null && main.stage != null)
          {
             main.stage.addEventListener(Event.ENTER_FRAME, inst.onFrame);
@@ -376,7 +378,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.120 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.121 已加载 (按 \ 触发斯安维斯坦)";
             t.autoSize = "left";   // v1.110：版本号此前显示不全（TextField 默认宽度截断）
             t.x = 10;
             t.y = 10;
@@ -438,6 +440,13 @@ package
                   if (kv.length < 2) continue;
                   var k:String = kv[0].replace(/^\s+|\s+$/g, "").toLowerCase();
                   var v:String = kv[1].replace(/^\s+|\s+$/g, "");
+                  // v1.121：剥离行尾注释——此前 `esandymark=1  # 注释` 的布尔
+                  // 精确匹配（v=="1"）失败 → cfgESMark 恒 false=S 徽标三轮
+                  // "修复"全部无效的真根因（esandyghost 同样中招=敌人残影
+                  // 一直未开启）；parseInt 键靠数字前缀侥幸存活
+                  var hs:int = v.indexOf("#");
+                  if (hs >= 0) { v = v.substring(0, hs); }
+                  v = v.replace(/^\s+|\s+$/g, "");
                   if (k == "hotkey") cfgHotkey = parseInt(v);
                   else if (k == "duration") cfgDuration = parseInt(v);
                   else if (k == "cooldown") cfgCooldown = parseInt(v);
@@ -2952,7 +2961,7 @@ package
       {
          if (panelTf == null) return;
          var lines:Array = [];
-         lines.push("== SandevistanMod v1.120 参数 ==");
+         lines.push("== SandevistanMod v1.121 参数 ==");
          lines.push((panelSel == 0 ? "> " : "  ") + "生效时长   " + (cfgDuration / 30).toFixed(1) + "s");
          lines.push((panelSel == 1 ? "> " : "  ") + "冷却       " + (cfgCooldown / 30).toFixed(1) + "s");
          lines.push((panelSel == 2 ? "> " : "  ") + "回放速度   x" + cfgReplaySpeed);
