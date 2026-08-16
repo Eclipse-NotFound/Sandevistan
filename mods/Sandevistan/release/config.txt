@@ -77,11 +77,12 @@ edgethresh=15
 swaprun=1
 
 # ===== v1.115：敌人斯安维斯坦（Enemy Sandevistan）=====
-# 装备名单（逗号分隔的类名；默认：掠夺者/狮鹫(佣兵)/天角兽/英克雷/铁骑卫）
-# 触发：敌人 AI 看到玩家进入战斗后立即开启；每个房间最多 1 个
+# 装备名单（逗号分隔的类名；默认：掠夺者/狮鹫(佣兵)/天角兽/英克雷/铁骑卫/斑马）
+# 触发：敌人 AI 看到玩家进入战斗后立即开启；每房间装备名额 = 候选敌人数 × esandyper%
 enemysandy=UnitRaider,UnitMerc,UnitAlicorn,UnitEncl,UnitRanger,UnitZebra
 esandydur=150     # 敌人斯安维斯坦持续帧（30帧=1秒 → 5秒）
 esandycd=300      # 冷却帧（10秒）
 esandyspd=5       # 加速倍率
 esandyghost=1     # 敌人残影（边缘行者配色）
 esandymark=1      # 调试"S"徽标（绿=待机 黄=激活 灰=冷却）
+esandyper=50      # v1.119 每房间装备百分比（50=一半 100=全部 0=关闭）

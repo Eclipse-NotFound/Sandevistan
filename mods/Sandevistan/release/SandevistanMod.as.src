@@ -177,17 +177,22 @@ package
       private var projArmorOver:Object = null;  // v1.114：按武器 id 的护甲覆盖（projarmor_<id>）
       // ===== v1.115：敌人斯安维斯坦（Enemy Sandevistan）=====
       // 触发=敌人 AI 看到玩家进入战斗（celUnit==gg 上升沿）后立即开启；
-      // 每房间最多 1 个（esRoomTaken 按 room.id 记录）；持续/冷却/倍率可配置。
+      // 每房间装备名额 v1.119 起为房间敌人数的 cfgESPer%（默认 50，即一半；
+      // esRoomCnt 按 room.id 计数）；持续/冷却/倍率可配置。
       private var cfgEnemySandy:String = "UnitRaider,UnitMerc,UnitAlicorn,UnitEncl,UnitRanger,UnitZebra";
       private var cfgESDur:int = 150;            // 持续帧（30帧=1秒 → 5秒）
       private var cfgESCd:int = 300;             // 冷却帧（10秒）
       private var cfgESSpd:int = 5;              // 加速倍率（每显示帧补 spd-1 次 step）
       private var cfgESGhost:Boolean = true;     // 敌人残影（边缘行者配色）
       private var cfgESMark:Boolean = true;      // 调试"S"徽标
+      private var cfgESPer:int = 50;             // v1.119：每房间装备百分比（50=一半；0=关闭；100=全部）
       private var esClasses:Array = [];          // 白名单类名（config enemysandy 解析）
       private var esEnemies:Dictionary = new Dictionary(); // 敌人 → {st,left,cd,sawCel,px,py}
-      private var esRoomTaken:Object = {};       // roomId → 敌人（每房间 1 个）
+      private var esRoomCnt:Object = {};         // v1.119：roomId → 已装备敌人数（名额=房间候选数×esandyper%）
       private var esMarks:Dictionary = new Dictionary(); // 敌人 → 徽标 TextField
+      private var esMarkLayer:Sprite = null;     // v1.119：徽标容器（挂 grafon.visual 顶层，免疫图层重建）
+      private var esMarkDiag:int = 0;            // v1.119：徽标诊断计数
+      private var esQuotaDiag:int = 0;           // v1.119：名额诊断计数
       private var esDiagCnt:int = 0;
       private var projDiagTick:int = 0;      // v1.117：常规玩法击落诊断计数
       private var projHitDiagCnt:int = 0;    // v1.117：常规玩法命中诊断计数
@@ -340,7 +345,7 @@ package
          // 死亡位置 = 鬼影真因。
          try { inst.slowPartClass = ApplicationDomain.currentDomain.getDefinition("fe.graph.Part") as Class; } catch (e:*) { }
          // v1.101：版本标记——日志确认实际加载运行的构建版本与关键开关
-         inst.log("[SandyMod] v1.118 loaded swaprun=" + (inst.cfgSwapRun ? 1 : 0) + " projhits=" + (inst.cfgProjHits ? 1 : 0));
+         inst.log("[SandyMod] v1.119 loaded swaprun=" + (inst.cfgSwapRun ? 1 : 0) + " projhits=" + (inst.cfgProjHits ? 1 : 0));
          if (main != null && main.stage != null)
          {
             main.stage.addEventListener(Event.ENTER_FRAME, inst.onFrame);
@@ -371,7 +376,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.118 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.119 已加载 (按 \ 触发斯安维斯坦)";
             t.autoSize = "left";   // v1.110：版本号此前显示不全（TextField 默认宽度截断）
             t.x = 10;
             t.y = 10;
@@ -476,6 +481,7 @@ package
                   else if (k == "esandyspd") cfgESSpd = parseInt(v);
                   else if (k == "esandyghost") cfgESGhost = v.toLowerCase() == "1" || v.toLowerCase() == "true";
                   else if (k == "esandymark") cfgESMark = v.toLowerCase() == "1" || v.toLowerCase() == "true";
+                  else if (k == "esandyper") cfgESPer = parseInt(v);
                }
             }
          }
@@ -502,6 +508,9 @@ package
          if (cfgESCd > 7200) cfgESCd = 7200;
          if (cfgESSpd < 2) cfgESSpd = 2;
          if (cfgESSpd > 10) cfgESSpd = 10;
+         if (isNaN(cfgESPer)) cfgESPer = 50;      // v1.119：每房间装备百分比
+         if (cfgESPer < 0) cfgESPer = 0;
+         if (cfgESPer > 100) cfgESPer = 100;
          esClasses = [];
          var arrES:Array = cfgEnemySandy.split(",");
          for (var iES:int = 0; iES < arrES.length; iES++)
@@ -2943,7 +2952,7 @@ package
       {
          if (panelTf == null) return;
          var lines:Array = [];
-         lines.push("== SandevistanMod v1.118 参数 ==");
+         lines.push("== SandevistanMod v1.119 参数 ==");
          lines.push((panelSel == 0 ? "> " : "  ") + "生效时长   " + (cfgDuration / 30).toFixed(1) + "s");
          lines.push((panelSel == 1 ? "> " : "  ") + "冷却       " + (cfgCooldown / 30).toFixed(1) + "s");
          lines.push((panelSel == 2 ? "> " : "  ") + "回放速度   x" + cfgReplaySpeed);
@@ -3007,6 +3016,7 @@ package
             sb.push("esandyspd=" + cfgESSpd);
             sb.push("esandyghost=" + (cfgESGhost ? 1 : 0));
             sb.push("esandymark=" + (cfgESMark ? 1 : 0));
+            sb.push("esandyper=" + cfgESPer);
             sb.push("fxrun=" + (cfgFxRun ? 1 : 0));
             sb.push("showmark=" + (cfgShowMark ? 1 : 0));
             sb.push("panelkey=" + cfgPanelKey);
@@ -3862,17 +3872,57 @@ package
       // ===== v1.115：敌人斯安维斯坦（Enemy Sandevistan）=====
       // 触发：敌人 AI 看到玩家进入战斗（celUnit==world.gg 上升沿——aiState 是
       // internal 读不到，celUnit 是 public 的"已锁定玩家为目标"信号）后立即
-      // 开启；持续 cfgESDur 帧、冷却 cfgESCd 帧；白名单类名配置；每房间最多
-      // 1 个（esRoomTaken 按 loc.room.id 记录，死亡后房间名额释放）。
+      // 开启；持续 cfgESDur 帧、冷却 cfgESCd 帧；白名单类名配置；每房间名额
+      // = 候选敌人数 × esandyper%（v1.119 起默认 50=一半；esRoomCnt 计数，
+      // 死亡后释放名额）。
       // 场景 A（玩家未开）：世界正常，模组在游戏步进后给活跃敌人补
       // (spd-1) 次 step() → AI/移动/攻击 N×；敌人子弹 1×（世界步进）。
       // 场景 B（玩家同时开）：stepSandy 内活跃敌人与玩家同权每帧 step 一次。
-      // 调试徽标："S"（待机绿/激活黄/冷却灰）挂在 visObjs[3]，非 goldstar
-      // （不设 hero，不影响精英怪判定）。
+      // 调试徽标："S"（待机绿/激活黄/冷却灰）v1.119 起挂在 grafon.visual
+      // 顶层专用容器（免疫 drawAllObjs 每帧换图层 Sprite 与其它模组的图层
+      // 重建），非 goldstar（不设 hero，不影响精英怪判定）。
       private function stepEnemySandy():void
       {
          var locE:Object = world.loc;
          if (locE == null) return;
+         // ---- 0. v1.119：预扫描本房间候选数 → 名额 = 候选 × esandyper%（每房间一半）----
+         var quotaE:int = 0;
+         try
+         {
+            if (cfgESPer > 0)
+            {
+               var candE:int = 0;
+               var oC:Object = locE.firstObj;
+               var gC:int = 0;
+               while (oC != null)
+               {
+                  var nxC:Object = oC.nobj;
+                  try
+                  {
+                     if (oC != world.gg)
+                     {
+                        var qnC:String = flash.utils.getQualifiedClassName(oC);
+                        if (qnC.indexOf("fe.unit::") == 0 && oC["currentWeapon"] != null
+                            && esClasses.indexOf(qnC) >= 0)
+                        {
+                           candE++;
+                        }
+                     }
+                  }
+                  catch (e:*) { }
+                  oC = nxC;
+                  if (++gC > 20000) break;
+               }
+               quotaE = Math.round(candE * cfgESPer / 100);
+               if (candE > 0 && quotaE < 1) quotaE = 1;
+               if (cfgDiagLog && esQuotaDiag < 6)
+               {
+                  esQuotaDiag++;
+                  log("[DIAG] esandy: room cand=" + candE + " per=" + cfgESPer + " quota=" + quotaE);
+               }
+            }
+         }
+         catch (e:*) { }
          // ---- 1. 扫描登记 + 战斗触发检测 + 状态推进 ----
          try
          {
@@ -3892,10 +3942,17 @@ package
                         var recE:Object = esEnemies[oE];
                         if (recE == null)
                         {
-                           // 每房间 1 个（房间名额被其它敌人占用则跳过注册）
+                           // v1.119：每房间名额 = 候选 × esandyper%（默认一半）；
+                           // 名额按登记顺序发放（esRoomCnt 计数）
                            var rIdE:String = "";
                            try { if (locE.room != null && locE.room.id != null) { rIdE = String(locE.room.id); } } catch (e:*) { }
-                           if (rIdE != "" && esRoomTaken[rIdE] != null && esRoomTaken[rIdE] != oE)
+                           var takenE:int = 0;
+                           if (rIdE != "")
+                           {
+                              var tvE:* = esRoomCnt[rIdE];
+                              if (tvE != null && tvE != undefined) { takenE = int(tvE); }
+                           }
+                           if (takenE >= quotaE)
                            {
                               oE = nxE;
                               if (++gE > 20000) break;
@@ -3903,7 +3960,7 @@ package
                            }
                            recE = { st: 0, left: 0, cd: 0, sawCel: false, px: 0, py: 0 };
                            esEnemies[oE] = recE;
-                           if (rIdE != "") { esRoomTaken[rIdE] = oE; }
+                           if (rIdE != "") { esRoomCnt[rIdE] = takenE + 1; }
                            try { recE.px = oE.X; recE.py = oE.Y; } catch (e:*) { }
                         }
                         // 战斗信号：celUnit==gg 上升沿且待机 → 立即触发
@@ -3955,7 +4012,14 @@ package
                {
                   var rIdC:String = "";
                   if (locE.room != null && locE.room.id != null) { rIdC = String(locE.room.id); }
-                  if (rIdC != "" && esRoomTaken[rIdC] == kR) { delete esRoomTaken[rIdC]; }
+                  if (rIdC != "")
+                  {
+                     var cvC:* = esRoomCnt[rIdC];
+                     if (cvC != null && cvC != undefined)
+                     {
+                        esRoomCnt[rIdC] = Math.max(0, int(cvC) - 1);
+                     }
+                  }
                }
                catch (e:*) { }
             }
@@ -4104,23 +4168,43 @@ package
                t.text = "S";
                esMarks[oE] = t;
             }
-            // v1.116/1.118：游戏 Grafon.drawAllObjs 每帧把 visObjs 各层换成
-            // 全新 Sprite（Unit.hpbar 靠 addVisual 每帧重挂存活）。徽标挂在
-            // 旧 Sprite 上时 parent≠null，v1.116 的 parent==null 判断永不触发
-            // → 永久脱离显示树。改为每帧校验 parent 是否仍是当前层对象，
-            // 不等（含旧层/被摘除两种情况）就摘掉重挂——与 hpbar 同款模式。
+            // v1.119：不再挂 visObjs[3]——drawAllObjs 每帧把图层 Sprite 整个
+            // 换新，且其它模组（RealisticVision 等）在我们之后还会再重建图层
+            // （v1.118 的每帧重挂仍会被随后摘掉，用户实测仍不可见）。改为把
+            // 徽标挂到 grafon.visual 顶层的专用容器：visual 是全部图层的父
+            // 容器，drawAllObjs 只替换子层对象、从不清空 visual 本身——任何
+            // 图层重建都碰不到它，且永远渲染在最上层（世界坐标不变）。
             var gVisE:Object = world["grafon"];
-            var lay3E:Object = (gVisE != null && gVisE.visObjs != null) ? gVisE.visObjs[3] : null;
-            if (lay3E != null && t.parent != lay3E)
+            var visC:Object = gVisE != null ? gVisE["visual"] : null;
+            if (visC != null)
             {
-               if (t.parent != null)
+               if (esMarkLayer == null) { esMarkLayer = new Sprite(); }
+               if (esMarkLayer.parent != visC)
                {
-                  try { t.parent.removeChild(t); } catch (e:*) { }
+                  visC.addChild(esMarkLayer);
                }
-               lay3E.addChild(t);
+               if (t.parent != esMarkLayer)
+               {
+                  if (t.parent != null)
+                  {
+                     try { t.parent.removeChild(t); } catch (e:*) { }
+                  }
+                  esMarkLayer.addChild(t);
+               }
             }
             t.textColor = st == 1 ? 0xFFD040 : (st == 0 ? 0x00FF88 : 0x888888);
             try { t.x = oE.X - 8; t.y = oE.Y - 60; } catch (e:*) { }
+            // v1.119 诊断：前 10 条记录挂载链，定位"不可见"的最后一手数据
+            if (cfgDiagLog && esMarkDiag < 10)
+            {
+               esMarkDiag++;
+               log("[DIAG] esmark: cls=" + flash.utils.getQualifiedClassName(oE) + " st=" + st
+                   + " inLay=" + (t.parent == esMarkLayer)
+                   + " layOnVis=" + (esMarkLayer != null && esMarkLayer.parent == visC)
+                   + " onStage=" + (t.stage != null)
+                   + " visOnStage=" + (visC != null && visC["stage"] != null)
+                   + " x=" + t.x + " y=" + t.y + " vis=" + t.visible);
+            }
          }
          catch (e:*) { }
       }

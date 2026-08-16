@@ -5,6 +5,7 @@
 
 | 版本 | 内容 |
 |---|---|
+| v1.119 | ①**S 徽标改挂 grafon.visual 顶层专用容器**：v1.118 每帧重挂仍不可见（用户实测）——drawAllObjs 每帧把 visObjs 图层 Sprite 整个换新，且其它模组（RealisticVision）在我们之后还会再重建图层（重挂又被摘掉）。visual 是全部图层的父容器、drawAllObjs 只替换子层对象不清 visual 本身——挂这里任何重建都碰不到，永远渲染在最上层（世界坐标不变）。新增 esmark 诊断（前 10 条：挂载链/onStage/x/y/visible，diaglog=1 时）②**每房间装备名额：1 → esandyper%（默认 50=一半）**：stepEnemySandy 预扫描房间候选数算配额（quota=round(候选×per%)，候选>0 时至少 1）；esRoomTaken 单槽改 esRoomCnt 计数（登记+1、死亡-1）；config 新增 esandyper（0=关闭 100=全部），F9 保存回写 |
 | v1.118 | **S 徽标显示修复（真根因）**：游戏 `Grafon.drawAllObjs`（Grafon.as:703）每帧把 visObjs 各层**换成全新 Sprite** 再 addVisual 重挂（hpbar 靠此存活）——徽标挂在旧 Sprite 上时 parent≠null，v1.116 的 parent==null 重挂判断永不触发 → 徽标永久脱离显示树（用户实测：狮鹫房敌人明显加速但头顶无 S）。修复：updateESMark 每帧校验 `t.parent != 当前 visObjs[3]`（含旧层/被摘除两种情况）→ 摘掉重挂，与 Unit.hpbar 同款每帧重挂模式 |
 | v1.117 | ①**敌人斯安维斯坦注册修复**：esClasses 存裸类名 vs getQualifiedClassName 返回 `fe.unit::UnitRaider` 全名——索引比较永远不匹配（v1.115/116 无敌人注册=S 徽标不出现的根因）；loadConfig 统一构造全名存储 ②白名单加 **UnitZebra（斑马）**（逻辑与其它一致）③**常规玩法击落诊断**：projScan（每 60 帧：projs/objs 表计数+前 3 个投掷物类名/坐标）与 projHit（命中时：类名/子弹类名/伤害/坐标）——定位"敌人手雷/导弹无法击落"（游戏 Bullet/PhisBullet/SmartBullet 类经反编译比对 0 差异，非游戏侧变更） |
 | v1.116 | **S 徽标图层重建兼容**：其它模组（RealisticVision 每帧 setLight→drawAllObjs）重建 visObjs 层会把徽标摘出显示树——updateESMark 改为 parent==null 时重挂（v1.115 徽标创建后永不重挂，多模组环境下会消失） |
