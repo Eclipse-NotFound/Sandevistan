@@ -193,7 +193,9 @@ package
       private var esMarks:Dictionary = new Dictionary(); // 敌人 → 徽标 TextField
       private var esMarkLayer:Sprite = null;     // v1.119：徽标容器（挂 grafon.visual 顶层，免疫图层重建）
       private var esMarkDiag:int = 0;            // v1.119：徽标诊断计数
+      private var esCreateDiag:int = 0;          // v1.124：徽标创建诊断计数（按敌人逐个记）
       private var esQuotaDiag:int = 0;           // v1.119：名额诊断计数
+      private var esLastLoc:Object = null;       // v1.124：上次房间（loc 变化时清空敌方状态）
       private var recSitFrames:int = 0;          // v1.123：时停中 isSit 帧计数（翻滚诊断）
       private var recRollFrames:int = 0;         // v1.123：时停中 animState=="roll" 帧计数
       private var recTotFrames:int = 0;          // v1.123：时停录像总帧数
@@ -351,7 +353,7 @@ package
          try { inst.slowPartClass = ApplicationDomain.currentDomain.getDefinition("fe.graph.Part") as Class; } catch (e:*) { }
          // v1.101：版本标记——日志确认实际加载运行的构建版本与关键开关
          // v1.121：追加 esmark/esper/espd——排查"徽标不可见"类问题的第一手数据
-         inst.log("[SandyMod] v1.123 loaded swaprun=" + (inst.cfgSwapRun ? 1 : 0) + " projhits=" + (inst.cfgProjHits ? 1 : 0)
+         inst.log("[SandyMod] v1.124 loaded swaprun=" + (inst.cfgSwapRun ? 1 : 0) + " projhits=" + (inst.cfgProjHits ? 1 : 0)
              + " esmark=" + (inst.cfgESMark ? 1 : 0) + " esghost=" + (inst.cfgESGhost ? 1 : 0) + " esper=" + inst.cfgESPer);
          if (main != null && main.stage != null)
          {
@@ -383,7 +385,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.123 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.124 已加载 (按 \ 触发斯安维斯坦)";
             t.autoSize = "left";   // v1.110：版本号此前显示不全（TextField 默认宽度截断）
             t.x = 10;
             t.y = 10;
@@ -2970,7 +2972,7 @@ package
       {
          if (panelTf == null) return;
          var lines:Array = [];
-         lines.push("== SandevistanMod v1.123 参数 ==");
+         lines.push("== SandevistanMod v1.124 参数 ==");
          lines.push((panelSel == 0 ? "> " : "  ") + "生效时长   " + (cfgDuration / 30).toFixed(1) + "s");
          lines.push((panelSel == 1 ? "> " : "  ") + "冷却       " + (cfgCooldown / 30).toFixed(1) + "s");
          lines.push((panelSel == 2 ? "> " : "  ") + "回放速度   x" + cfgReplaySpeed);
@@ -3923,6 +3925,36 @@ package
       {
          var locE:Object = world.loc;
          if (locE == null) return;
+         // ---- v1.124：换房间即清空敌方状态 ----
+         // loc=每房间一个（Land.newLoc 实证），但 grafon.visual 是全局单例：
+         // 旧房间的徽标 TextField 挂在共享层上会漏进新房间显示（"绝对没有
+         // 敌人存在过的房间也有 S"的根因）；esRoomCnt 跨房间残留还会吃掉
+         // 新房间名额（掠夺者房无 S 的嫌疑之一）。检测到 loc 变化时清空
+         // 注册表/徽标/名额并重开房间级诊断。
+         if (esLastLoc != locE)
+         {
+            esLastLoc = locE;
+            var kmA:Array = [];
+            for (var kM:Object in esMarks)
+            {
+               try { kmA.push(kM); } catch (e:*) { }
+            }
+            for each (var kX:Object in kmA)
+            {
+               try { removeESMark(kX); } catch (e:*) { }
+            }
+            esEnemies = new Dictionary();
+            esRoomCnt = {};
+            esQuotaDiag = 0;
+            esCreateDiag = 0;
+            if (cfgDiagLog && esDiagCnt < 24)
+            {
+               esDiagCnt++;
+               var rIdN:String = "";
+               try { if (locE.room != null && locE.room.id != null) { rIdN = String(locE.room.id); } } catch (e:*) { }
+               log("[DIAG] esandy: roomChange id=" + rIdN);
+            }
+         }
          // ---- 0. v1.119：预扫描本房间候选数 → 名额 = 候选 × esandyper%（每房间一半）----
          var quotaE:int = 0;
          try
@@ -3940,7 +3972,11 @@ package
                      if (oC != world.gg)
                      {
                         var qnC:String = flash.utils.getQualifiedClassName(oC);
-                        if (qnC.indexOf("fe.unit::") == 0 && oC["currentWeapon"] != null
+                        // v1.124：去掉 currentWeapon 条件——白名单本身就是
+                        // 敌对人类（掠夺者/狮鹫/天角兽/英克雷/铁骑卫/斑马），
+                        // 无需再用武器字段过滤；无武器/武器加载失败的掠夺者
+                        // 此前被静默排除=掠夺者房 cand=0 无 S 的嫌疑之二
+                        if (qnC.indexOf("fe.unit::") == 0
                             && esClasses.indexOf(qnC) >= 0)
                         {
                            // v1.123：排除死亡/尸体（sost>=3）——此前尸体也算
@@ -3985,7 +4021,7 @@ package
                   if (oE != world.gg)
                   {
                      var qnE:String = flash.utils.getQualifiedClassName(oE);
-                     if (qnE.indexOf("fe.unit::") == 0 && oE["currentWeapon"] != null
+                     if (qnE.indexOf("fe.unit::") == 0
                          && esClasses.indexOf(qnE) >= 0)
                      {
                         // v1.123：跳过死亡/尸体（sost>=3）——尸体不注册、
@@ -4256,6 +4292,15 @@ package
                t.autoSize = "left";
                t.text = "S";
                esMarks[oE] = t;
+               // v1.124：创建事件诊断（按敌人逐个记，覆盖整局而不是只前 10 帧）
+               if (cfgDiagLog && esCreateDiag < 40)
+               {
+                  esCreateDiag++;
+                  var rIdM:String = "";
+                  try { if (world.loc != null && world.loc.room != null && world.loc.room.id != null) { rIdM = String(world.loc.room.id); } } catch (e:*) { }
+                  log("[DIAG] esmark: create cls=" + flash.utils.getQualifiedClassName(oE)
+                      + " room=" + rIdM + " x=" + oE.X + " y=" + oE.Y);
+               }
             }
             // v1.119：不再挂 visObjs[3]——drawAllObjs 每帧把图层 Sprite 整个
             // 换新，且其它模组（RealisticVision 等）在我们之后还会再重建图层
