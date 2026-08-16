@@ -194,6 +194,10 @@ package
       private var esMarkLayer:Sprite = null;     // v1.119：徽标容器（挂 grafon.visual 顶层，免疫图层重建）
       private var esMarkDiag:int = 0;            // v1.119：徽标诊断计数
       private var esQuotaDiag:int = 0;           // v1.119：名额诊断计数
+      private var recSitFrames:int = 0;          // v1.123：时停中 isSit 帧计数（翻滚诊断）
+      private var recRollFrames:int = 0;         // v1.123：时停中 animState=="roll" 帧计数
+      private var recTotFrames:int = 0;          // v1.123：时停录像总帧数
+      private var rRollDiag:int = 0;             // v1.123：回放翻滚喂入诊断计数
       private var esDiagCnt:int = 0;
       private var projDiagTick:int = 0;      // v1.117：常规玩法击落诊断计数
       private var projHitDiagCnt:int = 0;    // v1.117：常规玩法命中诊断计数
@@ -347,7 +351,7 @@ package
          try { inst.slowPartClass = ApplicationDomain.currentDomain.getDefinition("fe.graph.Part") as Class; } catch (e:*) { }
          // v1.101：版本标记——日志确认实际加载运行的构建版本与关键开关
          // v1.121：追加 esmark/esper/espd——排查"徽标不可见"类问题的第一手数据
-         inst.log("[SandyMod] v1.122 loaded swaprun=" + (inst.cfgSwapRun ? 1 : 0) + " projhits=" + (inst.cfgProjHits ? 1 : 0)
+         inst.log("[SandyMod] v1.123 loaded swaprun=" + (inst.cfgSwapRun ? 1 : 0) + " projhits=" + (inst.cfgProjHits ? 1 : 0)
              + " esmark=" + (inst.cfgESMark ? 1 : 0) + " esghost=" + (inst.cfgESGhost ? 1 : 0) + " esper=" + inst.cfgESPer);
          if (main != null && main.stage != null)
          {
@@ -379,7 +383,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.122 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.123 已加载 (按 \ 触发斯安维斯坦)";
             t.autoSize = "left";   // v1.110：版本号此前显示不全（TextField 默认宽度截断）
             t.x = 10;
             t.y = 10;
@@ -2966,7 +2970,7 @@ package
       {
          if (panelTf == null) return;
          var lines:Array = [];
-         lines.push("== SandevistanMod v1.122 参数 ==");
+         lines.push("== SandevistanMod v1.123 参数 ==");
          lines.push((panelSel == 0 ? "> " : "  ") + "生效时长   " + (cfgDuration / 30).toFixed(1) + "s");
          lines.push((panelSel == 1 ? "> " : "  ") + "冷却       " + (cfgCooldown / 30).toFixed(1) + "s");
          lines.push((panelSel == 2 ? "> " : "  ") + "回放速度   x" + cfgReplaySpeed);
@@ -3173,6 +3177,10 @@ package
             rainbowIdx = 0;
             fxTicks = 0;
             replayDiagOnce = false;   // 回放开始诊断每轮重置
+            recSitFrames = 0;         // v1.123：翻滚诊断计数重置
+            recRollFrames = 0;
+            recTotFrames = 0;
+            rRollDiag = 0;
             rFixCnt = 0;               // 回放重钉诊断计数重置
             recDiagCnt = 0;            // 录像对象诊断计数重置
             playerAnimCat = 0;   // 回放玩家动画档位迟滞重置
@@ -3211,6 +3219,12 @@ package
       {
          if (!sandyActive) return;
          sandyActive = false;
+         // v1.123：翻滚诊断——时停结束报告录像中趴下/翻滚帧数（回放翻滚
+         // 不重现时先看这里：sit=0=记录侧没录到；roll>0=驱动侧问题）
+         if (cfgDiagLog)
+         {
+            log("[DIAG] rollRec: tot=" + recTotFrames + " sit=" + recSitFrames + " roll=" + recRollFrames);
+         }
          // v1.82：时停前已在飞的玩家攻击体（手雷/导弹）——恢复时停中清零的
          // 伤害（回放中继续飞行并正常结算）。必须在 restorePredDead 清空
          // origDam 之前。
@@ -3473,6 +3487,11 @@ package
                            ty: world.gg.teleObj != null ? world.gg.teleObj.Y : 0,
                            si: gg.isSit, an: gg.animState,
                            ci: speedToEdgeIdx(Math.abs(gg.dx) + Math.abs(gg.dy)) });
+            // v1.123：翻滚诊断——统计录像中趴下/翻滚帧数（回放不重现时
+            // 先看记录侧有没有录到：sit=0 说明记录侧问题，roll>0 说明驱动侧）
+            recTotFrames++;
+            try { if (gg.isSit) { recSitFrames++; } } catch (e:*) { }
+            try { if (gg.animState == "roll") { recRollFrames++; } } catch (e:*) { }
             // 记录重演状态（场景级录像：敌人/物品/攻击体每帧位置+动画帧+生成音效）
             recordReplayObjects();
             // 时停攻击状态诊断（每 30 帧）：观察时停中攻击意图与武器状态；
@@ -3924,6 +3943,17 @@ package
                         if (qnC.indexOf("fe.unit::") == 0 && oC["currentWeapon"] != null
                             && esClasses.indexOf(qnC) >= 0)
                         {
+                           // v1.123：排除死亡/尸体（sost>=3）——此前尸体也算
+                           // 候选：名额被尸体占掉=活敌无标记、S 飘在"没有敌人
+                           // 的地方"（用户实测"随机算法选中了非敌人实体"）
+                           var sostC:int = 0;
+                           try { sostC = int(oC["sost"]); } catch (e:*) { }
+                           if (sostC >= 3)
+                           {
+                              oC = nxC;
+                              if (++gC > 20000) break;
+                              continue;
+                           }
                            candE++;
                         }
                      }
@@ -3958,6 +3988,16 @@ package
                      if (qnE.indexOf("fe.unit::") == 0 && oE["currentWeapon"] != null
                          && esClasses.indexOf(qnE) >= 0)
                      {
+                        // v1.123：跳过死亡/尸体（sost>=3）——尸体不注册、
+                        // 徽标不跟随尸体（"没有敌人的地方出现 S"的根因）
+                        var sostE:int = 0;
+                        try { sostE = int(oE["sost"]); } catch (e:*) { }
+                        if (sostE >= 3)
+                        {
+                           oE = nxE;
+                           if (++gE > 20000) break;
+                           continue;
+                        }
                         var recE:Object = esEnemies[oE];
                         if (recE == null)
                         {
@@ -4016,7 +4056,10 @@ package
             {
                try
                {
-                  if (kC == null || kC.in_chain != true)
+                  // v1.123：死亡/尸体（sost>=3）也移除——徽标不再滞留尸体上方
+                  var deadC:Boolean = false;
+                  try { deadC = int(kC["sost"]) >= 3; } catch (e:*) { }
+                  if (kC == null || kC.in_chain != true || deadC)
                   {
                      rmE.push(kC);
                   }
@@ -4591,6 +4634,27 @@ package
                         world.gg.dx = 0;
                      }
                      world.gg.animate();
+                     // v1.123：翻滚诊断——记录喂入与 animate() 后的实际
+                     // animState（roll 没播出来时：after 非 roll = 状态机
+                     // 没进翻滚分支，看 stay/storona/wSpd 哪项不对）
+                     if (cfgDiagLog && rRollDiag < 25)
+                     {
+                        var anAfter:String = "";
+                        var stayNow:Boolean = false;
+                        var stoNow:Number = 0;
+                        var wspdNow:Number = 0;
+                        try { anAfter = String(world.gg.animState); } catch (e:*) { }
+                        try { stayNow = Boolean(world.gg.stay); } catch (e:*) { }
+                        try { stoNow = Number(world.gg.storona); } catch (e:*) { }
+                        try { wspdNow = Number(world.gg.walkSpeed); } catch (e:*) { }
+                        if (anR == "roll" || pCatR == 3 || anAfter == "roll" || anAfter == "polz" || anAfter == "down")
+                        {
+                           rRollDiag++;
+                           log("[DIAG] rRoll: idx=" + replayIdx + " siR=" + siR + " anR=" + anR
+                               + " pCat=" + pCatR + " stay=" + stayNow + " sto=" + stoNow
+                               + " wSpd=" + wspdNow + " after=" + anAfter);
+                        }
+                     }
                   }
                   else if (pCatR == 1)
                   {
