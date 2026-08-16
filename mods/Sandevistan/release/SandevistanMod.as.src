@@ -345,7 +345,7 @@ package
          // 死亡位置 = 鬼影真因。
          try { inst.slowPartClass = ApplicationDomain.currentDomain.getDefinition("fe.graph.Part") as Class; } catch (e:*) { }
          // v1.101：版本标记——日志确认实际加载运行的构建版本与关键开关
-         inst.log("[SandyMod] v1.119 loaded swaprun=" + (inst.cfgSwapRun ? 1 : 0) + " projhits=" + (inst.cfgProjHits ? 1 : 0));
+         inst.log("[SandyMod] v1.120 loaded swaprun=" + (inst.cfgSwapRun ? 1 : 0) + " projhits=" + (inst.cfgProjHits ? 1 : 0));
          if (main != null && main.stage != null)
          {
             main.stage.addEventListener(Event.ENTER_FRAME, inst.onFrame);
@@ -376,7 +376,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.119 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.120 已加载 (按 \ 触发斯安维斯坦)";
             t.autoSize = "left";   // v1.110：版本号此前显示不全（TextField 默认宽度截断）
             t.x = 10;
             t.y = 10;
@@ -2952,7 +2952,7 @@ package
       {
          if (panelTf == null) return;
          var lines:Array = [];
-         lines.push("== SandevistanMod v1.119 参数 ==");
+         lines.push("== SandevistanMod v1.120 参数 ==");
          lines.push((panelSel == 0 ? "> " : "  ") + "生效时长   " + (cfgDuration / 30).toFixed(1) + "s");
          lines.push((panelSel == 1 ? "> " : "  ") + "冷却       " + (cfgCooldown / 30).toFixed(1) + "s");
          lines.push((panelSel == 2 ? "> " : "  ") + "回放速度   x" + cfgReplaySpeed);
@@ -3443,6 +3443,9 @@ package
 
             var gg:Object = loc.gg;
             // 记录攻击键状态与瞄准方向（回放时攻击指向时停期间的发射方向）
+            // v1.120：追加 si（趴下/蹲下 isSit）与 an（animState）——回放动画
+            // 驱动据此重现翻滚（roll）/趴下（down/polz）/起身（up）等非移动
+            // 动画（dx 量化只覆盖走/跑/小跑，翻滚永远不出现——用户实测）。
             history.push({ x: gg.X, y: gg.Y, s: gg.storona, r: gg.vis != null ? gg.vis.rotation : 0, v: gg.vis != null ? gg.vis.scaleX : 1,
                            a: wantA, p: wantP, g: world.ctr.keyGrenad, m: world.ctr.keyMagic,
                            ax: world.celX, ay: world.celY,
@@ -3453,6 +3456,7 @@ package
                            tA: tAManual, hold: holdManual, fc: fcRec,
                            tx: world.gg.teleObj != null ? world.gg.teleObj.X : 0,
                            ty: world.gg.teleObj != null ? world.gg.teleObj.Y : 0,
+                           si: gg.isSit, an: gg.animState,
                            ci: speedToEdgeIdx(Math.abs(gg.dx) + Math.abs(gg.dy)) });
             // 记录重演状态（场景级录像：敌人/物品/攻击体每帧位置+动画帧+生成音效）
             recordReplayObjects();
@@ -4496,25 +4500,71 @@ package
                   else if (pPrevC == 2 && pCatR == 3 && pspdR < 10) { pCatR = 2; }
                }
                playerAnimCat = pCatR;
+               // v1.120：时停中趴下/翻滚在回放中重现——dx 量化只覆盖
+               // 走/跑/小跑（"roll" 是 isSit 移动分支的动画，dx 驱动永远
+               // 进不了）。按录像的 si（isSit）/an（animState）喂同样的
+               // 状态机输入（isSit + dx/maxSpeed/runForever），让游戏自身
+               // animate() 走出 roll→polz→down→up 的真实过渡。
+               var siR:Boolean = false;
+               var anR:String = "";
+               try
+               {
+                  siR = nP2["si"] != null && nP2["si"] != undefined ? Boolean(nP2["si"]) : false;
+                  anR = nP2["an"] != null ? String(nP2["an"]) : "";
+               }
+               catch (e:*) { }
                var savedMS:Number = 0;
                var savedRF:int = 0;
+               var savedSit:Boolean = false;
                try
                {
                   savedMS = world.gg.maxSpeed;
                   savedRF = world.gg.runForever;
-                  if (pCatR == 1)
+                  savedSit = world.gg.isSit;
+                  if (siR)
+                  {
+                     // 趴下/翻滚分支：方向取 storona（游戏要求 dx*storona>0
+                     // 才走 roll/run；storona 由主循环按录像恢复）
+                     var sgnS:Number = 1;
+                     try { sgnS = world.gg.storona < 0 ? -1 : 1; } catch (e:*) { }
+                     if (sgnS == 0) { sgnS = 1; }
+                     world.gg.isSit = true;
+                     if (anR == "roll" || pCatR == 3)
+                     {
+                        // 翻滚：dx 大 + maxSpeed 超 walkSpeed*1.6 + runForever
+                        //（anR=="roll" 兜底贴墙翻滚等位移小的情形）
+                        world.gg.dx = sgnS * 14;
+                        world.gg.maxSpeed = world.gg.walkSpeed * 1.6 + 10;
+                        world.gg.runForever = 1;
+                     }
+                     else if (pCatR == 2)
+                     {
+                        // 趴地移动（polz）：maxSpeed 低于 walkSpeed*1.6
+                        world.gg.dx = sgnS * 6;
+                        world.gg.maxSpeed = 4;
+                     }
+                     else
+                     {
+                        // 趴下静止：dx=0 走待机分支 → down 姿态/起身 up 过渡
+                        world.gg.dx = 0;
+                     }
+                     world.gg.animate();
+                  }
+                  else if (pCatR == 1)
                   {
                      world.gg.dx = 0;
+                     world.gg.animate();
                   }
                   else
                   {
                      world.gg.dx = (pdxR >= 0 ? 1 : -1) * (pCatR == 2 ? 6 : 14);
                      world.gg.maxSpeed = pCatR == 2 ? 4 : 20;
                      if (pCatR == 3) { world.gg.runForever = 1; }
+                     world.gg.animate();
                   }
-                  world.gg.animate();
                   world.gg.maxSpeed = savedMS;
                   world.gg.runForever = savedRF;
+                  world.gg.isSit = savedSit;
                }
                catch (e:*) { }
             }
