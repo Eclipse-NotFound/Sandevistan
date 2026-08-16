@@ -85,5 +85,6 @@ esandydur=150
 esandycd=300
 esandyspd=5
 esandyghost=1
+esandyghostlife=12
 esandymark=1
 esandyper=50

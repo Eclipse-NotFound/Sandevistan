@@ -184,6 +184,7 @@ package
       private var cfgESCd:int = 300;             // 冷却帧（10秒）
       private var cfgESSpd:int = 5;              // 加速倍率（每显示帧补 spd-1 次 step）
       private var cfgESGhost:Boolean = true;     // 敌人残影（边缘行者配色）
+      private var cfgESGhostLife:int = 12;       // v1.122：敌人残影寿命（显示帧，线性淡出）
       private var cfgESMark:Boolean = true;      // 调试"S"徽标
       private var cfgESPer:int = 50;             // v1.119：每房间装备百分比（50=一半；0=关闭；100=全部）
       private var esClasses:Array = [];          // 白名单类名（config enemysandy 解析）
@@ -346,7 +347,7 @@ package
          try { inst.slowPartClass = ApplicationDomain.currentDomain.getDefinition("fe.graph.Part") as Class; } catch (e:*) { }
          // v1.101：版本标记——日志确认实际加载运行的构建版本与关键开关
          // v1.121：追加 esmark/esper/espd——排查"徽标不可见"类问题的第一手数据
-         inst.log("[SandyMod] v1.121 loaded swaprun=" + (inst.cfgSwapRun ? 1 : 0) + " projhits=" + (inst.cfgProjHits ? 1 : 0)
+         inst.log("[SandyMod] v1.122 loaded swaprun=" + (inst.cfgSwapRun ? 1 : 0) + " projhits=" + (inst.cfgProjHits ? 1 : 0)
              + " esmark=" + (inst.cfgESMark ? 1 : 0) + " esghost=" + (inst.cfgESGhost ? 1 : 0) + " esper=" + inst.cfgESPer);
          if (main != null && main.stage != null)
          {
@@ -378,7 +379,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.121 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.122 已加载 (按 \ 触发斯安维斯坦)";
             t.autoSize = "left";   // v1.110：版本号此前显示不全（TextField 默认宽度截断）
             t.x = 10;
             t.y = 10;
@@ -489,6 +490,7 @@ package
                   else if (k == "esandycd") cfgESCd = parseInt(v);
                   else if (k == "esandyspd") cfgESSpd = parseInt(v);
                   else if (k == "esandyghost") cfgESGhost = v.toLowerCase() == "1" || v.toLowerCase() == "true";
+                  else if (k == "esandyghostlife") cfgESGhostLife = parseInt(v);
                   else if (k == "esandymark") cfgESMark = v.toLowerCase() == "1" || v.toLowerCase() == "true";
                   else if (k == "esandyper") cfgESPer = parseInt(v);
                }
@@ -520,6 +522,9 @@ package
          if (isNaN(cfgESPer)) cfgESPer = 50;      // v1.119：每房间装备百分比
          if (cfgESPer < 0) cfgESPer = 0;
          if (cfgESPer > 100) cfgESPer = 100;
+         if (isNaN(cfgESGhostLife)) cfgESGhostLife = 12;   // v1.122：敌人残影寿命
+         if (cfgESGhostLife < 1) cfgESGhostLife = 1;
+         if (cfgESGhostLife > 120) cfgESGhostLife = 120;
          esClasses = [];
          var arrES:Array = cfgEnemySandy.split(",");
          for (var iES:int = 0; iES < arrES.length; iES++)
@@ -2961,7 +2966,7 @@ package
       {
          if (panelTf == null) return;
          var lines:Array = [];
-         lines.push("== SandevistanMod v1.121 参数 ==");
+         lines.push("== SandevistanMod v1.122 参数 ==");
          lines.push((panelSel == 0 ? "> " : "  ") + "生效时长   " + (cfgDuration / 30).toFixed(1) + "s");
          lines.push((panelSel == 1 ? "> " : "  ") + "冷却       " + (cfgCooldown / 30).toFixed(1) + "s");
          lines.push((panelSel == 2 ? "> " : "  ") + "回放速度   x" + cfgReplaySpeed);
@@ -3024,6 +3029,7 @@ package
             sb.push("esandycd=" + cfgESCd);
             sb.push("esandyspd=" + cfgESSpd);
             sb.push("esandyghost=" + (cfgESGhost ? 1 : 0));
+            sb.push("esandyghostlife=" + cfgESGhostLife);
             sb.push("esandymark=" + (cfgESMark ? 1 : 0));
             sb.push("esandyper=" + cfgESPer);
             sb.push("fxrun=" + (cfgFxRun ? 1 : 0));
@@ -4051,7 +4057,7 @@ package
                   {
                      try { kA.step(); } catch (e:*) { }
                   }
-                  esGhostFor(kA, recA, cfgESSpd);
+                  esGhostFor(kA, recA);
                }
                catch (e:*) { }
             }
@@ -4096,7 +4102,7 @@ package
                   {
                      esTick(kE, recE);
                      try { kE.step(); } catch (e:*) { }
-                     esGhostFor(kE, recE, 1);
+                     esGhostFor(kE, recE);
                   }
                   updateESMark(kE, recE.st);
                }
@@ -4106,7 +4112,7 @@ package
          catch (e:*) { }
       }
       // 敌人残影（边缘行者配色，速度映射——快=绿、慢=蓝紫）
-      private function esGhostFor(oE:Object, recE:Object, mul:Number):void
+      private function esGhostFor(oE:Object, recE:Object):void
       {
          if (!cfgESGhost) return;
          try
@@ -4114,7 +4120,11 @@ package
             var spdE:Number = Math.abs(oE.X - recE.px) + Math.abs(oE.Y - recE.py);
             recE.px = oE.X;
             recE.py = oE.Y;
-            var sIdxE:int = speedToEdgeIdx(spdE * mul);
+            // v1.122：静止不生成（防同位置叠残影、省绘制）；速度映射用
+            // 本显示帧的真实位移（场景 A 的 N× 补步已包含在内，不再×倍率
+            // ——原先 ×spd 恒满速全绿，渐变从不体现）
+            if (spdE < 2) return;
+            var sIdxE:int = speedToEdgeIdx(spdE);
             spawnEnemyGhost(oE, edgePalette(sIdxE));
          }
          catch (e:*) { }
@@ -4150,13 +4160,36 @@ package
             {
                try { savedParentE.addChildAt(visE, savedIdxE); } catch (e:*) { }
             }
+            // v1.122：残影层懒初始化/重挂——此前 ghostLayer 只在玩家开时停
+            // （startSandy）时创建：只触发敌人斯安维斯坦（玩家没开过时停）
+            // 时 ghostLayer==null → addChild 抛空指针被吞 = 敌人残影
+            // "几乎没有"的真根因（偶尔可见=之前开过时停残留了层）。现在
+            // 每次生成前确保层挂在 world.visual 上、位于敌人 vis 所在层
+            // 下方（残影被本体遮挡，与玩家残影同款插层法）。
+            var visW:Object = world["visual"];
+            if (visW != null)
+            {
+               if (ghostLayer == null) { ghostLayer = new Sprite(); }
+               if (ghostLayer.parent != visW)
+               {
+                  if (ghostLayer.parent != null)
+                  {
+                     try { ghostLayer.parent.removeChild(ghostLayer); } catch (e:*) { }
+                  }
+                  var idxE2:int = -1;
+                  try { if (savedParentE != null) { idxE2 = visW.getChildIndex(savedParentE); } } catch (e:*) { }
+                  if (idxE2 > 0) { visW.addChildAt(ghostLayer, idxE2); }
+                  else { visW.addChild(ghostLayer); }
+               }
+            }
             var bitE:Bitmap = new Bitmap(bmpE, "auto", true);
             var sprE:Sprite = new Sprite();
             try { sprE.x = oE.X + bE.left; sprE.y = oE.Y + bE.top; } catch (e:*) { }
             sprE.addChild(bitE);
             bitE.blendMode = cfgGhostBlend == 0 ? "add" : "normal";
-            ghostLayer.addChild(sprE);
-            ghosts.push({ s: sprE, t: Math.max(1, cfgReplayGhostLife), life: Math.max(1, cfgReplayGhostLife), b: bmpE });
+            var glifeE:int = Math.max(1, cfgESGhostLife);   // v1.122：专用寿命（默认 12 帧）
+            if (ghostLayer != null) { ghostLayer.addChild(sprE); }
+            ghosts.push({ s: sprE, t: glifeE, life: glifeE, b: bmpE });
          }
          catch (e:*) { }
       }
