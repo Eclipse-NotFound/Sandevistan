@@ -5,9 +5,9 @@
 > 只读）；公共知识规范见 `../../shared-knowledge/README.md`；公共逆向资料在
 > `../../game-reference/`（只读）。
 
-## 0. 当前状态（2026-08-15）
+## 0. 当前状态（2026-08-16）
 
-- **当前版本 v1.117**（git master），已按**镜像部署**运行：仓库 `C:\RemainsMod` 为
+- **当前版本 v1.118**（git master），已按**镜像部署**运行：仓库 `C:\RemainsMod` 为
   唯一事实源；游戏目录是**多 agent 共享工作区**——`mods\Sandevistan` 全镜像
   （同步脚本 `C:\RemainsMod\sync-to-game.bat`，排除 build 与 config.txt），
   `shared-knowledge\`/`game-reference\` 增补式同步，**不删除其他 agent 的文件**。
@@ -21,13 +21,15 @@
 - **已解决（用户确认 ✓）**：鬼影（v1.110）；启动标记版本号显示完整；
   回放结束爆炸动画自然播完（v1.111/1.112）；爆炸动画原生速度（v1.113）；
   投掷物血量/护甲按武器覆盖（v1.114）。
-- **v1.115-1.117 内容**：敌人斯安维斯坦（v1.117 修复类名匹配 bug——此前无人
-  注册；白名单+斑马 UnitZebra；S 徽标图层重建重挂）；击落诊断 projScan/projHit。
+- **v1.115-1.118 内容**：敌人斯安维斯坦（v1.117 修复类名匹配 bug——此前无人
+  注册；白名单+斑马 UnitZebra）；v1.118 修复 S 徽标显示（drawAllObjs 每帧换新
+  visObjs 层 Sprite，徽标挂在旧层脱离显示树——改每帧校验 parent 重挂，与
+  hpbar 同款模式）；击落诊断 projScan/projHit（v1.117）。
 - **跨模组问题（已定位，未越权修复）**：全敌人满装甲条 = RealisticVision 的
   hideEnemies 对视野内敌人强制 `hpbar.visible=true` + 游戏血条子元件默认可见。
   已建议用户转告 RV 开发者；我们不动其代码。
-- **待用户实测确认**：①掠夺者/斑马房间出现 S 徽标、战斗触发变黄加速 ②击落
-  敌人手雷/导弹——若仍无效，带 diaglog=1 采集 projScan/projHit 行发我。
+- **待用户实测确认**：①S 徽标可见（绿待机/黄激活，v1.118 后）②击落敌人
+  手雷/导弹——若仍无效，带 diaglog=1 采集 projScan/projHit 行发我。
 
 ## 1. 已知问题与待办
 
@@ -51,9 +53,8 @@
 
 ## 2. 下一步
 
-1. **规划中**：敌人斯安维斯坦（场景 A 敌人加速 / 场景 B 敌我全速+世界慢放）——
-   探索完成、方案见 `design/enemy-sandevistan-plan.md`，等用户确认待决策点后实施
-   （未改任何代码）。
-2. 待用户实测 v1.113/v1.114（爆炸原生速度、按武器血量覆盖）。
-3. 若确认：更新本文件 + `decisions/changelog.md` + `release/说明.txt`，提交 git；
-   并删除游戏目录旧 `SandevistanMod\` 回退副本。
+1. 待用户实测 v1.118（S 徽标可见性；敌人斯安维斯坦整体行为——场景 A 加速、
+   残影、斑马、场景 B 与玩家时停交互）。
+2. 击落失效诊断：待用户带 diaglog=1 采集 projScan/projHit 行定位。
+3. 稳定后：更新本文件 + `release/说明.txt`，并删除游戏目录旧
+   `SandevistanMod\` 回退副本（保留一轮）。
