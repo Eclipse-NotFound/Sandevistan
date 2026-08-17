@@ -206,6 +206,7 @@ package
       private var esLastLoc:Object = null;       // v1.124：上次房间（loc 变化时清空敌方状态）
       private var esOffVisDiag:int = 0;          // v1.128：敌人斯安维斯坦结束后隐身诊断计数
       private var esOrphanDiag:int = 0;          // v1.128：敌人残影 vis 摘挂孤儿诊断计数
+      private var esInvDiag:int = 0;             // v1.129：敌人在隐形瞬间的记录计数
       private var recSitFrames:int = 0;          // v1.123：时停中 isSit 帧计数（翻滚诊断）
       private var recRollFrames:int = 0;         // v1.123：时停中 animState=="roll" 帧计数
       private var recTotFrames:int = 0;          // v1.123：时停录像总帧数
@@ -396,7 +397,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.128 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.129 已加载 (按 \ 触发斯安维斯坦)";
             t.autoSize = "left";   // v1.110：版本号此前显示不全（TextField 默认宽度截断）
             t.x = 10;
             t.y = 10;
@@ -2963,7 +2964,7 @@ package
       {
          if (panelTf == null) return;
          var lines:Array = [];
-         lines.push("== SandevistanMod v1.128 参数 ==");
+         lines.push("== SandevistanMod v1.129 参数 ==");
          lines.push((panelSel == 0 ? "> " : "  ") + "生效时长   " + (cfgDuration / 30).toFixed(1) + "s");
          lines.push((panelSel == 1 ? "> " : "  ") + "冷却       " + (cfgCooldown / 30).toFixed(1) + "s");
          lines.push((panelSel == 2 ? "> " : "  ") + "回放速度   x" + cfgReplaySpeed);
@@ -4058,6 +4059,7 @@ package
                         esTick(oE, recE);
                         updateESMark(oE, recE.st);
                         esShineGuard(oE);   // v1.128：斑马 shine 回充（防隐形）
+                        esInvScan(oE, recE);  // v1.129：敌人在隐形瞬间就地记录
                      }
                   }
                }
@@ -4186,10 +4188,99 @@ package
             s = "vis=" + (v.visible ? 1 : 0) + " onSt=" + onSt + " par=" + par + " al=" + al
                 + " sost=" + (oE["sost"] != null ? oE["sost"] : "-")
                 + " dis=" + (oE["disabled"] ? 1 : 0)
-                + " inv=" + (oE["invis"] ? 1 : 0);
+                + " inv=" + (oE["invis"] ? 1 : 0)
+                + " lev=" + (oE["levitPoss"] ? 1 : 0)
+                + " chain=" + (oE.in_chain ? 1 : 0)
+                + " ms=" + (oE["massa"] != null ? oE["massa"] : "-");
          }
          catch (e:*) { }
          return s;
+      }
+      // ===== v1.129：敌人在隐形瞬间就地记录 =====
+      // 用户澄清：所有敌人类型斯安维斯坦结束后都会隐身（不止斑马）——v1.128
+      // 的斑马 shine 修复是采样偏差（日志恰逢斑马战）。本扫描不依赖状态机：
+      // 每帧对每个注册敌人检查 vis 是否脱离显示树/visible=false/alpha 过低，
+      // 命中即记录完整状态（可见性/挂载链/alpha/sost/disabled/invis/levitPoss/
+      // chain/massa 与 recE.st 阶段），一次复现即可定位通用机制。
+      private function esInvScan(oE:Object, recE:Object):void
+      {
+         if (!cfgDiagLog || esInvDiag >= 40) return;
+         try
+         {
+            var v:* = oE.vis;
+            if (v == null) return;
+            var fixed:Boolean = false;
+            if (!v.visible)
+            {
+               esInvDiag++;
+               log("[DIAG] esInv: vis.visible=0 st=" + recE.st + " " + esVisState(oE));
+               try { v.visible = true; } catch (e:*) { }
+               fixed = true;
+            }
+            var alv:Number = -1;
+            try { alv = v.alpha; } catch (e:*) { }
+            if (alv >= 0 && alv < 0.25)
+            {
+               esInvDiag++;
+               log("[DIAG] esInv: alpha=" + alv + " st=" + recE.st + " " + esVisState(oE));
+               // 非斑马 alpha 极低只有显示树脱链/人为改过；斑马由 shineGuard 处理
+            }
+            // 显示树校验（parent 链到 stage）：脱链即按游戏 addVisual 方式
+            // 重挂回敌人所在图层（自我修复——若为孤儿机制，此处直接治好，
+            // 日志可确认；若 disabled=1 则重挂无效而 dis=1 会暴露）
+            var onst:Boolean = false;
+            var nn:Object = v;
+            var hp:int = 0;
+            while (nn != null && hp < 8)
+            {
+               if (nn["stage"] != null) { onst = true; break; }
+               nn = nn["parent"];
+               hp++;
+            }
+            if (!onst)
+            {
+               esInvDiag++;
+               log("[DIAG] esInv: notOnStage st=" + recE.st + " " + esVisState(oE));
+               // 重挂：放入敌人 vis 所在图层（与游戏 addVisual 一致）
+               var gV:Object = world["grafon"];
+               if (gV != null && gV.visObjs != null && oE.sloy != null)
+               {
+                  var layN:Object = gV.visObjs[oE.sloy];
+                  if (layN != null && v.parent != layN)
+                  {
+                     if (v.parent != null) { try { v.parent.removeChild(v); } catch (e:*) { } }
+                     layN.addChild(v);
+                     fixed = true;
+                  }
+               }
+               if (fixed) { esInvDiag++; log("[DIAG] esInv: reattached " + esVisState(oE)); }
+            }
+         }
+         catch (e:*) { }
+      }
+      // ===== v1.129：念力抓取诊断 =====
+      // 用户在敌人隐形后无法用念力抓敌人——很可能就是抓不到隐形敌人（onCursor/
+      // celObj 对不可见目标不成立）。按使用键(E/交互)时采样当前悬停对象状态，
+      // 一次复现即可确认抓取卡在哪一环（levitPoss/onCursor/距离/LOS）。
+      private function teleDiag():void
+      {
+         if (!cfgDiagLog || world == null || world.loc == null) return;
+         try
+         {
+            var cel:Object = world.loc["celObj"];
+            if (cel == null) return;
+            var cls:String = flash.utils.getQualifiedClassName(cel);
+            if (cls.indexOf("fe.unit::") != 0) return;   // 只关心敌人
+            var lev:int = -1; var onC:Number = -1; var ma:Number = -1; var dist:Number = -1;
+            try { lev = cel["levitPoss"] ? 1 : 0; } catch (e:*) { }
+            try { onC = Number(cel["onCursor"]); } catch (e:*) { }
+            try { ma = Number(cel["massa"]); } catch (e:*) { }
+            try { dist = Number(world.loc["celDist"]); } catch (e:*) { }
+            log("[DIAG] tele: cls=" + cls + " lev=" + lev + " onC=" + onC + " ma=" + ma
+                + " dist=" + dist + " maxTe=" + (world.gg["pers"] != null ? world.gg["pers"]["maxTeleMassa"] : "-")
+                + " " + esVisState(cel));
+         }
+         catch (e:*) { }
       }
       // ===== v1.128：斑马（UnitZebra）隐形修复 =====
       // 根因：斑马每 step() 扣 1 点 shine（UnitZebra.as:74），敌人斯安维斯坦
@@ -4313,6 +4404,18 @@ package
             if (savedParentE != null)
             {
                try { savedParentE.addChildAt(visE, savedIdxE); } catch (e:*) { }
+            }
+            // v1.129：摘挂兜底——若重挂失败导致 vis 脱离显示树（savedIdxE==-1
+            // 或父层已换新等），立即按游戏 addVisual 方式放回敌人所在图层，
+            // 从根上避免"敌人斯安维斯坦后隐身"。spawnEnemyGhost 调用频次低，
+            // 只在异常路径触发。
+            if (visE.parent == null)
+            {
+               var gVO:Object = world["grafon"];
+               if (gVO != null && gVO.visObjs != null && oE.sloy != null && gVO.visObjs[oE.sloy] != null)
+               {
+                  gVO.visObjs[oE.sloy].addChild(visE);
+               }
             }
             // v1.128：摘挂后校验 vis 是否仍在显示树上——若被摘下后重挂失败
             //（savedIdxE==-1 / 图层被换新等）vis 会脱离显示树=敌人隐身。
@@ -5873,6 +5976,23 @@ package
             }
             catch (err:*) { }
          }
+         // v1.129：按交互键(E)时采样念力抓取目标状态（诊断"无法抓敌人"）
+         try
+         {
+            var ctrT:Object = world != null ? world.ctr : null;
+            if (ctrT != null && ctrT.keyIds != null && ctrT.keyIds["keyAction"] != null)
+            {
+               var ka1:int = 0;
+               var ka2:int = -1;
+               try { ka1 = int(ctrT.keyIds["keyAction"].a1); } catch (e2:*) { }
+               try { ka2 = ctrT.keyIds["keyAction"].a2 != null ? int(ctrT.keyIds["keyAction"].a2) : -1; } catch (e2:*) { }
+               if (e.keyCode == ka1 || (ka2 > 0 && e.keyCode == ka2))
+               {
+                  teleDiag();
+               }
+            }
+         }
+         catch (e:*) { }
       }
 
       // ==================== HUD ====================
