@@ -176,7 +176,9 @@ package
       private var projHpOver:Object = null;     // v1.114：按武器 id 的血量覆盖（projhp_<id>）
       private var projArmorOver:Object = null;  // v1.114：按武器 id 的护甲覆盖（projarmor_<id>）
       // ===== v1.115：敌人斯安维斯坦（Enemy Sandevistan）=====
-      // 触发=敌人 AI 看到玩家进入战斗（celUnit==gg 上升沿）后立即开启；
+      // 触发=敌人 AI 锁定玩家（celUnit==gg）且待机（不在冷却）即开启；
+      // v1.126 起无上升沿要求（见 stepEnemySandy：玩家保持在视野内时冷却
+      // 结束可重复触发；玩家时停中进入视野同样能触发——stepEnemySandyB）。
       // 每房间装备名额 v1.119 起为房间敌人数的 cfgESPer%（默认 50，即一半；
       // esRoomCnt 按 room.id 计数）；持续/冷却/倍率可配置。
       private var cfgEnemySandy:String = "UnitRaider,UnitMerc,UnitAlicorn,UnitEncl,UnitRanger,UnitZebra";
@@ -188,7 +190,7 @@ package
       private var cfgESMark:Boolean = true;      // 调试"S"徽标
       private var cfgESPer:int = 50;             // v1.119：每房间装备百分比（50=一半；0=关闭；100=全部）
       private var esClasses:Array = [];          // 白名单类名（config enemysandy 解析）
-      private var esEnemies:Dictionary = new Dictionary(); // 敌人 → {st,left,cd,sawCel,px,py}
+      private var esEnemies:Dictionary = new Dictionary(); // 敌人 → {st,left,cd,px,py}
       private var esRoomCnt:Object = {};         // v1.119：roomId → 已装备敌人数（名额=房间候选数×esandyper%）
       private var esMarks:Dictionary = new Dictionary(); // 敌人 → 徽标 TextField
       private var esMarkLayer:Sprite = null;     // v1.119：徽标容器（挂 grafon.visual 顶层，免疫图层重建）
@@ -353,7 +355,7 @@ package
          try { inst.slowPartClass = ApplicationDomain.currentDomain.getDefinition("fe.graph.Part") as Class; } catch (e:*) { }
          // v1.101：版本标记——日志确认实际加载运行的构建版本与关键开关
          // v1.121：追加 esmark/esper/espd——排查"徽标不可见"类问题的第一手数据
-         inst.log("[SandyMod] v1.125 loaded swaprun=" + (inst.cfgSwapRun ? 1 : 0) + " projhits=" + (inst.cfgProjHits ? 1 : 0)
+         inst.log("[SandyMod] v1.126 loaded swaprun=" + (inst.cfgSwapRun ? 1 : 0) + " projhits=" + (inst.cfgProjHits ? 1 : 0)
              + " esmark=" + (inst.cfgESMark ? 1 : 0) + " esghost=" + (inst.cfgESGhost ? 1 : 0) + " esper=" + inst.cfgESPer);
          if (main != null && main.stage != null)
          {
@@ -385,7 +387,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.125 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.126 已加载 (按 \ 触发斯安维斯坦)";
             t.autoSize = "left";   // v1.110：版本号此前显示不全（TextField 默认宽度截断）
             t.x = 10;
             t.y = 10;
@@ -2974,7 +2976,7 @@ package
       {
          if (panelTf == null) return;
          var lines:Array = [];
-         lines.push("== SandevistanMod v1.125 参数 ==");
+         lines.push("== SandevistanMod v1.126 参数 ==");
          lines.push((panelSel == 0 ? "> " : "  ") + "生效时长   " + (cfgDuration / 30).toFixed(1) + "s");
          lines.push((panelSel == 1 ? "> " : "  ") + "冷却       " + (cfgCooldown / 30).toFixed(1) + "s");
          lines.push((panelSel == 2 ? "> " : "  ") + "回放速度   x" + cfgReplaySpeed);
@@ -4057,26 +4059,30 @@ package
                               if (++gE > 20000) break;
                               continue;
                            }
-                           recE = { st: 0, left: 0, cd: 0, sawCel: false, px: 0, py: 0 };
+                           recE = { st: 0, left: 0, cd: 0, px: 0, py: 0 };
                            esEnemies[oE] = recE;
                            if (rIdE != "") { esRoomCnt[rIdE] = takenE + 1; }
                            try { recE.px = oE.X; recE.py = oE.Y; } catch (e:*) { }
                         }
-                        // 战斗信号：celUnit==gg 上升沿且待机 → 立即触发
-                        var celE:* = null;
-                        try { celE = oE["celUnit"]; } catch (e:*) { }
-                        var inCombatE:Boolean = (celE == world.gg);
-                        if (inCombatE && !recE.sawCel && recE.st == 0)
-                        {
-                           recE.st = 1;
-                           recE.left = cfgESDur;
-                           if (cfgDiagLog && esDiagCnt < 12)
-                           {
-                              esDiagCnt++;
-                              log("[DIAG] esandy: cls=" + qnE + " room=" + rIdE + " ON dur=" + cfgESDur + " spd=" + cfgESSpd);
-                           }
-                        }
-                        recE.sawCel = inCombatE;
+                         // 战斗信号：celUnit==gg 且待机（无冷却中）→ 立即触发。
+                         // v1.126：去掉 sawCel 上升沿要求——玩家持续保持在视野内时，
+                         // 敌人冷却结束（st 2→0）后必须能重新触发；上升沿只在敌人
+                         // 初次看见玩家的那一帧成立，之后 sawCel 恒 true，敌人
+                         // 再也不会第二次开启斯安维斯坦（用户实测）。去掉门槛后，
+                         // 已处于战斗中的敌人（含注册时已锁定玩家）也能正常触发。
+                         var celE:* = null;
+                         try { celE = oE["celUnit"]; } catch (e:*) { }
+                         var inCombatE:Boolean = (celE == world.gg);
+                         if (inCombatE && recE.st == 0)
+                         {
+                            recE.st = 1;
+                            recE.left = cfgESDur;
+                            if (cfgDiagLog && esDiagCnt < 12)
+                            {
+                               esDiagCnt++;
+                               log("[DIAG] esandy: cls=" + qnE + " room=" + rIdE + " ON dur=" + cfgESDur + " spd=" + cfgESSpd);
+                            }
+                         }
                         esTick(oE, recE);
                         updateESMark(oE, recE.st);
                      }
@@ -4171,6 +4177,10 @@ package
          }
       }
       // 场景 B：玩家时停中活跃敌人与玩家同权（每帧 step + 计时 + 徽标 + 残影）
+      // v1.126：B 分支补上战斗触发检测与全部状态推进——此前只处理 st==1：
+      // 玩家开着时停进入敌人视野时，敌人 AI 在节流帧（loc.step 1/N 速）里
+      // 更新 celUnit 进入战斗，但触发检测只在常规分支 stepEnemySandy 里跑、
+      // 玩家时停中被整体跳过 → 敌人永远不开启斯安维斯坦（用户实测）。
       private function stepEnemySandyB():void
       {
          try
@@ -4181,9 +4191,24 @@ package
                {
                   var recE:Object = esEnemies[kE];
                   if (recE == null || kE == null || kE.in_chain != true) continue;
+                  // 战斗触发检测（与常规分支同条件：celUnit==gg 且待机）
+                  var celB:* = null;
+                  try { celB = kE["celUnit"]; } catch (e:*) { }
+                  if (celB == world.gg && recE.st == 0)
+                  {
+                     recE.st = 1;
+                     recE.left = cfgESDur;
+                     if (cfgDiagLog && esDiagCnt < 12)
+                     {
+                        esDiagCnt++;
+                        log("[DIAG] esandy: cls=" + flash.utils.getQualifiedClassName(kE) + " ON(during player sandy)");
+                     }
+                  }
+                  // 全部状态推进（含冷却倒计时——与 left 同速：玩家时停中敌人
+                  // 斯安维斯坦计时按显示帧走，冷却结束即可重新触发）
+                  esTick(kE, recE);
                   if (recE.st == 1)
                   {
-                     esTick(kE, recE);
                      try { kE.step(); } catch (e:*) { }
                      esGhostFor(kE, recE);
                   }

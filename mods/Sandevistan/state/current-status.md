@@ -5,9 +5,9 @@
 > 只读）；公共知识规范见 `../../shared-knowledge/README.md`；公共逆向资料在
 > `../../game-reference/`（只读）。
 
-## 0. 当前状态（2026-08-16）
+## 0. 当前状态（2026-08-17）
 
-- **当前版本 v1.125**（git master），已按**镜像部署**运行：仓库 `C:\RemainsMod` 为
+- **当前版本 v1.126**（git master），已按**镜像部署**运行：仓库 `C:\RemainsMod` 为
   唯一事实源；游戏目录是**多 agent 共享工作区**——`mods\Sandevistan` 全镜像
   （同步脚本 `C:\RemainsMod\sync-to-game.bat`，排除 build 与 config.txt），
   `shared-knowledge\`/`game-reference\` 增补式同步，**不删除其他 agent 的文件**。
@@ -18,26 +18,34 @@
   他人已改则合并（流程见 `build/README.md` §2）。
   **共存环境**：游戏目录现有 4 个模组（Sandevistan + MoreSkills&Weapons +
   RConnect + RealisticVision），游戏 SWF 已含四方补丁（我们的注入仍在）。
+  **同步注意**：`sync-to-game.bat` 是 LF-only 换行，cmd/PowerShell 直接跑会
+  逐行错乱（'le'/'o' 不是命令），需在 Git Bash 下包装或用临时 CRLF 副本；
+  本次改用 PowerShell 直接执行等效 robocopy（/MIR 排除 build+config.txt）。
 - **已解决（用户确认 ✓）**：鬼影（v1.110）；启动标记版本号显示完整；
   回放结束爆炸动画自然播完（v1.111/1.112）；爆炸动画原生速度（v1.113）；
   投掷物血量/护甲按武器覆盖（v1.114）；击落敌人手雷生效；**S 徽标可见
   （v1.121 配置解析真根因）**。
-- **v1.115-1.125 内容**：敌人斯安维斯坦（v1.117 修类名匹配；斑马；v1.119
+- **v1.115-1.126 内容**：敌人斯安维斯坦（v1.117 修类名匹配；斑马；v1.119
   徽标改挂 grafon.visual 顶层容器 + esandyper=50%；v1.121 S 徽标真根因=配置
   解析）；v1.120 回放重现翻滚/趴下/起身；v1.122 敌人残影修复；v1.123 S
   徽标排除尸体 + 回放翻滚诊断（rollRec/rRoll）；v1.124 换房间清空敌方状态
-  + 移除 currentWeapon 过滤；**v1.125 移除输入法警告 UI + 顶部状态 UI
-  showhud 开关（F9 面板第 7 项）**。
+  + 移除 currentWeapon 过滤；v1.125 移除输入法警告 UI + 顶部状态 UI
+  showhud 开关（F9 面板第 7 项）；**v1.126 敌人触发修复：去上升沿要求
+  （冷却结束在视野内可重触发）+ 玩家时停中补触发检测（stepEnemySandyB）**。
 - **跨模组问题（已定位，未越权修复）**：全敌人满装甲条 = RealisticVision 的
   hideEnemies 对视野内敌人强制 `hpbar.visible=true` + 游戏血条子元件默认可见。
   已建议用户转告 RV 开发者；我们不动其代码。
 - **待用户实测确认**：①掠夺者房间出现 S（v1.124）②S 不再出现在无敌人
   房间（v1.124 换房间清空）③敌人残影明显可见（v1.122）④**回放翻滚**——
-  若仍不重现，把日志里 `rollRec:`/`rRoll:` 行发我（diaglog=1）。
+  若仍不重现，把日志里 `rollRec:`/`rRoll:` 行发我（diaglog=1）
+  ⑤**v1.126 敌人触发**：a. 玩家保持在敌人视野内→敌人冷却结束后再次开启
+  b. 玩家开着时停进入敌人视野→敌人照常开启（日志可查 `ON(during player
+  sandy)`）。
 
 ## 1. 已知问题与待办
 
 ### 待用户实测确认
+- **v1.126 敌人触发两场景**（见 §0 ⑤）：触发节奏是否符合预期（dur/cd 循环）。
 - **v1.109 镜像部署**：加载标记、时停/回放、F9 保存 config（见上）。
 - **v1.108 鬼影修复**：触发时停→回放，看回放开始到爆炸前还有没有钉死的亮光。
   若有：采集 `ghostScan`/`partsKillDeep` 行；若无：收尾。
@@ -60,6 +68,8 @@
 1. **待用户实测确认**（每轮反馈后逐项勾销，见 §0）：
    ①掠夺者房间出现 S（v1.124）②S 不再出现在无敌人房间（v1.124）
    ③敌人残影明显可见（v1.122）④回放翻滚/趴下/起身（v1.120；仍不重现则
-   让用户开 diaglog=1，发回 `rollRec:`/`rRoll:` 日志行）。
+   让用户开 diaglog=1，发回 `rollRec:`/`rRoll:` 日志行）
+   ⑤v1.126 敌人触发：a. 玩家保持在视野内→冷却结束再开启 b. 玩家时停中
+   进入视野→敌人照常开启（`ON(during player sandy)` 日志可证）。
 2. 稳定后：更新本文件 + `release/说明.txt`，并删除游戏目录旧
    `SandevistanMod\` 回退副本（保留一轮）。
