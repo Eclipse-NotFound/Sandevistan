@@ -112,11 +112,10 @@ package
       private var keyPressTime:Array = [];      // 按键按下时间戳（防 UP 丢失卡键）
       private var keyMap:Object = {};            // 键码 -> 键布尔名（解析自游戏 keyXML）
       private var keyMapBuilt:Boolean = false;
-      private var imeWarnT:int = 0;                 // 输入法警告剩余帧数
       private var keyDownSeen:Array = new Array(256); // 最近按键按下记录（时间戳）
-      private var ime229Count:int = 0;                // 短时间内 229 事件计数
+      private var ime229Count:int = 0;                // 短时间内 229 事件计数（仅诊断日志）
       private var ime229Time:int = 0;
-      private var imeMissCount:int = 0;                // UP无DOWN 计数（2秒窗口）
+      private var imeMissCount:int = 0;               // UP无DOWN 计数（2秒窗口，仅诊断日志）
       private var imeMissTime:int = 0;
 
       // 解析游戏默认键位表（keyXML 是 public），建立键码->布尔名映射
@@ -155,6 +154,7 @@ package
       private var hudBg:Sprite;
       private var debugTest:Boolean = false;             // 自动测试模式（config debugtest=1）
       private var cfgShowMark:Boolean = true;            // 启动时显示模组已加载标记
+      private var cfgHud:Boolean = true;                 // v1.125：顶部状态 UI（启动中/回放中/充能中）显示开关
       private var cfgPanelKey:int = Keyboard.F9;         // 参数面板热键
       private var cfgGhostBlend:int = 1;                  // 残影混合: 1=normal柔和 0=add发光
       private var cfgGhostAlpha:int = 70;                 // 残影不透明度（百分比，默认 70）
@@ -353,7 +353,7 @@ package
          try { inst.slowPartClass = ApplicationDomain.currentDomain.getDefinition("fe.graph.Part") as Class; } catch (e:*) { }
          // v1.101：版本标记——日志确认实际加载运行的构建版本与关键开关
          // v1.121：追加 esmark/esper/espd——排查"徽标不可见"类问题的第一手数据
-         inst.log("[SandyMod] v1.124 loaded swaprun=" + (inst.cfgSwapRun ? 1 : 0) + " projhits=" + (inst.cfgProjHits ? 1 : 0)
+         inst.log("[SandyMod] v1.125 loaded swaprun=" + (inst.cfgSwapRun ? 1 : 0) + " projhits=" + (inst.cfgProjHits ? 1 : 0)
              + " esmark=" + (inst.cfgESMark ? 1 : 0) + " esghost=" + (inst.cfgESGhost ? 1 : 0) + " esper=" + inst.cfgESPer);
          if (main != null && main.stage != null)
          {
@@ -385,7 +385,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.124 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.125 已加载 (按 \ 触发斯安维斯坦)";
             t.autoSize = "left";   // v1.110：版本号此前显示不全（TextField 默认宽度截断）
             t.x = 10;
             t.y = 10;
@@ -462,6 +462,7 @@ package
                   else if (k == "fxrun") cfgFxRun = v.toLowerCase() == "1" || v.toLowerCase() == "true";
                   else if (k == "debugtest") debugTest = v.toLowerCase() == "1" || v.toLowerCase() == "true";
                   else if (k == "showmark") cfgShowMark = v.toLowerCase() == "1" || v.toLowerCase() == "true";
+                  else if (k == "showhud") cfgHud = v.toLowerCase() == "1" || v.toLowerCase() == "true";
                   else if (k == "panelkey") cfgPanelKey = parseInt(v);
                   else if (k == "diaglog") cfgDiagLog = v.toLowerCase() == "1" || v.toLowerCase() == "true";
                   else if (k == "ghostblend") cfgGhostBlend = parseInt(v);
@@ -2948,8 +2949,8 @@ package
       private function panelKey(kc:int):void
       {
          if (kc == Keyboard.ESCAPE || kc == cfgPanelKey) { togglePanel(false); return; }
-         if (kc == Keyboard.UP) { panelSel = (panelSel + 6 - 1) % 6; return; }
-         if (kc == Keyboard.DOWN) { panelSel = (panelSel + 1) % 6; return; }
+         if (kc == Keyboard.UP) { panelSel = (panelSel + 7 - 1) % 7; return; }
+         if (kc == Keyboard.DOWN) { panelSel = (panelSel + 1) % 7; return; }
          if (kc == Keyboard.LEFT) { panelAdj(-1); return; }
          if (kc == Keyboard.RIGHT) { panelAdj(1); return; }
          if (kc == Keyboard.ENTER) { togglePanel(false); return; }
@@ -2965,6 +2966,7 @@ package
             case 3: cfgGhostEvery = Math.max(1, Math.min(30, cfgGhostEvery + dir)); break;
             case 4: cfgFxRun = !cfgFxRun; break;
             case 5: cfgHotkey = Math.max(1, Math.min(255, cfgHotkey + dir)); break;
+            case 6: cfgHud = !cfgHud; break;   // v1.125：顶部状态 UI 开关
          }
       }
 
@@ -2972,13 +2974,14 @@ package
       {
          if (panelTf == null) return;
          var lines:Array = [];
-         lines.push("== SandevistanMod v1.124 参数 ==");
+         lines.push("== SandevistanMod v1.125 参数 ==");
          lines.push((panelSel == 0 ? "> " : "  ") + "生效时长   " + (cfgDuration / 30).toFixed(1) + "s");
          lines.push((panelSel == 1 ? "> " : "  ") + "冷却       " + (cfgCooldown / 30).toFixed(1) + "s");
          lines.push((panelSel == 2 ? "> " : "  ") + "回放速度   x" + cfgReplaySpeed);
          lines.push((panelSel == 3 ? "> " : "  ") + "残影间隔   " + cfgGhostEvery + "帧");
          lines.push((panelSel == 4 ? "> " : "  ") + "特效继续   " + (cfgFxRun ? "开" : "关"));
          lines.push((panelSel == 5 ? "> " : "  ") + "热键码     " + cfgHotkey);
+         lines.push((panelSel == 6 ? "> " : "  ") + "顶部状态UI " + (cfgHud ? "开" : "关"));
          lines.push("");
          lines.push("上下选择 左右调节 Enter保存 Esc关闭");
          panelTf.text = lines.join(String.fromCharCode(10));
@@ -3040,6 +3043,7 @@ package
             sb.push("esandyper=" + cfgESPer);
             sb.push("fxrun=" + (cfgFxRun ? 1 : 0));
             sb.push("showmark=" + (cfgShowMark ? 1 : 0));
+            sb.push("showhud=" + (cfgHud ? 1 : 0));
             sb.push("panelkey=" + cfgPanelKey);
             sb.push("diaglog=" + (cfgDiagLog ? 1 : 0));
             sb.push("debugtest=0");
@@ -5580,7 +5584,7 @@ package
                else { imeMissCount++; }
                if (imeMissCount >= 2)
                {
-                  imeWarnT = 90;   // 3 秒警告
+                  // v1.125：输入法警告 UI 已移除（用户要求），保留诊断日志
                   if (cfgDiagLog) { try { log("[IME] miss x" + imeMissCount + " kc=" + e.keyCode); } catch (err:*) { } }
                }
                else if (cfgDiagLog)
@@ -5620,7 +5624,7 @@ package
             else { ime229Count++; }
             if (ime229Count >= 2)
             {
-               imeWarnT = 150;
+               // v1.125：输入法警告 UI 已移除（用户要求），保留诊断日志
                if (cfgDiagLog) { try { log("[IME] 229 x" + ime229Count); } catch (err:*) { } }
             }
          }
@@ -5775,6 +5779,13 @@ package
       private function updateHud():void
       {
          if (world == null || world.main == null) return;
+         // v1.125：顶部状态 UI 开关（showhud）——关闭时全部隐藏
+         if (!cfgHud)
+         {
+            if (hud != null) { hud.visible = false; }
+            if (hudBg != null) { hudBg.visible = false; }
+            return;
+         }
          if (hud == null)
          {
             hud = new TextField();
@@ -5792,12 +5803,7 @@ package
             world.main.addChild(hud);
          }
          var txt:String = "";
-         if (imeWarnT > 0)
-         {
-            imeWarnT--;
-            txt = "⚠ 输入法已激活(可能按 Shift 误触)！请按 Ctrl+Space 切回英文";
-         }
-         else if (sandyActive)
+         if (sandyActive)
          {
             txt = "⚡ 斯安维斯坦 " + (sandyLeft / 30).toFixed(1) + "s";
          }
@@ -5821,11 +5827,9 @@ package
             hud.height = 28;
             hud.visible = true;
             var fg:uint = 0x00FF99;
-            if (imeWarnT > 0) fg = 0xFF3333;    // 输入法警告: 红色
-            else if (sandyActive) fg = 0x00FFFF;   // 激活: 青色
+            if (sandyActive) fg = 0x00FFFF;   // 激活: 青色
             else if (replaying) fg = 0xFFFF00; // 回放: 黄色
             hud.textColor = fg;
-            hud.text = (imeWarnT > 0) ? "⚠ 输入法已激活(可能按 Shift 误触)！请按 Ctrl+Space 切回英文" : hud.text;
             hudBg.graphics.clear();
             hudBg.graphics.lineStyle(1, fg, 0.9);              // 荧光边框
             hudBg.graphics.beginFill(0x002211, 0.7);           // 深绿黑底
