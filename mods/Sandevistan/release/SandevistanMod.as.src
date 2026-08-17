@@ -104,7 +104,7 @@ package
       private var lastGhostY:Number = 0;
       private var panelOpen:Boolean = false;
       private var optPanelOn:Boolean = false;      // 选项页模组设置面板
-      private var optSel:int = 0;                  // 0=生效 1=冷却 2=残影不透明度 3=残影频率 4=渐变门槛 5=回放残影间隔 6=回放残影寿命 7=投掷物可击落 8=疾跑切枪
+      private var optSel:int = 0;                  // 0=生效 1=冷却 2=残影不透明度 3=残影频率 4=渐变门槛 5=回放残影间隔 6=回放残影寿命
       private var optTf:TextField = null;
       private var optBg:Sprite = null;
       private var lastGgControl:Boolean = true;
@@ -169,14 +169,22 @@ package
       private var enemyAtks:Dictionary = new Dictionary();      // 敌对单位 → [{frame, w, cx, cy}] 时停记录的开火事件（回放复现）
       private var preExistB:Dictionary = new Dictionary();       // 时停开始时已在飞的玩家攻击体（不清除，回放继续飞行）
       private var gSnapKol:Number = -1;   // 时停结束时手雷库存（回放结束恢复——重演抛掷不二次消耗）
-      private var cfgProjHits:Boolean = true;   // 投掷物可被击落（手雷/导弹/榴弹受击至 0 爆炸）
-      private var cfgProjHp:Number = 30;        // 投掷物血量
-      private var cfgProjArmor:Number = 0;      // 投掷物护甲（预留接口：伤害先减护甲）
-      private var projHp:Dictionary = new Dictionary();  // 投掷物 → 当前血量
-      private var projHpOver:Object = null;     // v1.114：按武器 id 的血量覆盖（projhp_<id>）
-      private var projArmorOver:Object = null;  // v1.114：按武器 id 的护甲覆盖（projarmor_<id>）
+      // v1.127：以下四个字段原为"投掷物可击落（手雷击落）"技能配置——
+      // 该技能已迁移到 mods/MoreSkills&Weapons（MSWProjHits.as），Sandevistan
+      // 侧停用（默认 false、config 键失效、面板行移除）。声明与实现保留
+      // 作为备份（完整源码另存 state/migration-backup-v1.126/）。stepProjHits
+      // 的回放重演分支抽成 replayProjBoom() 脱离本开关（斯安维斯坦回放系统
+      // 对时停中自然爆炸的重演不受影响）。
+      private var cfgProjHits:Boolean = false;   // 已迁移 MSW：投掷物可被击落（手雷/导弹/榴弹受击至 0 爆炸）
+      private var cfgProjHp:Number = 30;        // 投掷物血量（已迁移 MSW，备份）
+      private var cfgProjArmor:Number = 0;      // 投掷物护甲（已迁移 MSW，备份）
+      private var projHp:Dictionary = new Dictionary();  // 投掷物 → 当前血量（已迁移 MSW，备份）
+      private var projHpOver:Object = null;     // v1.114：按武器 id 的血量覆盖（已迁移 MSW，备份）
+      private var projArmorOver:Object = null;  // v1.114：按武器 id 的护甲覆盖（已迁移 MSW，备份）
       // ===== v1.115：敌人斯安维斯坦（Enemy Sandevistan）=====
-      // 触发=敌人 AI 看到玩家进入战斗（celUnit==gg 上升沿）后立即开启；
+      // 触发=敌人 AI 锁定玩家（celUnit==gg）且待机（不在冷却）即开启；
+      // v1.126 起无上升沿要求（见 stepEnemySandy：玩家保持在视野内时冷却
+      // 结束可重复触发；玩家时停中进入视野同样能触发——stepEnemySandyB）。
       // 每房间装备名额 v1.119 起为房间敌人数的 cfgESPer%（默认 50，即一半；
       // esRoomCnt 按 room.id 计数）；持续/冷却/倍率可配置。
       private var cfgEnemySandy:String = "UnitRaider,UnitMerc,UnitAlicorn,UnitEncl,UnitRanger,UnitZebra";
@@ -188,7 +196,7 @@ package
       private var cfgESMark:Boolean = true;      // 调试"S"徽标
       private var cfgESPer:int = 50;             // v1.119：每房间装备百分比（50=一半；0=关闭；100=全部）
       private var esClasses:Array = [];          // 白名单类名（config enemysandy 解析）
-      private var esEnemies:Dictionary = new Dictionary(); // 敌人 → {st,left,cd,sawCel,px,py}
+      private var esEnemies:Dictionary = new Dictionary(); // 敌人 → {st,left,cd,px,py}
       private var esRoomCnt:Object = {};         // v1.119：roomId → 已装备敌人数（名额=房间候选数×esandyper%）
       private var esMarks:Dictionary = new Dictionary(); // 敌人 → 徽标 TextField
       private var esMarkLayer:Sprite = null;     // v1.119：徽标容器（挂 grafon.visual 顶层，免疫图层重建）
@@ -196,6 +204,8 @@ package
       private var esCreateDiag:int = 0;          // v1.124：徽标创建诊断计数（按敌人逐个记）
       private var esQuotaDiag:int = 0;           // v1.119：名额诊断计数
       private var esLastLoc:Object = null;       // v1.124：上次房间（loc 变化时清空敌方状态）
+      private var esOffVisDiag:int = 0;          // v1.128：敌人斯安维斯坦结束后隐身诊断计数
+      private var esOrphanDiag:int = 0;          // v1.128：敌人残影 vis 摘挂孤儿诊断计数
       private var recSitFrames:int = 0;          // v1.123：时停中 isSit 帧计数（翻滚诊断）
       private var recRollFrames:int = 0;         // v1.123：时停中 animState=="roll" 帧计数
       private var recTotFrames:int = 0;          // v1.123：时停录像总帧数
@@ -211,7 +221,7 @@ package
       private var twinDiagCnt:int = 0;                     // v1.98：孪生体惰性化诊断计数
       private var partDiagOnce:Boolean = false;            // v1.98：时停粒子视觉类型诊断（每轮一次）
       private var recPaired:Dictionary = new Dictionary(); // v1.99：已配对录像体去重（防同一录像体被多个孪生体配对）
-      private var cfgSwapRun:Boolean = true;           // v1.100：疾跑（按住Shift）中允许切枪开关（默认开——用户要求的功能）
+      private var cfgSwapRun:Boolean = false;          // v1.127：已迁移 mods/MoreSkills&Weapons（MSWSwaprun.as），Sandevistan 停用（默认关、config 键失效、面板行移除；实现保留作备份，完整源码见 state/migration-backup-v1.126/）
       private var leashLeft:int = 0;                   // v1.100：回放结束后弹药防泄漏钳制剩余帧数
       private var leashSnap:Object = null;             // v1.100：防泄漏钳制用的时停结束快照
       private var leashDiagCnt:int = 0;                // v1.100：防泄漏钳制诊断计数
@@ -353,7 +363,8 @@ package
          try { inst.slowPartClass = ApplicationDomain.currentDomain.getDefinition("fe.graph.Part") as Class; } catch (e:*) { }
          // v1.101：版本标记——日志确认实际加载运行的构建版本与关键开关
          // v1.121：追加 esmark/esper/espd——排查"徽标不可见"类问题的第一手数据
-         inst.log("[SandyMod] v1.125 loaded swaprun=" + (inst.cfgSwapRun ? 1 : 0) + " projhits=" + (inst.cfgProjHits ? 1 : 0)
+         // v1.127：swaprun/projhits 已迁移 mods/MoreSkills&Weapons（此处不再输出）
+         inst.log("[SandyMod] v1.127 loaded"
              + " esmark=" + (inst.cfgESMark ? 1 : 0) + " esghost=" + (inst.cfgESGhost ? 1 : 0) + " esper=" + inst.cfgESPer);
          if (main != null && main.stage != null)
          {
@@ -385,7 +396,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.125 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.128 已加载 (按 \ 触发斯安维斯坦)";
             t.autoSize = "left";   // v1.110：版本号此前显示不全（TextField 默认宽度截断）
             t.x = 10;
             t.y = 10;
@@ -436,9 +447,9 @@ package
                var txt:String = stream.readUTFBytes(stream.bytesAvailable);
                stream.close();
                var lines:Array = txt.split(/\r?\n/);
-               // v1.114：按武器 id 的投掷物血量/护甲覆盖（projhp_<id>/projarmor_<id>）
-               projHpOver = {};
-               projArmorOver = {};
+               // v1.127：projhp_<id>/projarmor_<id> 与 projhits/swaprun 键已移除——
+               // 两技能迁移到 mods/MoreSkills&Weapons（MSWProjHits/MSWSwaprun，
+               // SharedObject 持久化），Sandevistan 侧不再解析，已有 config 无法开启
                for each (var line:String in lines)
                {
                   line = line.replace(/^\s+|\s+$/g, "");
@@ -469,29 +480,9 @@ package
                   else if (k == "ghostalpha") cfgGhostAlpha = parseInt(v);
                   else if (k == "replayghost") cfgReplayGhost = parseInt(v);
                   else if (k == "replayghostlife") cfgReplayGhostLife = parseInt(v);
-                  else if (k == "projhits") cfgProjHits = v.toLowerCase() == "1" || v.toLowerCase() == "true";
-                  else if (k == "projhp") cfgProjHp = parseInt(v);
-                  else if (k == "projarmor") cfgProjArmor = parseInt(v);
-                  // v1.114：按武器 id 的覆盖项（projhp_aglau=45 / projarmor_bel=10 等；
-                  // 键已 toLowerCase，武器 id 均为小写，直接匹配）
-                  else if (k.indexOf("projhp_") == 0 && k.length > 7)
-                  {
-                     var hpOv:int = parseInt(v);
-                     if (hpOv < 1) hpOv = 1;
-                     if (hpOv > 1000) hpOv = 1000;
-                     try { projHpOver[k.substr(7)] = hpOv; } catch (e:*) { }
-                  }
-                  else if (k.indexOf("projarmor_") == 0 && k.length > 10)
-                  {
-                     var armOv:int = parseInt(v);
-                     if (armOv < 0) armOv = 0;
-                     if (armOv > 500) armOv = 500;
-                     try { projArmorOver[k.substr(10)] = armOv; } catch (e:*) { }
-                  }
                   else if (k == "slowfactor") cfgSlowFactor = parseFloat(v);
                   else if (k == "colormode") cfgColorMode = parseInt(v);
                   else if (k == "edgethresh") cfgEdgeThresh = parseFloat(v);
-                  else if (k == "swaprun") cfgSwapRun = v.toLowerCase() == "1" || v.toLowerCase() == "true";
                   else if (k == "enemysandy") cfgEnemySandy = v;
                   else if (k == "esandydur") cfgESDur = parseInt(v);
                   else if (k == "esandycd") cfgESCd = parseInt(v);
@@ -515,10 +506,7 @@ package
          if (cfgGhostAlpha > 100) cfgGhostAlpha = 100;
          if (cfgReplayGhost < 1) cfgReplayGhost = 1;
          if (cfgReplayGhostLife < 1) cfgReplayGhostLife = 1;
-         if (cfgProjHp < 1) cfgProjHp = 1;
-         if (cfgProjHp > 1000) cfgProjHp = 1000;
-         if (cfgProjArmor < 0) cfgProjArmor = 0;
-         if (cfgProjArmor > 500) cfgProjArmor = 500;
+         // v1.127：cfgProjHp/cfgProjArmor 钳制随 projhits 迁移一并移除（已迁移 MSW）
          // v1.115：敌人斯安维斯坦白名单与数值钳制
          if (cfgESDur < 30) cfgESDur = 30;
          if (cfgESDur > 3600) cfgESDur = 3600;
@@ -886,16 +874,7 @@ package
             // 回放残影寿命（显示帧，1-60）
             cfgReplayGhostLife = Math.max(1, Math.min(60, cfgReplayGhostLife + dir));
          }
-         else if (optSel == 7)
-         {
-            // 投掷物可击落开关（手雷/导弹/榴弹受击至 0 爆炸）
-            cfgProjHits = !cfgProjHits;
-         }
-         else
-         {
-            // 疾跑中切枪开关（游戏本体按住 Shift 疾跑时数字键不支持切枪）
-            cfgSwapRun = !cfgSwapRun;
-         }
+         // v1.127：optSel 7/8（投掷物可击落/疾跑切枪）已随迁移移除（→ MSW）
       }
 
       private function renderOptPanel():void
@@ -912,8 +891,6 @@ package
             lines.push((optSel == 4 ? "> " : "  ") + "渐变门槛    " + cfgEdgeThresh);
             lines.push((optSel == 5 ? "> " : "  ") + "回放残影间隔 " + cfgReplayGhost + "帧");
             lines.push((optSel == 6 ? "> " : "  ") + "回放残影寿命 " + cfgReplayGhostLife + "帧");
-            lines.push((optSel == 7 ? "> " : "  ") + "投掷物可击落 " + (cfgProjHits ? "开" : "关"));
-            lines.push((optSel == 8 ? "> " : "  ") + "疾跑中切枪  " + (cfgSwapRun ? "开" : "关"));
             lines.push("");
             lines.push("上下选择 左右调值 Enter保存");
             optTf.text = lines.join(String.fromCharCode(10));
@@ -1767,16 +1744,22 @@ package
       // ——普通子弹（含天角兽闪电）不参与。护甲 cfgProjArmor 为预留接口
       // （伤害先减护甲）。时停中爆炸仅视觉（伤害清零——真实伤害由回放中
       // 重演的子弹命中重演的投掷物结算，与攻击结算架构一致）。
-      private function stepProjHits(locP:Object, isSandy:Boolean):void
+      // v1.127：击落技能已迁移 mods/MoreSkills&Weapons（MSWProjHits.as，
+      // SharedObject 配置）；Sandevistan 侧停用（cfgProjHits 恒 false、
+      // config 键失效、面板行移除）。本函数与下方 stepProjHits 保留作
+      // 源码备份（完整备份见 state/migration-backup-v1.126/）。
+      // ===== 回放重演（斯安维斯坦回放系统核心，与击落开关无关）=====
+      // v1.127：从 stepProjHits 抽出、脱离 cfgProjHits 门控——时停中
+      // 自然爆炸（导火索到期/撞墙）由 slowStepWorld 记录进 projBoom，
+      // 回放必须照常重演，不能因击落技能停用而失效。
+      private function replayProjBoom():void
       {
-         if (!cfgProjHits) return;
+         if (!replaying) return;
          // v1.91：时停中引爆的投掷物（射击击落/自然到期）在回放对应帧
          // 真实爆炸（damageExpl 从武器恢复——时停中玩家攻击体伤害被清零）
-         if (replaying)
+         try
          {
-            try
-            {
-               for (var kB:Object in projBoom)
+            for (var kB:Object in projBoom)
                {
                   try
                   {
@@ -1917,7 +1900,13 @@ package
                }
             }
             catch (e:*) { }
-         }
+      }
+      // ===== 手雷击落判定（v1.83 原 stepProjHits 主体；已迁移 MSW，源码备份）=====
+      private function stepProjHits(locP:Object, isSandy:Boolean):void
+      {
+         // v1.127：回放重演已在 replayProjBoom() 独立处理（见上）
+         replayProjBoom();
+         if (!cfgProjHits) return;
          try
          {
             var projs:Array = [];
@@ -2974,7 +2963,7 @@ package
       {
          if (panelTf == null) return;
          var lines:Array = [];
-         lines.push("== SandevistanMod v1.125 参数 ==");
+         lines.push("== SandevistanMod v1.128 参数 ==");
          lines.push((panelSel == 0 ? "> " : "  ") + "生效时长   " + (cfgDuration / 30).toFixed(1) + "s");
          lines.push((panelSel == 1 ? "> " : "  ") + "冷却       " + (cfgCooldown / 30).toFixed(1) + "s");
          lines.push((panelSel == 2 ? "> " : "  ") + "回放速度   x" + cfgReplaySpeed);
@@ -3011,28 +3000,13 @@ package
             sb.push("ghostevery=" + cfgGhostEvery);
             sb.push("replayghost=" + cfgReplayGhost);
             sb.push("replayghostlife=" + cfgReplayGhostLife);
-            sb.push("projhits=" + (cfgProjHits ? 1 : 0));
-            sb.push("projhp=" + cfgProjHp);
-            sb.push("projarmor=" + cfgProjArmor);
-            // v1.114：回写按武器 id 的覆盖项——F9 面板保存时重写整个 config，
-            // 不写回会丢用户自定义的 projhp_<id>/projarmor_<id>
-            try
-            {
-               if (projHpOver != null)
-               {
-                  for (var kOH:String in projHpOver) { sb.push("projhp_" + kOH + "=" + projHpOver[kOH]); }
-               }
-               if (projArmorOver != null)
-               {
-                  for (var kOA:String in projArmorOver) { sb.push("projarmor_" + kOA + "=" + projArmorOver[kOA]); }
-               }
-            }
-            catch (e:*) { }
+            // v1.127：projhits/projhp/projarmor/projhp_<id>/projarmor_<id>/swaprun
+            // 回写已移除——两技能迁移到 mods/MoreSkills&Weapons（MSW 用
+            // SharedObject 持久化，见 MSWConfig）
             sb.push("ghostalpha=" + cfgGhostAlpha);
             sb.push("ghostblend=" + cfgGhostBlend);
             sb.push("colormode=" + cfgColorMode);
             sb.push("edgethresh=" + cfgEdgeThresh);
-            sb.push("swaprun=" + (cfgSwapRun ? 1 : 0));
             sb.push("enemysandy=" + cfgEnemySandy);
             sb.push("esandydur=" + cfgESDur);
             sb.push("esandycd=" + cfgESCd);
@@ -4057,28 +4031,33 @@ package
                               if (++gE > 20000) break;
                               continue;
                            }
-                           recE = { st: 0, left: 0, cd: 0, sawCel: false, px: 0, py: 0 };
+                           recE = { st: 0, left: 0, cd: 0, px: 0, py: 0 };
                            esEnemies[oE] = recE;
                            if (rIdE != "") { esRoomCnt[rIdE] = takenE + 1; }
                            try { recE.px = oE.X; recE.py = oE.Y; } catch (e:*) { }
                         }
-                        // 战斗信号：celUnit==gg 上升沿且待机 → 立即触发
-                        var celE:* = null;
-                        try { celE = oE["celUnit"]; } catch (e:*) { }
-                        var inCombatE:Boolean = (celE == world.gg);
-                        if (inCombatE && !recE.sawCel && recE.st == 0)
-                        {
-                           recE.st = 1;
-                           recE.left = cfgESDur;
-                           if (cfgDiagLog && esDiagCnt < 12)
-                           {
-                              esDiagCnt++;
-                              log("[DIAG] esandy: cls=" + qnE + " room=" + rIdE + " ON dur=" + cfgESDur + " spd=" + cfgESSpd);
-                           }
-                        }
-                        recE.sawCel = inCombatE;
+                         // 战斗信号：celUnit==gg 且待机（无冷却中）→ 立即触发。
+                         // v1.126：去掉 sawCel 上升沿要求——玩家持续保持在视野内时，
+                         // 敌人冷却结束（st 2→0）后必须能重新触发；上升沿只在敌人
+                         // 初次看见玩家的那一帧成立，之后 sawCel 恒 true，敌人
+                         // 再也不会第二次开启斯安维斯坦（用户实测）。去掉门槛后，
+                         // 已处于战斗中的敌人（含注册时已锁定玩家）也能正常触发。
+                         var celE:* = null;
+                         try { celE = oE["celUnit"]; } catch (e:*) { }
+                         var inCombatE:Boolean = (celE == world.gg);
+                         if (inCombatE && recE.st == 0)
+                         {
+                            recE.st = 1;
+                            recE.left = cfgESDur;
+                            if (cfgDiagLog && esDiagCnt < 12)
+                            {
+                               esDiagCnt++;
+                               log("[DIAG] esandy: cls=" + qnE + " room=" + rIdE + " ON dur=" + cfgESDur + " spd=" + cfgESSpd);
+                            }
+                         }
                         esTick(oE, recE);
                         updateESMark(oE, recE.st);
+                        esShineGuard(oE);   // v1.128：斑马 shine 回充（防隐形）
                      }
                   }
                }
@@ -4160,17 +4139,93 @@ package
                if (cfgDiagLog && esDiagCnt < 24)
                {
                   esDiagCnt++;
-                  log("[DIAG] esandy: cls=" + flash.utils.getQualifiedClassName(oE) + " OFF cd=" + cfgESCd);
+                  log("[DIAG] esandy: cls=" + flash.utils.getQualifiedClassName(oE) + " OFF cd=" + cfgESCd
+                      + " " + esVisState(oE));
                }
             }
          }
          else if (recE.st == 2)
          {
             recE.cd--;
+            // v1.128：敌人斯安维斯坦结束后隐身——冷却前 3 帧记录敌人视觉状态
+            //（visible/parent 是否在显示树/alpha/sost/disabled/invis）定位隐身点
+            if (cfgDiagLog && esOffVisDiag < 12)
+            {
+               esOffVisDiag++;
+               log("[DIAG] esandy: cdVis cls=" + flash.utils.getQualifiedClassName(oE)
+                   + " cd=" + recE.cd + " " + esVisState(oE));
+            }
             if (recE.cd <= 0) { recE.st = 0; }
          }
       }
+      // v1.128：敌人视觉状态摘要（定位"斯安维斯坦结束后隐身"）
+      private function esVisState(oE:Object):String
+      {
+         var s:String = "vis=-";
+         try
+         {
+            var v:* = oE.vis;
+            if (v == null) { return "vis=null"; }
+            var onSt:String = "-";
+            var par:String = "-";
+            try { par = v.parent != null ? String(v.parent) : "null"; } catch (e:*) { }
+            try
+            {
+               var stg:Boolean = false;
+               var n:Object = v;
+               while (n != null)
+               {
+                  if (n["stage"] != null) { stg = true; break; }
+                  n = n["parent"];
+               }
+               onSt = stg ? "1" : "0";
+            }
+            catch (e:*) { }
+            var al:Number = -1;
+            try { al = v.alpha; } catch (e:*) { }
+            s = "vis=" + (v.visible ? 1 : 0) + " onSt=" + onSt + " par=" + par + " al=" + al
+                + " sost=" + (oE["sost"] != null ? oE["sost"] : "-")
+                + " dis=" + (oE["disabled"] ? 1 : 0)
+                + " inv=" + (oE["invis"] ? 1 : 0);
+         }
+         catch (e:*) { }
+         return s;
+      }
+      // ===== v1.128：斑马（UnitZebra）隐形修复 =====
+      // 根因：斑马每 step() 扣 1 点 shine（UnitZebra.as:74），敌人斯安维斯坦
+      // 场景 A 给活跃敌人补 4 次额外 step → shine 按 5 倍速暴跌（对齐/无 LOS
+      // 时无 +15 增益），vis.alpha=shine/100 → 0 = "斯安维斯坦结束后隐身"。
+      // 修复：isShoot 是 public（Unit.as:346，仅 UnitZebra 消费）——斑马置
+      // true 后下一次 animate() 走 `isShoot→shine=currentWeapon.shine` 回充
+      // 分支（weapon.shine public 默认 500）→ 立即回亮；isShoot 被斑马自己
+      // 清零，无副作用。只对已隐形/低透明度的斑马家族触发。
+      private function esShineGuard(oE:Object):void
+      {
+         try
+         {
+            if (oE == null) return;
+            if (flash.utils.getQualifiedClassName(oE).indexOf("Zebra") < 0) return;
+            var invZ:Boolean = false;
+            try { invZ = Boolean(oE.invis); } catch (e:*) { }
+            var alZ:Number = -1;
+            try { if (oE.vis != null) { alZ = oE.vis.alpha; } } catch (e:*) { }
+            if (!invZ && !(alZ >= 0 && alZ < 0.5)) return;
+            if (oE["isShoot"] == null) return;
+            oE.isShoot = true;
+            if (cfgDiagLog && esOffVisDiag < 20)
+            {
+               esOffVisDiag++;
+               log("[DIAG] esandy: shineGuard cls=" + flash.utils.getQualifiedClassName(oE)
+                   + " inv=" + invZ + " al=" + alZ + " isShoot=1 " + esVisState(oE));
+            }
+         }
+         catch (e:*) { }
+      }
       // 场景 B：玩家时停中活跃敌人与玩家同权（每帧 step + 计时 + 徽标 + 残影）
+      // v1.126：B 分支补上战斗触发检测与全部状态推进——此前只处理 st==1：
+      // 玩家开着时停进入敌人视野时，敌人 AI 在节流帧（loc.step 1/N 速）里
+      // 更新 celUnit 进入战斗，但触发检测只在常规分支 stepEnemySandy 里跑、
+      // 玩家时停中被整体跳过 → 敌人永远不开启斯安维斯坦（用户实测）。
       private function stepEnemySandyB():void
       {
          try
@@ -4181,13 +4236,29 @@ package
                {
                   var recE:Object = esEnemies[kE];
                   if (recE == null || kE == null || kE.in_chain != true) continue;
+                  // 战斗触发检测（与常规分支同条件：celUnit==gg 且待机）
+                  var celB:* = null;
+                  try { celB = kE["celUnit"]; } catch (e:*) { }
+                  if (celB == world.gg && recE.st == 0)
+                  {
+                     recE.st = 1;
+                     recE.left = cfgESDur;
+                     if (cfgDiagLog && esDiagCnt < 12)
+                     {
+                        esDiagCnt++;
+                        log("[DIAG] esandy: cls=" + flash.utils.getQualifiedClassName(kE) + " ON(during player sandy)");
+                     }
+                  }
+                  // 全部状态推进（含冷却倒计时——与 left 同速：玩家时停中敌人
+                  // 斯安维斯坦计时按显示帧走，冷却结束即可重新触发）
+                  esTick(kE, recE);
                   if (recE.st == 1)
                   {
-                     esTick(kE, recE);
                      try { kE.step(); } catch (e:*) { }
                      esGhostFor(kE, recE);
                   }
                   updateESMark(kE, recE.st);
+                  esShineGuard(kE);   // v1.128：斑马 shine 回充（防隐形，B 分支）
                }
                catch (e:*) { }
             }
@@ -4242,6 +4313,32 @@ package
             if (savedParentE != null)
             {
                try { savedParentE.addChildAt(visE, savedIdxE); } catch (e:*) { }
+            }
+            // v1.128：摘挂后校验 vis 是否仍在显示树上——若被摘下后重挂失败
+            //（savedIdxE==-1 / 图层被换新等）vis 会脱离显示树=敌人隐身。
+            // 只读校验，发现问题即记录（定位"斯安维斯坦结束后隐身"）。
+            if (cfgDiagLog && esOrphanDiag < 15)
+            {
+               try
+               {
+                  var onStk:Boolean = false;
+                  var nk:Object = visE;
+                  var hop:int = 0;
+                  while (nk != null && hop < 8)
+                  {
+                     if (nk["stage"] != null) { onStk = true; break; }
+                     nk = nk["parent"];
+                     hop++;
+                  }
+                  if (!onStk || visE.parent == null)
+                  {
+                     esOrphanDiag++;
+                     log("[DIAG] esGhost-orphan: cls=" + flash.utils.getQualifiedClassName(oE)
+                         + " onSt=" + onStk + " idx=" + savedIdxE + " parNul=" + (visE.parent == null)
+                         + " " + esVisState(oE));
+                  }
+               }
+               catch (e:*) { }
             }
             // v1.122：残影层懒初始化/重挂——此前 ghostLayer 只在玩家开时停
             // （startSandy）时创建：只触发敌人斯安维斯坦（玩家没开过时停）
@@ -5640,6 +5737,9 @@ package
          // 的 KEY_DOWN 先于游戏 Ctr 注册（Ctr 在 World 构造时才注册）。此处
          // 直接消费按键+useFav 第一组槽位，并 stopImmediatePropagation 阻止
          // 游戏 Ctr 收到该键（防第二组槽重复处理）。
+         // v1.127：技能已迁移 mods/MoreSkills&Weapons（MSWSwaprun.as）——
+         // cfgSwapRun 恒 false（默认关、config 键移除、面板行移除），
+         // 本拦截不再触发，代码保留作备份（完整源码见 state/migration-backup-v1.126/）。
          try
          {
             if (cfgSwapRun && !replaying && !panelOpen && world != null && world.ctr != null
@@ -5719,8 +5819,8 @@ package
          // ===== 选项页模组设置面板（主菜单/游戏内 Options 页）=====
          if (optPanelOn)
          {
-            if (e.keyCode == Keyboard.UP) { optSel = (optSel + 9 - 1) % 9; return; }
-            if (e.keyCode == Keyboard.DOWN) { optSel = (optSel + 1) % 9; return; }
+            if (e.keyCode == Keyboard.UP) { optSel = (optSel + 7 - 1) % 7; return; }
+            if (e.keyCode == Keyboard.DOWN) { optSel = (optSel + 1) % 7; return; }
             if (e.keyCode == Keyboard.LEFT) { optAdj(-1); return; }
             if (e.keyCode == Keyboard.RIGHT) { optAdj(1); return; }
             if (e.keyCode == Keyboard.ENTER) { saveConfigFile(); return; }

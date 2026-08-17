@@ -7,7 +7,7 @@
 
 ## 0. 当前状态（2026-08-17）
 
-- **当前版本 v1.127**（git master），已按**镜像部署**运行：仓库 `C:\RemainsMod` 为
+- **当前版本 v1.128**（git master），已按**镜像部署**运行：仓库 `C:\RemainsMod` 为
   唯一事实源；游戏目录是**多 agent 共享工作区**——`mods\Sandevistan` 全镜像
   （同步脚本 `C:\RemainsMod\sync-to-game.bat`，排除 build 与 config.txt），
   `shared-knowledge\`/`game-reference\` 增补式同步，**不删除其他 agent 的文件**。
@@ -43,11 +43,16 @@
   若仍不重现，把日志里 `rollRec:`/`rRoll:` 行发我（diaglog=1）
   ⑤**v1.126 敌人触发**：a. 玩家保持在敌人视野内→敌人冷却结束后再次开启
   b. 玩家开着时停进入敌人视野→敌人照常开启（日志可查 `ON(during player
-  sandy)`）。
+  sandy)`）⑥**v1.128 斑马隐身修复**：敌人斯安维斯坦结束后斑马不再隐形。
 
 ## 1. 已知问题与待办
 
 ### 待用户实测确认
+- **v1.128 斑马隐身**：斑马（UnitZebra）在敌人斯安维斯坦后不再隐形（根因
+  =shine 每步-1 被 5× 补步放大；esShineGuard 用 public isShoot 触发
+  `shine=weapon.shine` 回充）。若仍隐身：diaglog=1 采
+  `esandy: ... OFF`/`cdVis`/`shineGuard`/`esGhost-orphan` 行（esVisState
+  会显示 vis/onSt/parent/alpha/sost——区分"显示链断了"还是"alpha 归零"）。
 - **v1.127 迁出回归**：①Sandevistan 侧疾跑切枪/手雷击落确认不再生效
   （无双重执行）；②斯安维斯坦时停/回放一切照常（含回放爆炸重演——
   验证 replayProjBoom 抽离门控后无回归）；③MoreSkills&Weapons 侧两技能
@@ -80,5 +85,7 @@
    进入视野→敌人照常开启（`ON(during player sandy)` 日志可证）
    ⑥v1.127 迁出回归（见 §1）：Sandevistan 侧两技能不再生效、斯安维斯坦
    时停/回放（含爆炸重演）无回归。
+   ⑦v1.128 斑马隐身修复：敌人斯安维斯坦结束后斑马不再隐形（shine 回充）；
+   若仍有隐身，diaglog=1 采 `esandy: ... OFF`/`cdVis`/`shineGuard`/`esGhost-orphan` 行。
 2. 稳定后：更新本文件 + `release/说明.txt`，并删除游戏目录旧
    `SandevistanMod\` 回退副本（保留一轮）。

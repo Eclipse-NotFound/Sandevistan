@@ -204,6 +204,8 @@ package
       private var esCreateDiag:int = 0;          // v1.124：徽标创建诊断计数（按敌人逐个记）
       private var esQuotaDiag:int = 0;           // v1.119：名额诊断计数
       private var esLastLoc:Object = null;       // v1.124：上次房间（loc 变化时清空敌方状态）
+      private var esOffVisDiag:int = 0;          // v1.128：敌人斯安维斯坦结束后隐身诊断计数
+      private var esOrphanDiag:int = 0;          // v1.128：敌人残影 vis 摘挂孤儿诊断计数
       private var recSitFrames:int = 0;          // v1.123：时停中 isSit 帧计数（翻滚诊断）
       private var recRollFrames:int = 0;         // v1.123：时停中 animState=="roll" 帧计数
       private var recTotFrames:int = 0;          // v1.123：时停录像总帧数
@@ -394,7 +396,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.127 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.128 已加载 (按 \ 触发斯安维斯坦)";
             t.autoSize = "left";   // v1.110：版本号此前显示不全（TextField 默认宽度截断）
             t.x = 10;
             t.y = 10;
@@ -2961,7 +2963,7 @@ package
       {
          if (panelTf == null) return;
          var lines:Array = [];
-         lines.push("== SandevistanMod v1.127 参数 ==");
+         lines.push("== SandevistanMod v1.128 参数 ==");
          lines.push((panelSel == 0 ? "> " : "  ") + "生效时长   " + (cfgDuration / 30).toFixed(1) + "s");
          lines.push((panelSel == 1 ? "> " : "  ") + "冷却       " + (cfgCooldown / 30).toFixed(1) + "s");
          lines.push((panelSel == 2 ? "> " : "  ") + "回放速度   x" + cfgReplaySpeed);
@@ -4055,6 +4057,7 @@ package
                          }
                         esTick(oE, recE);
                         updateESMark(oE, recE.st);
+                        esShineGuard(oE);   // v1.128：斑马 shine 回充（防隐形）
                      }
                   }
                }
@@ -4136,15 +4139,87 @@ package
                if (cfgDiagLog && esDiagCnt < 24)
                {
                   esDiagCnt++;
-                  log("[DIAG] esandy: cls=" + flash.utils.getQualifiedClassName(oE) + " OFF cd=" + cfgESCd);
+                  log("[DIAG] esandy: cls=" + flash.utils.getQualifiedClassName(oE) + " OFF cd=" + cfgESCd
+                      + " " + esVisState(oE));
                }
             }
          }
          else if (recE.st == 2)
          {
             recE.cd--;
+            // v1.128：敌人斯安维斯坦结束后隐身——冷却前 3 帧记录敌人视觉状态
+            //（visible/parent 是否在显示树/alpha/sost/disabled/invis）定位隐身点
+            if (cfgDiagLog && esOffVisDiag < 12)
+            {
+               esOffVisDiag++;
+               log("[DIAG] esandy: cdVis cls=" + flash.utils.getQualifiedClassName(oE)
+                   + " cd=" + recE.cd + " " + esVisState(oE));
+            }
             if (recE.cd <= 0) { recE.st = 0; }
          }
+      }
+      // v1.128：敌人视觉状态摘要（定位"斯安维斯坦结束后隐身"）
+      private function esVisState(oE:Object):String
+      {
+         var s:String = "vis=-";
+         try
+         {
+            var v:* = oE.vis;
+            if (v == null) { return "vis=null"; }
+            var onSt:String = "-";
+            var par:String = "-";
+            try { par = v.parent != null ? String(v.parent) : "null"; } catch (e:*) { }
+            try
+            {
+               var stg:Boolean = false;
+               var n:Object = v;
+               while (n != null)
+               {
+                  if (n["stage"] != null) { stg = true; break; }
+                  n = n["parent"];
+               }
+               onSt = stg ? "1" : "0";
+            }
+            catch (e:*) { }
+            var al:Number = -1;
+            try { al = v.alpha; } catch (e:*) { }
+            s = "vis=" + (v.visible ? 1 : 0) + " onSt=" + onSt + " par=" + par + " al=" + al
+                + " sost=" + (oE["sost"] != null ? oE["sost"] : "-")
+                + " dis=" + (oE["disabled"] ? 1 : 0)
+                + " inv=" + (oE["invis"] ? 1 : 0);
+         }
+         catch (e:*) { }
+         return s;
+      }
+      // ===== v1.128：斑马（UnitZebra）隐形修复 =====
+      // 根因：斑马每 step() 扣 1 点 shine（UnitZebra.as:74），敌人斯安维斯坦
+      // 场景 A 给活跃敌人补 4 次额外 step → shine 按 5 倍速暴跌（对齐/无 LOS
+      // 时无 +15 增益），vis.alpha=shine/100 → 0 = "斯安维斯坦结束后隐身"。
+      // 修复：isShoot 是 public（Unit.as:346，仅 UnitZebra 消费）——斑马置
+      // true 后下一次 animate() 走 `isShoot→shine=currentWeapon.shine` 回充
+      // 分支（weapon.shine public 默认 500）→ 立即回亮；isShoot 被斑马自己
+      // 清零，无副作用。只对已隐形/低透明度的斑马家族触发。
+      private function esShineGuard(oE:Object):void
+      {
+         try
+         {
+            if (oE == null) return;
+            if (flash.utils.getQualifiedClassName(oE).indexOf("Zebra") < 0) return;
+            var invZ:Boolean = false;
+            try { invZ = Boolean(oE.invis); } catch (e:*) { }
+            var alZ:Number = -1;
+            try { if (oE.vis != null) { alZ = oE.vis.alpha; } } catch (e:*) { }
+            if (!invZ && !(alZ >= 0 && alZ < 0.5)) return;
+            if (oE["isShoot"] == null) return;
+            oE.isShoot = true;
+            if (cfgDiagLog && esOffVisDiag < 20)
+            {
+               esOffVisDiag++;
+               log("[DIAG] esandy: shineGuard cls=" + flash.utils.getQualifiedClassName(oE)
+                   + " inv=" + invZ + " al=" + alZ + " isShoot=1 " + esVisState(oE));
+            }
+         }
+         catch (e:*) { }
       }
       // 场景 B：玩家时停中活跃敌人与玩家同权（每帧 step + 计时 + 徽标 + 残影）
       // v1.126：B 分支补上战斗触发检测与全部状态推进——此前只处理 st==1：
@@ -4183,6 +4258,7 @@ package
                      esGhostFor(kE, recE);
                   }
                   updateESMark(kE, recE.st);
+                  esShineGuard(kE);   // v1.128：斑马 shine 回充（防隐形，B 分支）
                }
                catch (e:*) { }
             }
@@ -4237,6 +4313,32 @@ package
             if (savedParentE != null)
             {
                try { savedParentE.addChildAt(visE, savedIdxE); } catch (e:*) { }
+            }
+            // v1.128：摘挂后校验 vis 是否仍在显示树上——若被摘下后重挂失败
+            //（savedIdxE==-1 / 图层被换新等）vis 会脱离显示树=敌人隐身。
+            // 只读校验，发现问题即记录（定位"斯安维斯坦结束后隐身"）。
+            if (cfgDiagLog && esOrphanDiag < 15)
+            {
+               try
+               {
+                  var onStk:Boolean = false;
+                  var nk:Object = visE;
+                  var hop:int = 0;
+                  while (nk != null && hop < 8)
+                  {
+                     if (nk["stage"] != null) { onStk = true; break; }
+                     nk = nk["parent"];
+                     hop++;
+                  }
+                  if (!onStk || visE.parent == null)
+                  {
+                     esOrphanDiag++;
+                     log("[DIAG] esGhost-orphan: cls=" + flash.utils.getQualifiedClassName(oE)
+                         + " onSt=" + onStk + " idx=" + savedIdxE + " parNul=" + (visE.parent == null)
+                         + " " + esVisState(oE));
+                  }
+               }
+               catch (e:*) { }
             }
             // v1.122：残影层懒初始化/重挂——此前 ghostLayer 只在玩家开时停
             // （startSandy）时创建：只触发敌人斯安维斯坦（玩家没开过时停）
