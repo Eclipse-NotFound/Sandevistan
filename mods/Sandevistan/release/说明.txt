@@ -1,7 +1,17 @@
 ==========================================================
-  斯安维斯坦模组 (Sandevistan Mod) v1.126
+  斯安维斯坦模组 (Sandevistan Mod) v1.127
   for Fallout Equestria: REMAINS
 ==========================================================
+
+【v1.127 更新内容】（疾跑切枪 + 手雷击落 迁出）
+  · 这两个技能的实际运行实现已迁移到另一个模组 MoreSkills&Weapons
+    （新组件 MSWSwaprun / MSWProjHits，设置在 MoreSkills&Weapons 的
+    哔哔小马设置页/F6 浮层第 7-10 行调整）
+  · Sandevistan 侧已停用：本模组的配置项与设置面板里不再有"疾跑切枪/
+    投掷物可击落"，不会与 MoreSkills&Weapons 重复执行
+  · 斯安维斯坦时停/回放期间这两个技能不介入（由 MoreSkills&Weapons 的
+    冻结判定保证），回放爆炸重演等原有功能不受影响
+  · 完整源码备份在本模组 state/migration-backup-v1.126/
 
 【v1.126 更新内容】（敌人斯安维斯坦触发修复）
   · 修复：玩家一直待在敌人视野里时，敌人斯安维斯坦冷却结束后不会再开启

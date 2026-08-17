@@ -104,7 +104,7 @@ package
       private var lastGhostY:Number = 0;
       private var panelOpen:Boolean = false;
       private var optPanelOn:Boolean = false;      // 选项页模组设置面板
-      private var optSel:int = 0;                  // 0=生效 1=冷却 2=残影不透明度 3=残影频率 4=渐变门槛 5=回放残影间隔 6=回放残影寿命
+      private var optSel:int = 0;                  // 0=生效 1=冷却 2=残影不透明度 3=残影频率 4=渐变门槛 5=回放残影间隔 6=回放残影寿命 7=投掷物可击落 8=疾跑切枪
       private var optTf:TextField = null;
       private var optBg:Sprite = null;
       private var lastGgControl:Boolean = true;
@@ -169,18 +169,12 @@ package
       private var enemyAtks:Dictionary = new Dictionary();      // 敌对单位 → [{frame, w, cx, cy}] 时停记录的开火事件（回放复现）
       private var preExistB:Dictionary = new Dictionary();       // 时停开始时已在飞的玩家攻击体（不清除，回放继续飞行）
       private var gSnapKol:Number = -1;   // 时停结束时手雷库存（回放结束恢复——重演抛掷不二次消耗）
-      // v1.127：以下四个字段原为"投掷物可击落（手雷击落）"技能配置——
-      // 该技能已迁移到 mods/MoreSkills&Weapons（MSWProjHits.as），Sandevistan
-      // 侧停用（默认 false、config 键失效、面板行移除）。声明与实现保留
-      // 作为备份（完整源码另存 state/migration-backup-v1.126/）。stepProjHits
-      // 的回放重演分支抽成 replayProjBoom() 脱离本开关（斯安维斯坦回放系统
-      // 对时停中自然爆炸的重演不受影响）。
-      private var cfgProjHits:Boolean = false;   // 已迁移 MSW：投掷物可被击落（手雷/导弹/榴弹受击至 0 爆炸）
-      private var cfgProjHp:Number = 30;        // 投掷物血量（已迁移 MSW，备份）
-      private var cfgProjArmor:Number = 0;      // 投掷物护甲（已迁移 MSW，备份）
-      private var projHp:Dictionary = new Dictionary();  // 投掷物 → 当前血量（已迁移 MSW，备份）
-      private var projHpOver:Object = null;     // v1.114：按武器 id 的血量覆盖（已迁移 MSW，备份）
-      private var projArmorOver:Object = null;  // v1.114：按武器 id 的护甲覆盖（已迁移 MSW，备份）
+      private var cfgProjHits:Boolean = true;   // 投掷物可被击落（手雷/导弹/榴弹受击至 0 爆炸）
+      private var cfgProjHp:Number = 30;        // 投掷物血量
+      private var cfgProjArmor:Number = 0;      // 投掷物护甲（预留接口：伤害先减护甲）
+      private var projHp:Dictionary = new Dictionary();  // 投掷物 → 当前血量
+      private var projHpOver:Object = null;     // v1.114：按武器 id 的血量覆盖（projhp_<id>）
+      private var projArmorOver:Object = null;  // v1.114：按武器 id 的护甲覆盖（projarmor_<id>）
       // ===== v1.115：敌人斯安维斯坦（Enemy Sandevistan）=====
       // 触发=敌人 AI 锁定玩家（celUnit==gg）且待机（不在冷却）即开启；
       // v1.126 起无上升沿要求（见 stepEnemySandy：玩家保持在视野内时冷却
@@ -219,7 +213,7 @@ package
       private var twinDiagCnt:int = 0;                     // v1.98：孪生体惰性化诊断计数
       private var partDiagOnce:Boolean = false;            // v1.98：时停粒子视觉类型诊断（每轮一次）
       private var recPaired:Dictionary = new Dictionary(); // v1.99：已配对录像体去重（防同一录像体被多个孪生体配对）
-      private var cfgSwapRun:Boolean = false;          // v1.127：已迁移 mods/MoreSkills&Weapons（MSWSwaprun.as），Sandevistan 停用（默认关、config 键失效、面板行移除；实现保留作备份，完整源码见 state/migration-backup-v1.126/）
+      private var cfgSwapRun:Boolean = true;           // v1.100：疾跑（按住Shift）中允许切枪开关（默认开——用户要求的功能）
       private var leashLeft:int = 0;                   // v1.100：回放结束后弹药防泄漏钳制剩余帧数
       private var leashSnap:Object = null;             // v1.100：防泄漏钳制用的时停结束快照
       private var leashDiagCnt:int = 0;                // v1.100：防泄漏钳制诊断计数
@@ -361,8 +355,7 @@ package
          try { inst.slowPartClass = ApplicationDomain.currentDomain.getDefinition("fe.graph.Part") as Class; } catch (e:*) { }
          // v1.101：版本标记——日志确认实际加载运行的构建版本与关键开关
          // v1.121：追加 esmark/esper/espd——排查"徽标不可见"类问题的第一手数据
-         // v1.127：swaprun/projhits 已迁移 mods/MoreSkills&Weapons（此处不再输出）
-         inst.log("[SandyMod] v1.127 loaded"
+         inst.log("[SandyMod] v1.126 loaded swaprun=" + (inst.cfgSwapRun ? 1 : 0) + " projhits=" + (inst.cfgProjHits ? 1 : 0)
              + " esmark=" + (inst.cfgESMark ? 1 : 0) + " esghost=" + (inst.cfgESGhost ? 1 : 0) + " esper=" + inst.cfgESPer);
          if (main != null && main.stage != null)
          {
@@ -394,7 +387,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.127 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.126 已加载 (按 \ 触发斯安维斯坦)";
             t.autoSize = "left";   // v1.110：版本号此前显示不全（TextField 默认宽度截断）
             t.x = 10;
             t.y = 10;
@@ -445,9 +438,9 @@ package
                var txt:String = stream.readUTFBytes(stream.bytesAvailable);
                stream.close();
                var lines:Array = txt.split(/\r?\n/);
-               // v1.127：projhp_<id>/projarmor_<id> 与 projhits/swaprun 键已移除——
-               // 两技能迁移到 mods/MoreSkills&Weapons（MSWProjHits/MSWSwaprun，
-               // SharedObject 持久化），Sandevistan 侧不再解析，已有 config 无法开启
+               // v1.114：按武器 id 的投掷物血量/护甲覆盖（projhp_<id>/projarmor_<id>）
+               projHpOver = {};
+               projArmorOver = {};
                for each (var line:String in lines)
                {
                   line = line.replace(/^\s+|\s+$/g, "");
@@ -478,9 +471,29 @@ package
                   else if (k == "ghostalpha") cfgGhostAlpha = parseInt(v);
                   else if (k == "replayghost") cfgReplayGhost = parseInt(v);
                   else if (k == "replayghostlife") cfgReplayGhostLife = parseInt(v);
+                  else if (k == "projhits") cfgProjHits = v.toLowerCase() == "1" || v.toLowerCase() == "true";
+                  else if (k == "projhp") cfgProjHp = parseInt(v);
+                  else if (k == "projarmor") cfgProjArmor = parseInt(v);
+                  // v1.114：按武器 id 的覆盖项（projhp_aglau=45 / projarmor_bel=10 等；
+                  // 键已 toLowerCase，武器 id 均为小写，直接匹配）
+                  else if (k.indexOf("projhp_") == 0 && k.length > 7)
+                  {
+                     var hpOv:int = parseInt(v);
+                     if (hpOv < 1) hpOv = 1;
+                     if (hpOv > 1000) hpOv = 1000;
+                     try { projHpOver[k.substr(7)] = hpOv; } catch (e:*) { }
+                  }
+                  else if (k.indexOf("projarmor_") == 0 && k.length > 10)
+                  {
+                     var armOv:int = parseInt(v);
+                     if (armOv < 0) armOv = 0;
+                     if (armOv > 500) armOv = 500;
+                     try { projArmorOver[k.substr(10)] = armOv; } catch (e:*) { }
+                  }
                   else if (k == "slowfactor") cfgSlowFactor = parseFloat(v);
                   else if (k == "colormode") cfgColorMode = parseInt(v);
                   else if (k == "edgethresh") cfgEdgeThresh = parseFloat(v);
+                  else if (k == "swaprun") cfgSwapRun = v.toLowerCase() == "1" || v.toLowerCase() == "true";
                   else if (k == "enemysandy") cfgEnemySandy = v;
                   else if (k == "esandydur") cfgESDur = parseInt(v);
                   else if (k == "esandycd") cfgESCd = parseInt(v);
@@ -504,7 +517,10 @@ package
          if (cfgGhostAlpha > 100) cfgGhostAlpha = 100;
          if (cfgReplayGhost < 1) cfgReplayGhost = 1;
          if (cfgReplayGhostLife < 1) cfgReplayGhostLife = 1;
-         // v1.127：cfgProjHp/cfgProjArmor 钳制随 projhits 迁移一并移除（已迁移 MSW）
+         if (cfgProjHp < 1) cfgProjHp = 1;
+         if (cfgProjHp > 1000) cfgProjHp = 1000;
+         if (cfgProjArmor < 0) cfgProjArmor = 0;
+         if (cfgProjArmor > 500) cfgProjArmor = 500;
          // v1.115：敌人斯安维斯坦白名单与数值钳制
          if (cfgESDur < 30) cfgESDur = 30;
          if (cfgESDur > 3600) cfgESDur = 3600;
@@ -872,7 +888,16 @@ package
             // 回放残影寿命（显示帧，1-60）
             cfgReplayGhostLife = Math.max(1, Math.min(60, cfgReplayGhostLife + dir));
          }
-         // v1.127：optSel 7/8（投掷物可击落/疾跑切枪）已随迁移移除（→ MSW）
+         else if (optSel == 7)
+         {
+            // 投掷物可击落开关（手雷/导弹/榴弹受击至 0 爆炸）
+            cfgProjHits = !cfgProjHits;
+         }
+         else
+         {
+            // 疾跑中切枪开关（游戏本体按住 Shift 疾跑时数字键不支持切枪）
+            cfgSwapRun = !cfgSwapRun;
+         }
       }
 
       private function renderOptPanel():void
@@ -889,6 +914,8 @@ package
             lines.push((optSel == 4 ? "> " : "  ") + "渐变门槛    " + cfgEdgeThresh);
             lines.push((optSel == 5 ? "> " : "  ") + "回放残影间隔 " + cfgReplayGhost + "帧");
             lines.push((optSel == 6 ? "> " : "  ") + "回放残影寿命 " + cfgReplayGhostLife + "帧");
+            lines.push((optSel == 7 ? "> " : "  ") + "投掷物可击落 " + (cfgProjHits ? "开" : "关"));
+            lines.push((optSel == 8 ? "> " : "  ") + "疾跑中切枪  " + (cfgSwapRun ? "开" : "关"));
             lines.push("");
             lines.push("上下选择 左右调值 Enter保存");
             optTf.text = lines.join(String.fromCharCode(10));
@@ -1742,22 +1769,16 @@ package
       // ——普通子弹（含天角兽闪电）不参与。护甲 cfgProjArmor 为预留接口
       // （伤害先减护甲）。时停中爆炸仅视觉（伤害清零——真实伤害由回放中
       // 重演的子弹命中重演的投掷物结算，与攻击结算架构一致）。
-      // v1.127：击落技能已迁移 mods/MoreSkills&Weapons（MSWProjHits.as，
-      // SharedObject 配置）；Sandevistan 侧停用（cfgProjHits 恒 false、
-      // config 键失效、面板行移除）。本函数与下方 stepProjHits 保留作
-      // 源码备份（完整备份见 state/migration-backup-v1.126/）。
-      // ===== 回放重演（斯安维斯坦回放系统核心，与击落开关无关）=====
-      // v1.127：从 stepProjHits 抽出、脱离 cfgProjHits 门控——时停中
-      // 自然爆炸（导火索到期/撞墙）由 slowStepWorld 记录进 projBoom，
-      // 回放必须照常重演，不能因击落技能停用而失效。
-      private function replayProjBoom():void
+      private function stepProjHits(locP:Object, isSandy:Boolean):void
       {
-         if (!replaying) return;
+         if (!cfgProjHits) return;
          // v1.91：时停中引爆的投掷物（射击击落/自然到期）在回放对应帧
          // 真实爆炸（damageExpl 从武器恢复——时停中玩家攻击体伤害被清零）
-         try
+         if (replaying)
          {
-            for (var kB:Object in projBoom)
+            try
+            {
+               for (var kB:Object in projBoom)
                {
                   try
                   {
@@ -1898,13 +1919,7 @@ package
                }
             }
             catch (e:*) { }
-      }
-      // ===== 手雷击落判定（v1.83 原 stepProjHits 主体；已迁移 MSW，源码备份）=====
-      private function stepProjHits(locP:Object, isSandy:Boolean):void
-      {
-         // v1.127：回放重演已在 replayProjBoom() 独立处理（见上）
-         replayProjBoom();
-         if (!cfgProjHits) return;
+         }
          try
          {
             var projs:Array = [];
@@ -2961,7 +2976,7 @@ package
       {
          if (panelTf == null) return;
          var lines:Array = [];
-         lines.push("== SandevistanMod v1.127 参数 ==");
+         lines.push("== SandevistanMod v1.126 参数 ==");
          lines.push((panelSel == 0 ? "> " : "  ") + "生效时长   " + (cfgDuration / 30).toFixed(1) + "s");
          lines.push((panelSel == 1 ? "> " : "  ") + "冷却       " + (cfgCooldown / 30).toFixed(1) + "s");
          lines.push((panelSel == 2 ? "> " : "  ") + "回放速度   x" + cfgReplaySpeed);
@@ -2998,13 +3013,28 @@ package
             sb.push("ghostevery=" + cfgGhostEvery);
             sb.push("replayghost=" + cfgReplayGhost);
             sb.push("replayghostlife=" + cfgReplayGhostLife);
-            // v1.127：projhits/projhp/projarmor/projhp_<id>/projarmor_<id>/swaprun
-            // 回写已移除——两技能迁移到 mods/MoreSkills&Weapons（MSW 用
-            // SharedObject 持久化，见 MSWConfig）
+            sb.push("projhits=" + (cfgProjHits ? 1 : 0));
+            sb.push("projhp=" + cfgProjHp);
+            sb.push("projarmor=" + cfgProjArmor);
+            // v1.114：回写按武器 id 的覆盖项——F9 面板保存时重写整个 config，
+            // 不写回会丢用户自定义的 projhp_<id>/projarmor_<id>
+            try
+            {
+               if (projHpOver != null)
+               {
+                  for (var kOH:String in projHpOver) { sb.push("projhp_" + kOH + "=" + projHpOver[kOH]); }
+               }
+               if (projArmorOver != null)
+               {
+                  for (var kOA:String in projArmorOver) { sb.push("projarmor_" + kOA + "=" + projArmorOver[kOA]); }
+               }
+            }
+            catch (e:*) { }
             sb.push("ghostalpha=" + cfgGhostAlpha);
             sb.push("ghostblend=" + cfgGhostBlend);
             sb.push("colormode=" + cfgColorMode);
             sb.push("edgethresh=" + cfgEdgeThresh);
+            sb.push("swaprun=" + (cfgSwapRun ? 1 : 0));
             sb.push("enemysandy=" + cfgEnemySandy);
             sb.push("esandydur=" + cfgESDur);
             sb.push("esandycd=" + cfgESCd);
@@ -5635,9 +5665,6 @@ package
          // 的 KEY_DOWN 先于游戏 Ctr 注册（Ctr 在 World 构造时才注册）。此处
          // 直接消费按键+useFav 第一组槽位，并 stopImmediatePropagation 阻止
          // 游戏 Ctr 收到该键（防第二组槽重复处理）。
-         // v1.127：技能已迁移 mods/MoreSkills&Weapons（MSWSwaprun.as）——
-         // cfgSwapRun 恒 false（默认关、config 键移除、面板行移除），
-         // 本拦截不再触发，代码保留作备份（完整源码见 state/migration-backup-v1.126/）。
          try
          {
             if (cfgSwapRun && !replaying && !panelOpen && world != null && world.ctr != null
@@ -5717,8 +5744,8 @@ package
          // ===== 选项页模组设置面板（主菜单/游戏内 Options 页）=====
          if (optPanelOn)
          {
-            if (e.keyCode == Keyboard.UP) { optSel = (optSel + 7 - 1) % 7; return; }
-            if (e.keyCode == Keyboard.DOWN) { optSel = (optSel + 1) % 7; return; }
+            if (e.keyCode == Keyboard.UP) { optSel = (optSel + 9 - 1) % 9; return; }
+            if (e.keyCode == Keyboard.DOWN) { optSel = (optSel + 1) % 9; return; }
             if (e.keyCode == Keyboard.LEFT) { optAdj(-1); return; }
             if (e.keyCode == Keyboard.RIGHT) { optAdj(1); return; }
             if (e.keyCode == Keyboard.ENTER) { saveConfigFile(); return; }

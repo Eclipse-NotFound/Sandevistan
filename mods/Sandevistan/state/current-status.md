@@ -7,7 +7,7 @@
 
 ## 0. 当前状态（2026-08-17）
 
-- **当前版本 v1.126**（git master），已按**镜像部署**运行：仓库 `C:\RemainsMod` 为
+- **当前版本 v1.127**（git master），已按**镜像部署**运行：仓库 `C:\RemainsMod` 为
   唯一事实源；游戏目录是**多 agent 共享工作区**——`mods\Sandevistan` 全镜像
   （同步脚本 `C:\RemainsMod\sync-to-game.bat`，排除 build 与 config.txt），
   `shared-knowledge\`/`game-reference\` 增补式同步，**不删除其他 agent 的文件**。
@@ -21,17 +21,20 @@
   **同步注意**：`sync-to-game.bat` 是 LF-only 换行，cmd/PowerShell 直接跑会
   逐行错乱（'le'/'o' 不是命令），需在 Git Bash 下包装或用临时 CRLF 副本；
   本次改用 PowerShell 直接执行等效 robocopy（/MIR 排除 build+config.txt）。
+- **v1.127 迁移（2026-08-17）**：**疾跑切枪 + 手雷击落 已迁出到
+  MoreSkills&Weapons**（新组件 MSWSwaprun.as / MSWProjHits.as，SharedObject
+  配置、面板第 7-10 行；交接文档见该模组
+  `state/MIGRATION-Sandevistan-swaprun-projhits.md`）。Sandevistan 侧停用：
+  cfgProjHits/cfgSwapRun 默认 false、config 键/设置面板行/saveConfigFile 回写
+  移除；**适配**：stepProjHits 回放重演分支抽成 replayProjBoom() 脱离门控，
+  斯安维斯坦回放对"时停中自然爆炸"的重演不受影响；完整源码备份在
+  `state/migration-backup-v1.126/`。共存约定：MSW 侧 MSWU.inGameplay() 含
+  onPause 判定——时停/回放期间两技能不介入（行为差异：时停期间疾跑切枪
+  不再生效，换取回放系统共存）。
 - **已解决（用户确认 ✓）**：鬼影（v1.110）；启动标记版本号显示完整；
   回放结束爆炸动画自然播完（v1.111/1.112）；爆炸动画原生速度（v1.113）；
   投掷物血量/护甲按武器覆盖（v1.114）；击落敌人手雷生效；**S 徽标可见
-  （v1.121 配置解析真根因）**。
-- **v1.115-1.126 内容**：敌人斯安维斯坦（v1.117 修类名匹配；斑马；v1.119
-  徽标改挂 grafon.visual 顶层容器 + esandyper=50%；v1.121 S 徽标真根因=配置
-  解析）；v1.120 回放重现翻滚/趴下/起身；v1.122 敌人残影修复；v1.123 S
-  徽标排除尸体 + 回放翻滚诊断（rollRec/rRoll）；v1.124 换房间清空敌方状态
-  + 移除 currentWeapon 过滤；v1.125 移除输入法警告 UI + 顶部状态 UI
-  showhud 开关（F9 面板第 7 项）；**v1.126 敌人触发修复：去上升沿要求
-  （冷却结束在视野内可重触发）+ 玩家时停中补触发检测（stepEnemySandyB）**。
+  （v1.121 配置解析真根因）**；**敌人触发修复（v1.126）**。
 - **跨模组问题（已定位，未越权修复）**：全敌人满装甲条 = RealisticVision 的
   hideEnemies 对视野内敌人强制 `hpbar.visible=true` + 游戏血条子元件默认可见。
   已建议用户转告 RV 开发者；我们不动其代码。
@@ -45,6 +48,10 @@
 ## 1. 已知问题与待办
 
 ### 待用户实测确认
+- **v1.127 迁出回归**：①Sandevistan 侧疾跑切枪/手雷击落确认不再生效
+  （无双重执行）；②斯安维斯坦时停/回放一切照常（含回放爆炸重演——
+  验证 replayProjBoom 抽离门控后无回归）；③MoreSkills&Weapons 侧两技能
+  正常（见其 HANDOFF/MIGRATION 文档）。
 - **v1.126 敌人触发两场景**（见 §0 ⑤）：触发节奏是否符合预期（dur/cd 循环）。
 - **v1.109 镜像部署**：加载标记、时停/回放、F9 保存 config（见上）。
 - **v1.108 鬼影修复**：触发时停→回放，看回放开始到爆炸前还有没有钉死的亮光。
@@ -70,6 +77,8 @@
    ③敌人残影明显可见（v1.122）④回放翻滚/趴下/起身（v1.120；仍不重现则
    让用户开 diaglog=1，发回 `rollRec:`/`rRoll:` 日志行）
    ⑤v1.126 敌人触发：a. 玩家保持在视野内→冷却结束再开启 b. 玩家时停中
-   进入视野→敌人照常开启（`ON(during player sandy)` 日志可证）。
+   进入视野→敌人照常开启（`ON(during player sandy)` 日志可证）
+   ⑥v1.127 迁出回归（见 §1）：Sandevistan 侧两技能不再生效、斯安维斯坦
+   时停/回放（含爆炸重演）无回归。
 2. 稳定后：更新本文件 + `release/说明.txt`，并删除游戏目录旧
    `SandevistanMod\` 回退副本（保留一轮）。
