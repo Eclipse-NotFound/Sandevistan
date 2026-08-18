@@ -368,7 +368,7 @@ package
          // v1.101：版本标记——日志确认实际加载运行的构建版本与关键开关
          // v1.121：追加 esmark/esper/espd——排查"徽标不可见"类问题的第一手数据
          // v1.127：swaprun/projhits 已迁移 mods/MoreSkills&Weapons（此处不再输出）
-         inst.log("[SandyMod] v1.131 loaded"
+         inst.log("[SandyMod] v1.132 loaded"
              + " esmark=" + (inst.cfgESMark ? 1 : 0) + " esghost=" + (inst.cfgESGhost ? 1 : 0) + " esper=" + inst.cfgESPer
              + " esen=" + (inst.cfgESEnabled ? 1 : 0) + " esprob=" + inst.cfgESRoomProb);
          if (main != null && main.stage != null)
@@ -401,7 +401,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.131 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.132 已加载 (按 \ 触发斯安维斯坦)";
             t.autoSize = "left";   // v1.110：版本号此前显示不全（TextField 默认宽度截断）
             t.x = 10;
             t.y = 10;
@@ -1050,6 +1050,12 @@ package
                      // 视觉可见性（v1.76：尸鬼钻地/炮塔死亡隐藏等按记录重演）
                      var vvR:Boolean = true;
                      try { if (oR.vis != null) { vvR = oR.vis.visible; } } catch (e:*) { }
+                     // v1.132：记录隐身/可抓取标志（回放 AI 分歧会推入 burrow/隐身：
+                     // aiState=5 → invis=true + levitPoss=false，按记录强压回去）
+                     var ivR:Boolean = false;
+                     try { if (oR.invis != null) { ivR = Boolean(oR.invis); } } catch (e:*) { }
+                     var lvR:Boolean = true;
+                     try { if (oR.levitPoss != null) { lvR = Boolean(oR.levitPoss); } } catch (e:*) { }
                      // 朝向与武器转动（v1.79：回放中 AI 因位置重钉不转向、
                      // 瞄准目标失真——按记录恢复 storona 与武器 rot）
                      var stoR:Number = 1;
@@ -1109,8 +1115,8 @@ package
                               }
                               catch (e:*) { }
                            }
-                           for (var f0:int = 0; f0 < frameN; f0++) { arrR.push({ x: oR.X, y: oR.Y, f: -1, s: "", wx: wxR, wy: wyR, twx: txR, twy: tyR, vv: vvR, sto: stoR, wrot: wrotR }); }
-                           arrR.push({ x: oR.X, y: oR.Y, f: animFrameOf(oR), s: sndR, wx: wxR, wy: wyR, twx: txR, twy: tyR, vv: vvR, sto: stoR, wrot: wrotR });
+                           for (var f0:int = 0; f0 < frameN; f0++) { arrR.push({ x: oR.X, y: oR.Y, f: -1, s: "", wx: wxR, wy: wyR, twx: txR, twy: tyR, vv: vvR, sto: stoR, wrot: wrotR, iv: ivR, lv: lvR }); }
+                           arrR.push({ x: oR.X, y: oR.Y, f: animFrameOf(oR), s: sndR, wx: wxR, wy: wyR, twx: txR, twy: tyR, vv: vvR, sto: stoR, wrot: wrotR, iv: ivR, lv: lvR });
                         }
                         else
                         {
@@ -1131,7 +1137,7 @@ package
                      }
                      else
                      {
-                        arrR.push({ x: oR.X, y: oR.Y, f: animFrameOf(oR), s: "", wx: wxR, wy: wyR, twx: txR, twy: tyR, vv: vvR, sto: stoR, wrot: wrotR, vf: vfR2 });
+                        arrR.push({ x: oR.X, y: oR.Y, f: animFrameOf(oR), s: "", wx: wxR, wy: wyR, twx: txR, twy: tyR, vv: vvR, sto: stoR, wrot: wrotR, vf: vfR2, iv: ivR, lv: lvR });
                      }
                   }
                }
@@ -1587,6 +1593,25 @@ package
                                  {
                                     try { oR.animate(); } catch (e:*) { }
                                  }
+                              }
+                              catch (e:*) { }
+                              // v1.132：回放敌人动画防"偶发僵死" + 防怪物残留隐身/不可抓：
+                              // · 位置重钉使 AI 常判"已到目标范围"→dx≈0→animate() 只走
+                              //   stay（僵尸/蝎子等 Blit 怪原地定住=僵死）。按记录位移
+                              //   折算 dx/dy 补喂 + 补一次 animate()，动画按真实移动档位
+                              //   （run/trot/walk）重现。
+                              // · 回放 AI 分歧可能把怪物推入 burrow/隐身（aiState=5 →
+                              //   vis.visible=false + invis=true + levitPoss=false），
+                              //   按记录最后状态强压回去——回放结束也不残留
+                              //   "隐身/无法念力抓取"（用户实测：隐身的肉食灵/辐射蝎）。
+                              try
+                              {
+                                 try { oR.dx = (nxtR2.x - stR.x) * cfgReplaySpeed; } catch (e:*) { }
+                                 try { oR.dy = (nxtR2.y - stR.y) * cfgReplaySpeed; } catch (e:*) { }
+                                 if (oR.vis != null && stR.vv != null) { try { oR.vis.visible = Boolean(stR.vv); } catch (e:*) { } }
+                                 if (stR.iv != null) { try { oR.invis = Boolean(stR.iv); } catch (e:*) { } }
+                                 if (stR.lv != null) { try { oR.levitPoss = Boolean(stR.lv); } catch (e:*) { } }
+                                 try { oR.animate(); } catch (e:*) { }
                               }
                               catch (e:*) { }
                               // v1.85：攻击体复现已移除——攻击体由追踪器（seenAtk）
@@ -2993,7 +3018,7 @@ package
       {
          if (panelTf == null) return;
          var lines:Array = [];
-         lines.push("== SandevistanMod v1.131 参数 ==");
+         lines.push("== SandevistanMod v1.132 参数 ==");
          lines.push((panelSel == 0 ? "> " : "  ") + "生效时长   " + (cfgDuration / 30).toFixed(1) + "s");
          lines.push((panelSel == 1 ? "> " : "  ") + "冷却       " + (cfgCooldown / 30).toFixed(1) + "s");
          lines.push((panelSel == 2 ? "> " : "  ") + "回放速度   x" + cfgReplaySpeed);
