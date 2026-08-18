@@ -27,7 +27,7 @@ if not exist "%MODDIR%backup\pfe_1.02_original.swf" (
     copy /y "%GAMEDIR%\pfe.swf"      "%MODDIR%backup\pfe_1.02_original.swf"  >nul
     copy /y "%GAMEDIR%\DLC\pfe.swf"  "%MODDIR%backup\pfe_1.03_original.swf"  >nul
     copy /y "%GAMEDIR%\DLC\pfeUI.swf" "%MODDIR%backup\pfe_1.04_original.swf" >nul
-    echo         Backed up to SandevistanMod\backup\
+    echo         Backed up to mods\Sandevistan\release\backup\
 ) else (
     echo [1/2] Backup already exists, skipping
 )

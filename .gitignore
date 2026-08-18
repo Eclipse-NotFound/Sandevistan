@@ -12,3 +12,6 @@ mods/Sandevistan/build/logs/
 mods/Sandevistan/build/tests/tiny.swf
 game-reference/decompiled/1.02/src_frame/
 game-reference/decompiled/1.02/src102/
+
+# ===== 分发包（不入库，dist/SandevistanMod_v*.zip）=====
+dist/
