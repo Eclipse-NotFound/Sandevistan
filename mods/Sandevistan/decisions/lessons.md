@@ -45,3 +45,31 @@
   remVisual/currentWeapon 赋值/childObjs[0]/addVisual/setNull/setPers/gui.setWeapon；
   并每帧清 work="change"/t_work 钉住 replayWpn，防游戏 changeWeapon 动画流程在回放中
   触发 changeWeaponNow 乱切。
+
+## v1.120-1.132 阶段教训（回放忠实度 + 敌人生成）
+
+- **"重算型回放"必然失真，能用快照就别重算**：回放动画若靠"分类动作+状态机重算"
+  （dx 量化喂 animate），姿态连续性依赖状态机从干净起点走起——时停跨越半个动作
+  （跳到一半/滚到一半）时回放从动作开头或错误分支开始=错乱（用户实测）。改成
+  **快照重演**（逐帧记录标签+帧号，回放 gotoAndStop）后彻底解决（v1.130 玩家、
+  v1.132 敌人按位移补喂 dx+animate——贴图怪无帧可录时的次优解）。
+- **位置钉住 → AI 判"已到目标" → dx≈0 → 动画僵死**：回放把敌人钉在记录位置后，
+  重跑的 AI 常认为已抵达（尤其目标在攻击范围内）→ 控制层 dx=0 → animate() 只走
+  stay。贴图动画怪（僵尸/蝎子，anims[state].st 非循环态）直接定住。修法：步后按
+  记录位移折算 dx/dy 再补调一次 animate()。
+- **AI 重跑有分歧，会污染"事后世界"**：回放重跑怪物 AI 可能把它推入本体隐蔽状态
+  （僵尸钻地 aiState=5 → vis.visible=false+invis=true+levitPoss=false），**回放结束
+  后残留**——表现为"偶发隐身的怪物"+"无法念力抓取"。修法：录像每帧记公开标志
+  （vis.visible/invis/levitPoss），回放步后按录像强压。任何"重跑型"机制都要防
+  状态分歧残留（快照恢复的时机是每帧，不是只在结束时）。
+- **config 行尾注释会毒化布尔键（v1.121 教训）**：解析器不剥 `#` 注释时，
+  `esandymark=1  # 说明` 的布尔精确匹配（`v=="1"`）失败=功能被静默关闭（三轮
+  "修复无效"的真根因）；parseInt 键靠数字前缀侥幸存活——同一 bug 对不同类型键
+  表现完全不同，**诊断时要对比同源键的行为差异**。修法：解析器统一剥注释；
+  配置文件注释独立成行。
+- **采样偏差会再犯（v1.128 教训）**：斑马 shine 修复依据的是"日志恰好只有一场
+  斑马战"——用户随后澄清所有类型都隐形。已有 diag-sampling-rules（shared-knowledge）
+  照样再犯一次：**单一样本定案前必须确认样本对全部类型成立**。
+- **公开字段是逃生门**：internal 读不到时，找同机制链上的 public 杠杆——
+  斑马 shine 用 `isShoot`（全游戏仅 UnitZebra 消费）触发其自带回充；
+  僵尸钻地用 vis.visible/invis/levitPoss 强压。先把游戏自身的重置路径找全。
