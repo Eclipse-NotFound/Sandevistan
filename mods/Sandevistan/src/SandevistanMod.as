@@ -195,6 +195,8 @@ package
       private var cfgESGhostLife:int = 12;       // v1.122：敌人残影寿命（显示帧，线性淡出）
       private var cfgESMark:Boolean = true;      // 调试"S"徽标
       private var cfgESPer:int = 50;             // v1.119：每房间装备百分比（50=一半；0=关闭；100=全部）
+      private var cfgESEnabled:Boolean = true;   // v1.131：敌人斯安维斯坦总开关（0=房间不生成）
+      private var cfgESRoomProb:int = 100;       // v1.131：房间出现斯安维斯坦敌人的概率%（100=每个候选房间都有）
       private var esClasses:Array = [];          // 白名单类名（config enemysandy 解析）
       private var esEnemies:Dictionary = new Dictionary(); // 敌人 → {st,left,cd,px,py}
       private var esRoomCnt:Object = {};         // v1.119：roomId → 已装备敌人数（名额=房间候选数×esandyper%）
@@ -204,6 +206,7 @@ package
       private var esCreateDiag:int = 0;          // v1.124：徽标创建诊断计数（按敌人逐个记）
       private var esQuotaDiag:int = 0;           // v1.119：名额诊断计数
       private var esLastLoc:Object = null;       // v1.124：上次房间（loc 变化时清空敌方状态）
+      private var esRoomAllow:Boolean = true;    // v1.131：本房间是否允许生成斯安维斯坦敌人（换房间掷一次）
       private var esOffVisDiag:int = 0;          // v1.128：敌人斯安维斯坦结束后隐身诊断计数
       private var esOrphanDiag:int = 0;          // v1.128：敌人残影 vis 摘挂孤儿诊断计数
       private var esInvDiag:int = 0;             // v1.129：敌人在隐形瞬间的记录计数
@@ -365,8 +368,9 @@ package
          // v1.101：版本标记——日志确认实际加载运行的构建版本与关键开关
          // v1.121：追加 esmark/esper/espd——排查"徽标不可见"类问题的第一手数据
          // v1.127：swaprun/projhits 已迁移 mods/MoreSkills&Weapons（此处不再输出）
-         inst.log("[SandyMod] v1.127 loaded"
-             + " esmark=" + (inst.cfgESMark ? 1 : 0) + " esghost=" + (inst.cfgESGhost ? 1 : 0) + " esper=" + inst.cfgESPer);
+         inst.log("[SandyMod] v1.131 loaded"
+             + " esmark=" + (inst.cfgESMark ? 1 : 0) + " esghost=" + (inst.cfgESGhost ? 1 : 0) + " esper=" + inst.cfgESPer
+             + " esen=" + (inst.cfgESEnabled ? 1 : 0) + " esprob=" + inst.cfgESRoomProb);
          if (main != null && main.stage != null)
          {
             main.stage.addEventListener(Event.ENTER_FRAME, inst.onFrame);
@@ -397,7 +401,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.130 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.131 已加载 (按 \ 触发斯安维斯坦)";
             t.autoSize = "left";   // v1.110：版本号此前显示不全（TextField 默认宽度截断）
             t.x = 10;
             t.y = 10;
@@ -492,6 +496,8 @@ package
                   else if (k == "esandyghostlife") cfgESGhostLife = parseInt(v);
                   else if (k == "esandymark") cfgESMark = v.toLowerCase() == "1" || v.toLowerCase() == "true";
                   else if (k == "esandyper") cfgESPer = parseInt(v);
+                  else if (k == "esandyenabled") cfgESEnabled = v.toLowerCase() == "1" || v.toLowerCase() == "true";
+                  else if (k == "esandyroomprob") cfgESRoomProb = parseInt(v);
                }
             }
          }
@@ -518,6 +524,9 @@ package
          if (isNaN(cfgESPer)) cfgESPer = 50;      // v1.119：每房间装备百分比
          if (cfgESPer < 0) cfgESPer = 0;
          if (cfgESPer > 100) cfgESPer = 100;
+         if (isNaN(cfgESRoomProb)) cfgESRoomProb = 100;   // v1.131：房间出现概率
+         if (cfgESRoomProb < 0) cfgESRoomProb = 0;
+         if (cfgESRoomProb > 100) cfgESRoomProb = 100;
          if (isNaN(cfgESGhostLife)) cfgESGhostLife = 12;   // v1.122：敌人残影寿命
          if (cfgESGhostLife < 1) cfgESGhostLife = 1;
          if (cfgESGhostLife > 120) cfgESGhostLife = 120;
@@ -875,7 +884,21 @@ package
             // 回放残影寿命（显示帧，1-60）
             cfgReplayGhostLife = Math.max(1, Math.min(60, cfgReplayGhostLife + dir));
          }
-         // v1.127：optSel 7/8（投掷物可击落/疾跑切枪）已随迁移移除（→ MSW）
+         else if (optSel == 7)
+         {
+            // v1.131：敌人斯安维斯坦总开关
+            cfgESEnabled = !cfgESEnabled;
+         }
+         else if (optSel == 8)
+         {
+            // v1.131：房间出现斯安维斯坦敌人概率（0-100%，步进 10%）
+            cfgESRoomProb = Math.max(0, Math.min(100, cfgESRoomProb + dir * 10));
+         }
+         else if (optSel == 9)
+         {
+            // v1.131：有斯安维斯坦敌人的房间内装备占比（0-100%，步进 5%）
+            cfgESPer = Math.max(0, Math.min(100, cfgESPer + dir * 5));
+         }
       }
 
       private function renderOptPanel():void
@@ -892,6 +915,9 @@ package
             lines.push((optSel == 4 ? "> " : "  ") + "渐变门槛    " + cfgEdgeThresh);
             lines.push((optSel == 5 ? "> " : "  ") + "回放残影间隔 " + cfgReplayGhost + "帧");
             lines.push((optSel == 6 ? "> " : "  ") + "回放残影寿命 " + cfgReplayGhostLife + "帧");
+            lines.push((optSel == 7 ? "> " : "  ") + "敌人斯安维斯坦 " + (cfgESEnabled ? "开" : "关"));
+            lines.push((optSel == 8 ? "> " : "  ") + "敌人房间概率 " + cfgESRoomProb + "%");
+            lines.push((optSel == 9 ? "> " : "  ") + "房内装备占比 " + cfgESPer + "%");
             lines.push("");
             lines.push("上下选择 左右调值 Enter保存");
             optTf.text = lines.join(String.fromCharCode(10));
@@ -900,7 +926,7 @@ package
             optTf.x = sw - 300;
             optTf.y = 120;
             optTf.width = 260;
-            optTf.height = 290;
+            optTf.height = 330;
             optBg.graphics.clear();
             optBg.graphics.lineStyle(1, 0x00FF99, 0.8);
             optBg.graphics.beginFill(0x002211, 0.75);
@@ -2939,8 +2965,8 @@ package
       private function panelKey(kc:int):void
       {
          if (kc == Keyboard.ESCAPE || kc == cfgPanelKey) { togglePanel(false); return; }
-         if (kc == Keyboard.UP) { panelSel = (panelSel + 7 - 1) % 7; return; }
-         if (kc == Keyboard.DOWN) { panelSel = (panelSel + 1) % 7; return; }
+         if (kc == Keyboard.UP) { panelSel = (panelSel + 10 - 1) % 10; return; }
+         if (kc == Keyboard.DOWN) { panelSel = (panelSel + 1) % 10; return; }
          if (kc == Keyboard.LEFT) { panelAdj(-1); return; }
          if (kc == Keyboard.RIGHT) { panelAdj(1); return; }
          if (kc == Keyboard.ENTER) { togglePanel(false); return; }
@@ -2957,6 +2983,9 @@ package
             case 4: cfgFxRun = !cfgFxRun; break;
             case 5: cfgHotkey = Math.max(1, Math.min(255, cfgHotkey + dir)); break;
             case 6: cfgHud = !cfgHud; break;   // v1.125：顶部状态 UI 开关
+            case 7: cfgESEnabled = !cfgESEnabled; break;                 // v1.131：敌人斯安维斯坦总开关
+            case 8: cfgESRoomProb = Math.max(0, Math.min(100, cfgESRoomProb + dir * 10)); break;  // 房间出现概率
+            case 9: cfgESPer = Math.max(0, Math.min(100, cfgESPer + dir * 5)); break;            // 房内装备占比
          }
       }
 
@@ -2964,7 +2993,7 @@ package
       {
          if (panelTf == null) return;
          var lines:Array = [];
-         lines.push("== SandevistanMod v1.130 参数 ==");
+         lines.push("== SandevistanMod v1.131 参数 ==");
          lines.push((panelSel == 0 ? "> " : "  ") + "生效时长   " + (cfgDuration / 30).toFixed(1) + "s");
          lines.push((panelSel == 1 ? "> " : "  ") + "冷却       " + (cfgCooldown / 30).toFixed(1) + "s");
          lines.push((panelSel == 2 ? "> " : "  ") + "回放速度   x" + cfgReplaySpeed);
@@ -2972,13 +3001,16 @@ package
          lines.push((panelSel == 4 ? "> " : "  ") + "特效继续   " + (cfgFxRun ? "开" : "关"));
          lines.push((panelSel == 5 ? "> " : "  ") + "热键码     " + cfgHotkey);
          lines.push((panelSel == 6 ? "> " : "  ") + "顶部状态UI " + (cfgHud ? "开" : "关"));
+         lines.push((panelSel == 7 ? "> " : "  ") + "敌人斯安维斯坦 " + (cfgESEnabled ? "开" : "关"));
+         lines.push((panelSel == 8 ? "> " : "  ") + "敌人房间概率 " + cfgESRoomProb + "%");
+         lines.push((panelSel == 9 ? "> " : "  ") + "房内装备占比 " + cfgESPer + "%");
          lines.push("");
          lines.push("上下选择 左右调节 Enter保存 Esc关闭");
          panelTf.text = lines.join(String.fromCharCode(10));
          panelTf.x = 30;
          panelTf.y = 30;
-         panelTf.width = 420;
-         panelTf.height = 220;
+         panelTf.width = 440;
+         panelTf.height = 260;
          panelTf.visible = true;
       }
 
@@ -3016,6 +3048,8 @@ package
             sb.push("esandyghostlife=" + cfgESGhostLife);
             sb.push("esandymark=" + (cfgESMark ? 1 : 0));
             sb.push("esandyper=" + cfgESPer);
+            sb.push("esandyenabled=" + (cfgESEnabled ? 1 : 0));
+            sb.push("esandyroomprob=" + cfgESRoomProb);
             sb.push("fxrun=" + (cfgFxRun ? 1 : 0));
             sb.push("showmark=" + (cfgShowMark ? 1 : 0));
             sb.push("showhud=" + (cfgHud ? 1 : 0));
@@ -3940,14 +3974,20 @@ package
             esRoomCnt = {};
             esQuotaDiag = 0;
             esCreateDiag = 0;
+            // v1.131：换房间掷一次"本房间是否出现斯安维斯坦敌人"（概率
+            // esandyroomprob%）——结合总开关 cfgESEnabled；本房间不掷中则
+            // 整个房间跳过生成（esandyenabled=0 时恒不生成）
+            esRoomAllow = cfgESEnabled && (cfgESRoomProb >= 100 || Math.random() * 100 < cfgESRoomProb);
             if (cfgDiagLog && esDiagCnt < 24)
             {
                esDiagCnt++;
                var rIdN:String = "";
                try { if (locE.room != null && locE.room.id != null) { rIdN = String(locE.room.id); } } catch (e:*) { }
-               log("[DIAG] esandy: roomChange id=" + rIdN);
+               log("[DIAG] esandy: roomChange id=" + rIdN + " allow=" + (esRoomAllow ? 1 : 0) + " prob=" + cfgESRoomProb + " en=" + (cfgESEnabled ? 1 : 0));
             }
          }
+         // v1.131：总开关关闭 / 本房间未掷中 → 整个房间不生成斯安维斯坦敌人
+         if (!esRoomAllow) return;
          // ---- 0. v1.119：预扫描本房间候选数 → 名额 = 候选 × esandyper%（每房间一半）----
          var quotaE:int = 0;
          try
@@ -4333,6 +4373,7 @@ package
       // 玩家时停中被整体跳过 → 敌人永远不开启斯安维斯坦（用户实测）。
       private function stepEnemySandyB():void
       {
+         if (!cfgESEnabled || !esRoomAllow) return;   // v1.131：总开关/本房间未掷中则不生成
          try
          {
             for (var kE:Object in esEnemies)
@@ -5952,8 +5993,8 @@ package
          // ===== 选项页模组设置面板（主菜单/游戏内 Options 页）=====
          if (optPanelOn)
          {
-            if (e.keyCode == Keyboard.UP) { optSel = (optSel + 7 - 1) % 7; return; }
-            if (e.keyCode == Keyboard.DOWN) { optSel = (optSel + 1) % 7; return; }
+            if (e.keyCode == Keyboard.UP) { optSel = (optSel + 10 - 1) % 10; return; }
+            if (e.keyCode == Keyboard.DOWN) { optSel = (optSel + 1) % 10; return; }
             if (e.keyCode == Keyboard.LEFT) { optAdj(-1); return; }
             if (e.keyCode == Keyboard.RIGHT) { optAdj(1); return; }
             if (e.keyCode == Keyboard.ENTER) { saveConfigFile(); return; }

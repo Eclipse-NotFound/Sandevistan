@@ -7,7 +7,7 @@
 
 ## 0. 当前状态（2026-08-17）
 
-- **当前版本 v1.130**（git master），已按**镜像部署**运行：仓库 `C:\RemainsMod` 为
+- **当前版本 v1.131**（git master），已按**镜像部署**运行：仓库 `C:\RemainsMod` 为
   唯一事实源；游戏目录是**多 agent 共享工作区**——`mods\Sandevistan` 全镜像
   （同步脚本 `C:\RemainsMod\sync-to-game.bat`，排除 build 与 config.txt），
   `shared-knowledge\`/`game-reference\` 增补式同步，**不删除其他 agent 的文件**。
@@ -92,5 +92,7 @@
    esGhost-orphan 行。
    ⑧**v1.130 回放玩家动画帧级忠实重演**：起始/结束姿势不一致时也应逐帧
    还原（跳/滚/趴/起立中途帧）；旧状态机喂入只为兼容旧录像。
+   ⑨**v1.131 敌人生成三控件**：F9/设置页调 esandyenabled（总开关）/
+   esandyroomprob（房间概率）/esandyper（房内占比）。
 2. 稳定后：更新本文件 + `release/说明.txt`，并删除游戏目录旧
    `SandevistanMod\` 回退副本（保留一轮）。
