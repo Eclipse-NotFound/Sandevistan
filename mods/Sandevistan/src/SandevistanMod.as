@@ -368,7 +368,7 @@ package
          // v1.101：版本标记——日志确认实际加载运行的构建版本与关键开关
          // v1.121：追加 esmark/esper/espd——排查"徽标不可见"类问题的第一手数据
          // v1.127：swaprun/projhits 已迁移 mods/MoreSkills&Weapons（此处不再输出）
-         inst.log("[SandyMod] v1.133 loaded"
+         inst.log("[SandyMod] v1.134 loaded"
              + " esmark=" + (inst.cfgESMark ? 1 : 0) + " esghost=" + (inst.cfgESGhost ? 1 : 0) + " esper=" + inst.cfgESPer
              + " esen=" + (inst.cfgESEnabled ? 1 : 0) + " esprob=" + inst.cfgESRoomProb);
          if (main != null && main.stage != null)
@@ -401,7 +401,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.133 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.134 已加载 (按 \ 触发斯安维斯坦)";
             t.autoSize = "left";   // v1.110：版本号此前显示不全（TextField 默认宽度截断）
             t.x = 10;
             t.y = 10;
@@ -1056,6 +1056,11 @@ package
                      try { if (oR.invis != null) { ivR = Boolean(oR.invis); } } catch (e:*) { }
                      var lvR:Boolean = true;
                      try { if (oR.levitPoss != null) { lvR = Boolean(oR.levitPoss); } } catch (e:*) { }
+                     // v1.134：记录敌人 animState + osn 标签（MC 小马类回放按帧
+                     // 快照；Blit 怪无标签 → "" → 走 dx 喂入）
+                     var anR:String = "";
+                     try { anR = oR.animState != null ? String(oR.animState) : ""; } catch (e:*) { }
+                     var blR:String = osnLabelOf(oR);
                      // 朝向与武器转动（v1.79：回放中 AI 因位置重钉不转向、
                      // 瞄准目标失真——按记录恢复 storona 与武器 rot）
                      var stoR:Number = 1;
@@ -1115,8 +1120,8 @@ package
                               }
                               catch (e:*) { }
                            }
-                           for (var f0:int = 0; f0 < frameN; f0++) { arrR.push({ x: oR.X, y: oR.Y, f: -1, s: "", wx: wxR, wy: wyR, twx: txR, twy: tyR, vv: vvR, sto: stoR, wrot: wrotR, iv: ivR, lv: lvR }); }
-                           arrR.push({ x: oR.X, y: oR.Y, f: animFrameOf(oR), s: sndR, wx: wxR, wy: wyR, twx: txR, twy: tyR, vv: vvR, sto: stoR, wrot: wrotR, iv: ivR, lv: lvR });
+                           for (var f0:int = 0; f0 < frameN; f0++) { arrR.push({ x: oR.X, y: oR.Y, f: -1, s: "", wx: wxR, wy: wyR, twx: txR, twy: tyR, vv: vvR, sto: stoR, wrot: wrotR, iv: ivR, lv: lvR, an: anR, bl: blR }); }
+                           arrR.push({ x: oR.X, y: oR.Y, f: animFrameOf(oR), s: sndR, wx: wxR, wy: wyR, twx: txR, twy: tyR, vv: vvR, sto: stoR, wrot: wrotR, iv: ivR, lv: lvR, an: anR, bl: blR });
                         }
                         else
                         {
@@ -1137,7 +1142,7 @@ package
                      }
                      else
                      {
-                        arrR.push({ x: oR.X, y: oR.Y, f: animFrameOf(oR), s: "", wx: wxR, wy: wyR, twx: txR, twy: tyR, vv: vvR, sto: stoR, wrot: wrotR, vf: vfR2, iv: ivR, lv: lvR });
+                        arrR.push({ x: oR.X, y: oR.Y, f: animFrameOf(oR), s: "", wx: wxR, wy: wyR, twx: txR, twy: tyR, vv: vvR, sto: stoR, wrot: wrotR, vf: vfR2, iv: ivR, lv: lvR, an: anR, bl: blR });
                      }
                   }
                }
@@ -1623,7 +1628,53 @@ package
                                  if (oR.vis != null && stR.vv != null) { try { oR.vis.visible = Boolean(stR.vv); } catch (e:*) { } }
                                  if (stR.iv != null) { try { oR.invis = Boolean(stR.iv); } catch (e:*) { } }
                                  if (stR.lv != null) { try { oR.levitPoss = Boolean(stR.lv); } catch (e:*) { } }
-                                 try { oR.animate(); } catch (e:*) { }
+                                 // v1.134：敌人动画忠实重演走两路——
+                                 // (a) MC 小马类（录到 osn 标签/身体帧）：按帧快照
+                                 //     osn.gotoAndStop(bl)+body.gotoAndStop(bf)——含攻击/
+                                 //     瞄准/翻滚等任意姿态的中间帧，与玩家回放(v1.130)
+                                 //     同款，不受 AI 分歧影响（"僵硬"来源于 dx 喂入
+                                 //     只覆盖移动档、站桩攻击姿态全被压成 stay）。
+                                 // (b) Blit 怪（无 osn.body，f<0）：继续 dx 喂入+
+                                 //     补 animate()，按记录移动档位重现（贴图怪不可
+                                 //     逐帧快照——anims/BlitAnim internal）。
+                                 // (c) 尸体（sost>=3 非 postDie）：不快照不喂入——
+                                 //     保持定格在游戏最后一步留下的死亡姿态（v1.133
+                                 //     起尸体不再 step；若录像死亡帧早于回放死亡，快照
+                                 //     会把尸体打回存活姿态=穿帮）。
+                                 var alvCM:Boolean = true;
+                                 try { alvCM = int(oR.sost) < 3 || Boolean(oR.postDie); } catch (e:*) { }
+                                 if (alvCM)
+                                 {
+                                    var frM:int = -1;
+                                    try { frM = int(stR.f); } catch (e:*) { }
+                                    var blM:String = stR.bl != null ? String(stR.bl) : "";
+                                    if (frM > 0 || blM.length > 0)
+                                    {
+                                       try
+                                       {
+                                          var vgM:* = oR.vis;
+                                          if (vgM != null && vgM["osn"] != null)
+                                          {
+                                             var osnM:* = vgM["osn"];
+                                             if (blM.length > 0 && osnM.currentFrameLabel != blM)
+                                             {
+                                                try { osnM.gotoAndStop(blM); } catch (e:*) { }
+                                             }
+                                             if (osnM["body"] != null && frM > 0)
+                                             {
+                                                try { osnM["body"].gotoAndStop(frM); } catch (e:*) { }
+                                             }
+                                             var anM:String = stR.an != null ? String(stR.an) : "";
+                                             if (anM.length > 0) { try { oR.animState = anM; } catch (e:*) { } }
+                                          }
+                                       }
+                                       catch (e:*) { }
+                                    }
+                                    else
+                                    {
+                                       try { oR.animate(); } catch (e:*) { }
+                                    }
+                                 }
                               }
                               catch (e:*) { }
                               // v1.85：攻击体复现已移除——攻击体由追踪器（seenAtk）
@@ -1801,6 +1852,20 @@ package
          }
          catch (e:*) { }
          return -1;
+      }
+      // v1.134：敌人 osn 当前标签（MC 小马类可录；Blit 怪无 osn.body → "")
+      private function osnLabelOf(o:Object):String
+      {
+         try
+         {
+            if (o.vis != null && o.vis["osn"] != null)
+            {
+               var lbl:String = String(o.vis["osn"].currentFrameLabel);
+               return lbl != null ? lbl : "";
+            }
+         }
+         catch (e:*) { }
+         return "";
       }
 
       // ===== 投掷物可击落（v1.83）：手雷（PhisBullet）/导弹（SmartBullet）/
@@ -3030,7 +3095,7 @@ package
       {
          if (panelTf == null) return;
          var lines:Array = [];
-         lines.push("== SandevistanMod v1.133 参数 ==");
+         lines.push("== SandevistanMod v1.134 参数 ==");
          lines.push((panelSel == 0 ? "> " : "  ") + "生效时长   " + (cfgDuration / 30).toFixed(1) + "s");
          lines.push((panelSel == 1 ? "> " : "  ") + "冷却       " + (cfgCooldown / 30).toFixed(1) + "s");
          lines.push((panelSel == 2 ? "> " : "  ") + "回放速度   x" + cfgReplaySpeed);
