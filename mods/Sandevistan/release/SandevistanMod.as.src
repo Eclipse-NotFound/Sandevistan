@@ -368,7 +368,7 @@ package
          // v1.101：版本标记——日志确认实际加载运行的构建版本与关键开关
          // v1.121：追加 esmark/esper/espd——排查"徽标不可见"类问题的第一手数据
          // v1.127：swaprun/projhits 已迁移 mods/MoreSkills&Weapons（此处不再输出）
-         inst.log("[SandyMod] v1.132 loaded"
+         inst.log("[SandyMod] v1.133 loaded"
              + " esmark=" + (inst.cfgESMark ? 1 : 0) + " esghost=" + (inst.cfgESGhost ? 1 : 0) + " esper=" + inst.cfgESPer
              + " esen=" + (inst.cfgESEnabled ? 1 : 0) + " esprob=" + inst.cfgESRoomProb);
          if (main != null && main.stage != null)
@@ -401,7 +401,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.132 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.133 已加载 (按 \ 触发斯安维斯坦)";
             t.autoSize = "left";   // v1.110：版本号此前显示不全（TextField 默认宽度截断）
             t.x = 10;
             t.y = 10;
@@ -1545,7 +1545,19 @@ package
                                     }
                                  }
                                  catch (e:*) { }
-                                 oR.step();
+                                 // v1.133：回放中已死的敌人（sost>=3，postDie 除外）
+                                 // 不再重跑 AI——step() 对尸体不门控（仅 disabled/
+                                 // trigDis），继续跑 control/actions 会让尸体"开火"
+                                 // （用户实测：回放期间死亡敌人开枪）。postDie 单位
+                                 // 是本体"死后仍行动"设定（如某些不死怪），保留 step。
+                                 var cpdSost:int = -1;
+                                 try { cpdSost = int(oR.sost); } catch (e:*) { }
+                                 var cpdPost:Boolean = false;
+                                 try { cpdPost = Boolean(oR.postDie); } catch (e:*) { }
+                                 if (cpdSost < 0 || cpdSost < 3 || cpdPost)
+                                 {
+                                    oR.step();
+                                 }
                               }
                               catch (e:*) { }
                               world["enemyAct"] = savedEA;
@@ -3018,7 +3030,7 @@ package
       {
          if (panelTf == null) return;
          var lines:Array = [];
-         lines.push("== SandevistanMod v1.132 参数 ==");
+         lines.push("== SandevistanMod v1.133 参数 ==");
          lines.push((panelSel == 0 ? "> " : "  ") + "生效时长   " + (cfgDuration / 30).toFixed(1) + "s");
          lines.push((panelSel == 1 ? "> " : "  ") + "冷却       " + (cfgCooldown / 30).toFixed(1) + "s");
          lines.push((panelSel == 2 ? "> " : "  ") + "回放速度   x" + cfgReplaySpeed);

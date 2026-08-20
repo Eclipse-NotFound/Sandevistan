@@ -7,7 +7,7 @@
 
 ## 0. 当前状态（2026-08-17）
 
-- **当前版本 v1.132**（git master），已按**镜像部署**运行：仓库 `C:\RemainsMod` 为
+- **当前版本 v1.133**（git master），已按**镜像部署**运行：仓库 `C:\RemainsMod` 为
   唯一事实源；游戏目录是**多 agent 共享工作区**——`mods\Sandevistan` 全镜像
   （同步脚本 `C:\RemainsMod\sync-to-game.bat`，排除 build 与 config.txt），
   `shared-knowledge\`/`game-reference\` 增补式同步，**不删除其他 agent 的文件**。
@@ -98,5 +98,8 @@
    僵死（位置重钉→AI 判已达→stay；按记录位移喂 dx/dy+补 animate 修复）；
    隐身/不可抓（回放 AI 误入 burrow aiState=5 → 逐帧按录像强压
    vis.visible/invis/levitPoss，ivR/lvR 入录像）。
+   ⑪**v1.133 回放死亡敌人开火根治**：Unit.step 对尸体不门控，回放重跑 AI
+   让尸体继续开火——sost>=3 且非 postDie 时跳过 step（尸体定格、重钉/
+   可见/可抓照常）。
 2. 稳定后：更新本文件 + `release/说明.txt`，并删除游戏目录旧
    `SandevistanMod\` 回退副本（保留一轮）。
