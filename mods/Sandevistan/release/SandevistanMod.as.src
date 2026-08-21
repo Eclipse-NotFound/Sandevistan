@@ -368,7 +368,7 @@ package
          // v1.101：版本标记——日志确认实际加载运行的构建版本与关键开关
          // v1.121：追加 esmark/esper/espd——排查"徽标不可见"类问题的第一手数据
          // v1.127：swaprun/projhits 已迁移 mods/MoreSkills&Weapons（此处不再输出）
-         inst.log("[SandyMod] v1.134 loaded"
+         inst.log("[SandyMod] v1.135 loaded"
              + " esmark=" + (inst.cfgESMark ? 1 : 0) + " esghost=" + (inst.cfgESGhost ? 1 : 0) + " esper=" + inst.cfgESPer
              + " esen=" + (inst.cfgESEnabled ? 1 : 0) + " esprob=" + inst.cfgESRoomProb);
          if (main != null && main.stage != null)
@@ -401,7 +401,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.134 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.135 已加载 (按 \ 触发斯安维斯坦)";
             t.autoSize = "left";   // v1.110：版本号此前显示不全（TextField 默认宽度截断）
             t.x = 10;
             t.y = 10;
@@ -651,9 +651,12 @@ package
          catch (e:*) { }
          // v1.115：敌人斯安维斯坦（常规游戏分支——场景 A：敌人 N× 补步；
          // 场景 B 的挂钩在 stepSandy 内）
+         // v1.135：加 inGameplay() 门控——本体 pip 打开时 allStat=2 暂停世界，
+         // 但本函数每显示帧照跑（5× 补步+状态机+徽标）→ 激活中的敌人继续
+         // 移动= "打开哔哔小马界面时游戏不能暂停"（用户实测）。
          try
          {
-            if (!sandyActive && !replaying && world != null && world.loc != null)
+            if (!sandyActive && !replaying && inGameplay())
             {
                stepEnemySandy();
             }
@@ -3095,7 +3098,7 @@ package
       {
          if (panelTf == null) return;
          var lines:Array = [];
-         lines.push("== SandevistanMod v1.134 参数 ==");
+         lines.push("== SandevistanMod v1.135 参数 ==");
          lines.push((panelSel == 0 ? "> " : "  ") + "生效时长   " + (cfgDuration / 30).toFixed(1) + "s");
          lines.push((panelSel == 1 ? "> " : "  ") + "冷却       " + (cfgCooldown / 30).toFixed(1) + "s");
          lines.push((panelSel == 2 ? "> " : "  ") + "回放速度   x" + cfgReplaySpeed);

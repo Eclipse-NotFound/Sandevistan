@@ -7,7 +7,7 @@
 
 ## 0. 当前状态（2026-08-17）
 
-- **当前版本 v1.134**（git master），已按**镜像部署**运行：仓库 `C:\RemainsMod` 为
+- **当前版本 v1.135**（git master），已按**镜像部署**运行：仓库 `C:\RemainsMod` 为
   唯一事实源；游戏目录是**多 agent 共享工作区**——`mods\Sandevistan` 全镜像
   （同步脚本 `C:\RemainsMod\sync-to-game.bat`，排除 build 与 config.txt），
   `shared-knowledge\`/`game-reference\` 增补式同步，**不删除其他 agent 的文件**。
@@ -104,5 +104,8 @@
    ⑫**v1.134 回放敌人动画僵硬根治**：v1.132 dx 喂入只覆盖移动档、站桩攻击/
    瞄准姿态被压成 stay=僵硬——MC 小马类改按帧快照（录 an/bl，osn.gotoAndStop
    +body.gotoAndStop(f)，同玩家 v1.130）；Blit 怪保留 dx 喂入；尸体不快照。
+   ⑬**v1.135 pip 暂停修复**：本体 pip→allStat=2 暂停世界，但 stepEnemySandy
+   每帧照跑（激活敌人 5× 补步）="打开哔哔小马不能暂停"——常规分支加
+   inGameplay() 门控（pip/对话/菜单时敌人斯安维斯坦整体冻结）。
 2. 稳定后：更新本文件 + `release/说明.txt`，并删除游戏目录旧
    `SandevistanMod\` 回退副本（保留一轮）。
