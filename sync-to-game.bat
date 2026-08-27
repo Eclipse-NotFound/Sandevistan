@@ -2,7 +2,7 @@
 title RemainsMod - sync Sandevistan to game dir
 echo ============================================================
 echo   Sync repo -^> game dir (this repo's own scope ONLY)
-echo
+echo.
 echo   mods\Sandevistan    full mirror of this mod (never touches
 echo                       other agents' mods under game-dir mods\)
 echo   shared-knowledge    additive sync (never deletes files
@@ -12,7 +12,7 @@ echo                       contributed by other agents)
 echo ============================================================
 setlocal
 set "REPO=%~dp0"
-set "GAME=C:\Program Files (x86)\Steam\steamapps\common\Remains"
+set "GAME=D:\Program Files\Steam\steamapps\common\Remains"
 
 if not exist "%GAME%\Remains.exe" (
     echo [ERROR] Game dir not found: %GAME%
