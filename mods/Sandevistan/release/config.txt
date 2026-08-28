@@ -93,5 +93,6 @@ esandyghostlife=12
 esandymark=1
 esandyper=50
 # v1.131：敌人斯安维斯坦生成控制（也可在 F9 面板 / 游戏设置页调整）
-esandyenabled=1   # 总开关（1=生成 0=不生成）
+esandyenabled=0
+# v1.136：总开关默认 0=不生成斯安维斯坦敌人（用户设置；F9 面板/设置页可开）
 esandyroomprob=100 # 房间出现斯安维斯坦敌人的概率%（100=每个候选房间都有；0=从不）

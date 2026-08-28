@@ -10,6 +10,7 @@
  */
 package
 {
+   import flash.desktop.NativeApplication;
    import flash.display.Bitmap;
    import flash.display.BitmapData;
    import flash.display.IBitmapDrawable;
@@ -28,7 +29,6 @@ package
    import flash.text.TextFormat;
    import flash.ui.Keyboard;
    import flash.utils.getTimer;
-   import flash.utils.describeType;
    import flash.utils.Dictionary;
 
    public class SandevistanMod extends Sprite
@@ -195,7 +195,7 @@ package
       private var cfgESGhostLife:int = 12;       // v1.122：敌人残影寿命（显示帧，线性淡出）
       private var cfgESMark:Boolean = true;      // 调试"S"徽标
       private var cfgESPer:int = 50;             // v1.119：每房间装备百分比（50=一半；0=关闭；100=全部）
-      private var cfgESEnabled:Boolean = true;   // v1.131：敌人斯安维斯坦总开关（0=房间不生成）
+      private var cfgESEnabled:Boolean = false;  // v1.136：默认关（用户要求——不生成斯安维斯坦敌人）；config/F9/设置页可开
       private var cfgESRoomProb:int = 100;       // v1.131：房间出现斯安维斯坦敌人的概率%（100=每个候选房间都有）
       private var esClasses:Array = [];          // 白名单类名（config enemysandy 解析）
       private var esEnemies:Dictionary = new Dictionary(); // 敌人 → {st,left,cd,px,py}
@@ -287,8 +287,29 @@ package
          if (arr == null) { arr = []; enemyAtks[u] = arr; }
          arr.push(ev);
       }
-      private var testStage:int = 0;                     // 0=等待world 1=开始新游戏 2=等待进游戏 3=启动sandy 4=结束sandy
+      private var testStage:int = 0;                     // v1.136 状态机：0=开机 1=进游戏 2=传送 3=到达 4=拉怪 5=热身 6=时停 7=回放 8=pip 9=F9面板 10=总结
       private var testTicks:int = 0;
+      private var testSub:int = 0;                       // v1.136：子步骤（pip/面板细分阶段）
+      private var testPass:int = 0;                      // v1.136：断言通过计数
+      private var testFail:int = 0;                      // v1.136：断言失败计数
+      private var testFailNames:String = "";             // v1.136：失败断言名单（SUMMARY 用）
+      private var testSkipCnt:int = 0;                   // v1.136：SKIP 断言数（不参与 pass/fail）
+      private var testTravelTries:int = 0;               // v1.136：gotoLand 重试计数
+      private var testPreTravelLoc:Object = null;        // v1.136：传送前 loc 引用（到达判定）
+      private var testEnemy:Object = null;               // v1.136：拉怪目标
+      private var testAtkT:int = 0;                      // v1.136：合成攻击脉冲相位
+      private var testAnimSamples:String = "";           // v1.136：回放期玩家动画帧采样
+      private var testDeadAtkSnap:Object = {};           // v1.136：回放开始时死亡敌人攻击体位置快照
+      private var testDeadSnapN:int = 0;                 // v1.136：快照条数（SUMMARY 详情用）
+      private var testDeadAtkNew:int = 0;                // v1.136：回放中新增/位移的死亡敌人攻击体计数
+      private var testReplaySeen:Boolean = false;        // v1.136：本轮回放确实发生过
+      private var testSandySeen:Boolean = false;         // v1.136：时停确实激活过（自然结束≠未启动）
+      private var testGgDowned:Boolean = false;          // v1.136：时停期间玩家曾倒地（sost>=2，动画断言作废）
+      private var testFlagsBase:Dictionary = new Dictionary();  // v1.136：时停瞬间单位可见性/抓取基线（unit → esVisState 串）
+      private var testGgX:Number = 0;                    // v1.136：pip 暂停检测基线
+      private var testGgY:Number = 0;
+      private var testErrDiag:int = 0;                   // v1.136：verror 解冻诊断计数
+      private var testDone:Boolean = false;              // v1.136：SUMMARY 已输出
 
       // 彩虹色调色板（边缘行者风格，高饱和）—— alpha 由 config ghostalpha 控制
       private function palette(idx:int):ColorTransform
@@ -360,6 +381,20 @@ package
          inst = new SandevistanMod();
          inst.log("[SandyMod] init called");
          inst.loadConfig();
+         // v1.136：自动测试双重门控——config debugtest=1 且 app id ≠ "pfe" 才激活。
+         // 用户实例即使 config 残留 debugtest=1 也不会被自动开档驱动；测试实例
+         // （独立 app id）的存档/日志随 app id 天然隔离。
+         try
+         {
+            var aid:String = NativeApplication.nativeApplication.applicationID;
+            inst.log("[SandyMod] app id=" + aid);
+            if (inst.debugTest && aid == "pfe")
+            {
+               inst.debugTest = false;
+               inst.log("[SandyMod] debugtest ignored on user app id (pfe)");
+            }
+         }
+         catch (e0:*) { }
          // v1.110：初始化粒子类引用——recordReplayObjects 的"粒子跳过"分支
          // 依赖它，但此前从未赋值（oR is null 恒 false）→ 时停中粒子被误
          // 录像 → 回放 v1.87 reatt 把已死粒子的 vis 重新挂回显示树、钉在
@@ -368,7 +403,7 @@ package
          // v1.101：版本标记——日志确认实际加载运行的构建版本与关键开关
          // v1.121：追加 esmark/esper/espd——排查"徽标不可见"类问题的第一手数据
          // v1.127：swaprun/projhits 已迁移 mods/MoreSkills&Weapons（此处不再输出）
-         inst.log("[SandyMod] v1.135 loaded"
+         inst.log("[SandyMod] v1.136 loaded"
              + " esmark=" + (inst.cfgESMark ? 1 : 0) + " esghost=" + (inst.cfgESGhost ? 1 : 0) + " esper=" + inst.cfgESPer
              + " esen=" + (inst.cfgESEnabled ? 1 : 0) + " esprob=" + inst.cfgESRoomProb);
          if (main != null && main.stage != null)
@@ -401,7 +436,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.135 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.136 已加载 (按 \ 触发斯安维斯坦)";
             t.autoSize = "left";   // v1.110：版本号此前显示不全（TextField 默认宽度截断）
             t.x = 10;
             t.y = 10;
@@ -705,80 +740,568 @@ package
       }
 
       // ==================== 自动测试 ====================
+      // v1.136 重写：覆盖 MEMORY §4 待验证清单的机器可验证项——
+      //   ① 开新档 → 传送 random_mane → 拉怪（合成 ctr 输入实战）
+      //   ② 玩家斯安维斯坦 + 回放（v1.130 玩家动画帧驱动采样；v1.132-134
+      //      敌人回放：死亡敌人开火体冻结 / 无敌形 / 无念力抓取残留）
+      //   ③ v1.135 哔哔小马（pip）打开时 allStat=2 + inGameplay()=false、
+      //      关闭后恢复（stepEnemySandy 门控的输入侧；敌桑行为面按用户
+      //      要求暂不测——esandy 默认已关）
+      //   ④ v1.131 敌人斯安维斯坦三控件渲染（F9 面板 + 设置页 7→10 项、
+      //      v1.136 默认"关"）
+      //   ⑤ v1.127 迁移回归（projhits/swaprun 本侧停用断言）
+      // 激活条件：config debugtest=1 且 app id ≠ "pfe"（见 init）——用户
+      // 实例即使 config 残留 debugtest=1 也不会被自动驱动。断言逐条输出
+      // [TEST-ASSERT] name=PASS/FAIL，结尾 [TEST] SUMMARY 汇总。
       private function stepDebugTest():void
       {
          try
          {
+            // 错误对话框自愈（仅测试实例）：记录完整内容后模拟关闭，防全局冻结
+            if (world != null && world.verror != null && world.verror.visible && testErrDiag < 6)
+            {
+               testErrDiag++;
+               var et:String = "?";
+               try { et = String(world.verror.txt.text); } catch (e2:*) { }
+               log("[TEST] verror unfreeze #" + testErrDiag + ": " + et);
+               world.verror.visible = false;
+            }
+
             if (testStage == 0)
             {
-               // 等待 World 就绪后开始新游戏
-               if (world != null && world.mm != null && world.mm.loaded)
+               // 等开机完成：菜单就绪且 landData 已建（boot stage-2 没跑完
+               // 就放菜单 → newGame 时 Game 构造器访问 landData #1009）
+               if (world != null && world.mm != null && world.mm.loaded && world.landData != null)
                {
-                  log("[TEST] starting new game");
+                  log("[TEST] boot ready, driver starting");
+                  testAssert("esandy-default-off", cfgESEnabled == false, "cfgESEnabled=" + cfgESEnabled);
+                  testAssert("migrated-keys-off", cfgProjHits == false && cfgSwapRun == false,
+                             "projhits=" + cfgProjHits + " swaprun=" + cfgSwapRun);
                   world.mm.mainMenuOff();
                   world.newGame(-1, "TEST", { "dif": 2, "propusk": true });
                   testStage = 1;
+                  testTicks = 0;
                }
+               else if (++testTicks > 1800) { testAssert("boot-ready", false, "timeout"); testStage = 10; }
             }
             else if (testStage == 1)
             {
-               // 等待进入游戏
-               if (world.allStat >= 1 && world.gg != null && world.loc != null)
+               if (world.allStat >= 1 && world.gg != null && world.loc != null && world.game != null)
                {
-                  log("[TEST] in game, allStat=" + world.allStat);
+                  var land1:String = "";
+                  try { land1 = String(world.game.curLandId); } catch (eL:*) { }
+                  log("[TEST] in game: land=" + land1 + " ggX=" + world.gg.X + " ggY=" + world.gg.Y);
                   testStage = 2;
                   testTicks = 0;
                }
+               else if (++testTicks > 2700) { testAssert("new-game", false, "timeout"); testStage = 10; }
             }
             else if (testStage == 2)
             {
-               // 给游戏一点稳定时间后启动斯安维斯坦
-               testTicks++;
-               if (testTicks > 90)
+               // 传送马哈顿废墟（敌人最丰富）；重入当前土地/加载中旅行会挂死，先防护
+               var clId:String = "";
+               try { clId = String(world.game.curLandId); } catch (e3:*) { }
+               if (clId != "" && clId != "random_mane")
                {
-                  log("[TEST] starting sandevistan");
-                  startSandy();
-                  // 测试环境存在开场对话导致 ggControl=false；强制恢复以模拟正常游玩
-                  try { world.gg.controlOn(); } catch (e:*) { }
+                  log("[TEST] gotoLand random_mane (from " + clId + ")");
+                  testPreTravelLoc = world.loc;
+                  world.game.gotoLand("random_mane");
                   testStage = 3;
                   testTicks = 0;
                }
+               else if (clId == "random_mane") { testStage = 3; testTicks = 0; }
+               else if (++testTicks > 600) { testAssert("travel-start", false, "curLandId=" + clId); testStage = 10; }
             }
             else if (testStage == 3)
             {
-               testTicks++;
-               if (testTicks > 180)  // 6秒后结束
+               // 到达判定：curLandId 变更 + loc 引用已切换 + 90 帧稳定
+               var arrB:Boolean = false;
+               try
                {
-                  log("[TEST] ending sandevistan (was active=" + sandyActive + ")");
-                  endSandy();
+                  arrB = (String(world.game.curLandId) == "random_mane" && world.loc != null
+                          && world.loc != testPreTravelLoc && world.land != null && world.land.act != null);
+               }
+               catch (e4:*) { }
+               if (arrB && ++testTicks > 90)
+               {
+                  log("[TEST] arrived random_mane, scanning enemies");
                   testStage = 4;
                   testTicks = 0;
+               }
+               else if (!arrB && ++testTicks > 1800)
+               {
+                  testTravelTries++;
+                  if (testTravelTries < 3) { log("[TEST] travel retry #" + testTravelTries); testStage = 2; testTicks = 0; }
+                  else { testAssert("travel-done", false, "3 tries timeout"); testStage = 10; }
                }
             }
             else if (testStage == 4)
             {
-               testTicks++;
-               if (testTicks > 300)  // 回放10秒
+               var ens:Array = testScanEnemies();
+               if (ens.length > 0)
                {
-                  // 卡键自愈验证：模拟 UP 丢失残留后伪造按键事件
-                  try
+                  testEnemy = ens[0];
+                  var lst:String = "";
+                  for (var iE:int = 0; iE < ens.length && iE < 5; iE++)
                   {
-                     var c2:Object = world.ctr;
-                     var dt:XML = describeType(c2);
-                     log("[TEST] ctr vars: " + dt.variable.@name.toString().split(",").join(" "));
-                     c2.keyRight = false;
-                     log("[TEST] pre-heal: keyRight=" + c2.keyRight + " keyMap[68]=" + keyMap[68]);
-                     world.swfStage.dispatchEvent(new KeyboardEvent(KeyboardEvent.KEY_DOWN, true, false, 0, 68));
-                     log("[TEST] post-heal: keyRight=" + c2.keyRight);
-                     c2.keyRight = false;
+                     lst += flash.utils.getQualifiedClassName(ens[iE]).replace("fe.unit::", "") + "(hp=" + ens[iE].hp + ") ";
                   }
-                  catch (e:*) { log("[TEST] heal test err: " + e); }
-                  log("[TEST] done. replaying=" + replaying + " ghosts=" + ghosts.length);
+                  log("[TEST] enemies=" + ens.length + ": " + lst);
+                  try { world.gg.setPos(testEnemy.X + 150, testEnemy.Y); } catch (e5:*) { }
+                  log("[TEST] gg moved near enemy, combat warmup");
                   testStage = 5;
+                  testTicks = 0;
+                  testAtkT = 0;
+               }
+               else if (++testTicks > 1200)
+               {
+                  testAssert("enemies-found", false, "no hostiles in 40s");
+                  testStage = 10;
+               }
+            }
+            else if (testStage == 5)
+            {
+               // 战斗热身 90 帧（拉仇恨、产生真实输入流），随后等敌人就位再进时停
+               if (testTicks == 0) { log("[TEST] combat warmup"); }
+               testDriveCombat();
+               testTicks++;
+               if (testTicks >= 90)
+               {
+                  if (testSub == 0)
+                  {
+                     testStopKeys();
+                     // 满血进时停：带伤(sost=2)倒地姿态只有一帧，回放动画断言会失真
+                     try { world.pers.healAll(); } catch (eH:*) { }
+                     try { world.gg.controlOn(); } catch (e6:*) { }   // 开场对话可能 ggControl=false
+                     testSub = 1;
+                  }
+                  // 等敌人回到可交战状态（飞行怪飞远后可能被游戏 disabled 挂起）——
+                  // 最多再等 ~17 秒，有敌人才有基线；等不到就空基线继续（残留断言空转）
+                  var base2:Array = testScanEnemies();
+                  if (base2.length > 0 || testTicks > 600)
+                  {
+                     if (base2.length == 0)
+                     {
+                        log("[TEST] no engaged enemies after wait, proceed (residue asserts will be vacuous)");
+                        testDiagUnits();
+                     }
+                     // 基线：时停瞬间每个敌人的可见性/抓取状态（回放后对比变化）
+                     testFlagsBase = new Dictionary();
+                     var nB:int = 0;
+                     for (var iB:int = 0; iB < base2.length; iB++)
+                     {
+                        testFlagsBase[base2[iB]] = esVisState(base2[iB]);
+                        nB++;
+                     }
+                     // 造击杀机会：把最弱敌人打到 1hp（时停中首杀 → dead-fire 断言有数据）
+                     var weak:Object = null;
+                     for (var iW:int = 0; iW < base2.length; iW++)
+                     {
+                        try
+                        {
+                           if (weak == null || base2[iW].hp < weak.hp) { weak = base2[iW]; }
+                        }
+                        catch (eW:*) { }
+                     }
+                     if (weak != null) { try { weak.damage(weak.hp - 1, 0, null, false); } catch (eD2:*) { } }
+                     var igpB:Boolean = inGameplay();
+                     log("[TEST] startSandy inGameplay=" + igpB + " hp=" + world.gg.hp + " sost=" + world.gg.sost
+                         + " enemies=" + base2.length + " baseFlags=" + nB);
+                     testAssert("inGameplay-before-sandy", igpB, "");
+                     testGgDowned = (world.gg.sost >= 2);
+                     startSandy();
+                     testStage = 6;
+                     testTicks = 0;
+                     testAtkT = 0;
+                     testSandySeen = false;
+                  }
+               }
+            }
+            else if (testStage == 6)
+            {
+               // 时停段：持续合成输入（玩家全速攻击/走位），结束后回放
+               if (testTicks == 1 && !sandyActive)
+               {
+                  // startSandy 首次未生效（门控未过）——重试一次
+                  try { world.gg.controlOn(); startSandy(); } catch (e7:*) { }
+                  log("[TEST] startSandy retry, sandyActive=" + sandyActive);
+               }
+               if (sandyActive)
+               {
+                  testSandySeen = true;
+                  if (world.gg.sost >= 2) { testGgDowned = true; }
+                  testDriveCombat();
+                  if (testTicks % 60 == 30)
+                  {
+                     log("[TEST] sandy t=" + testTicks + " left=" + sandyLeft + " hp=" + world.gg.hp + " sost=" + world.gg.sost);
+                  }
+               }
+               testTicks++;
+               if (testSandySeen && !sandyActive)
+               {
+                  // duration 计满由 stepSandy 自动 endSandy（210 帧 ≈ t=151）——
+                  // 自然结束≠未启动，直接进入回放观察
+                  log("[TEST] sandy ended naturally at t=" + testTicks + ", waiting replay");
+                  testStopKeys();
+                  testStage = 7;
+                  testTicks = 0;
+                  testAnimSamples = "";
+                  testDeadAtkSnap = {};
+                  testDeadSnapN = 0;
+                  testDeadAtkNew = 0;
+                  testReplaySeen = false;
+               }
+               else if (!testSandySeen && testTicks > 90)
+               {
+                  testAssert("sandy-started", false, "never activated");
+                  testStage = 8; testSub = 0; testTicks = 0;
+               }
+               else if (testTicks >= 600)
+               {
+                  // 保险：duration 被调大时强停（正常路径到不了这里）
+                  testStopKeys();
+                  if (sandyActive) { endSandy(); }
+                  log("[TEST] sandy force-ended at t=" + testTicks);
+                  testStage = 7;
+                  testTicks = 0;
+                  testAnimSamples = "";
+                  testDeadAtkSnap = {};
+                  testDeadSnapN = 0;
+                  testDeadAtkNew = 0;
+                  testReplaySeen = false;
+               }
+            }
+            else if (testStage == 7)
+            {
+               // 回放段：首帧快照死亡敌人攻击体位置，逐 5 帧采样玩家动画帧
+               if (replaying)
+               {
+                  if (!testReplaySeen)
+                  {
+                     testReplaySeen = true;
+                     testDeadAtkSample("start");
+                     log("[TEST] replay started, sampling");
+                  }
+                  if (testTicks % 5 == 0 && testTicks > 0)
+                  {
+                     testAnimSamples += animFrameOf(world.gg) + ",";
+                  }
+                  if (testTicks % 60 == 30) { testDeadAtkSample("run"); }
+                  testTicks++;
+                  if (testTicks > 5400)
+                  {
+                     testAssert("replay-finished", false, "timeout 180s");
+                     testFinishReplayChecks();
+                     testStage = 8; testSub = 0; testTicks = 0;
+                  }
+               }
+               else if (!testReplaySeen)
+               {
+                  testTicks++;
+                  if (testTicks > 30)
+                  {
+                     testAssert("replay-started", false, "replaying never observed");
+                     testStage = 8; testSub = 0; testTicks = 0;
+                  }
+               }
+               else
+               {
+                  testFinishReplayChecks();
+                  testStage = 8; testSub = 0; testTicks = 0;
+               }
+            }
+            else if (testStage == 8)
+            {
+               // v1.135：哔哔小马打开 → allStat=2 世界暂停 + inGameplay()=false；
+               // 设置页（page=5）打开时模组设置区渲染（v1.131 三控件、10 项）
+               if (testSub == 0)
+               {
+                  log("[TEST] pip test pre: inGameplay=" + inGameplay() + " allStat=" + world.allStat);
+                  try { world.pip.onoff(0); } catch (e8:*) { log("[TEST] pip open err: " + e8); }
+                  testSub = 1; testTicks = 0;
+               }
+               else if (testSub == 1 && ++testTicks > 45)
+               {
+                  var pA:Boolean = false;
+                  try { pA = world.pip.active; } catch (e9:*) { }
+                  testAssert("pip-open", pA, "");
+                  testAssert("pip-pauses-gameplay", pA && !inGameplay() && world.allStat == 2,
+                             "pip=" + pA + " inGameplay=" + inGameplay() + " allStat=" + world.allStat);
+                  try { world.pip.onoff(5); } catch (e10:*) { log("[TEST] pip opt err: " + e10); }
+                  testSub = 3; testTicks = 0;
+               }
+               else if (testSub == 3 && ++testTicks > 45)
+               {
+                  testAssert("opt-page-detected", optPanelOn, "");
+                  var txt8:String = optTf != null ? optTf.text : "";
+                  // TextField 内部以 \r 存行——归一化后再数行/找子串
+                  var norm8:String = txt8.split(String.fromCharCode(13)).join(String.fromCharCode(10));
+                  var nonEmpty8:int = 0;
+                  for each (var ln8:String in norm8.split(String.fromCharCode(10)))
+                  {
+                     if (ln8.replace(/^\s+|\s+$/g, "") != "") { nonEmpty8++; }
+                  }
+                  // 行构成：标题 + 10 个条目(0-9) + 空行 + 提示 = 非空 12 行
+                  testAssert("opt-page-10-items", nonEmpty8 == 12, "nonEmptyLines=" + nonEmpty8);
+                  testAssert("opt-esandy-default-off", norm8.indexOf("敌人斯安维斯坦 关") >= 0,
+                             "esen=" + cfgESEnabled + " raw=[" + norm8.replace(/\r?\n/g, "|") + "]");
+                  try { world.pip.onoff(-1); } catch (e11:*) { }
+                  testSub = 4; testTicks = 0;
+               }
+               else if (testSub == 4 && ++testTicks > 45)
+               {
+                  var pA2:Boolean = true;
+                  try { pA2 = world.pip.active; } catch (e12:*) { }
+                  testAssert("pip-resume", !pA2 && inGameplay(), "pip=" + pA2 + " inGameplay=" + inGameplay());
+                  testSub = 0;
+                  testStage = 9;
+                  testTicks = 0;
+               }
+            }
+            else if (testStage == 9)
+            {
+               // F9 面板渲染断言（含 v1.136 敌桑默认"关"）
+               if (testSub == 0)
+               {
+                  togglePanel(true);
+                  testSub = 1; testTicks = 0;
+               }
+               else if (testSub == 1 && ++testTicks > 15)
+               {
+                  var ptxt9:String = panelTf != null ? panelTf.text : "";
+                  var pnorm9:String = ptxt9.split(String.fromCharCode(13)).join(String.fromCharCode(10));
+                  testAssert("panel-open", panelOpen && pnorm9.length > 0, "");
+                  testAssert("panel-esandy-default-off", pnorm9.indexOf("敌人斯安维斯坦 关") >= 0,
+                             "esen=" + cfgESEnabled);
+                  togglePanel(false);
+                  testSub = 0;
+                  testStage = 10;
+                  testTicks = 0;
+               }
+            }
+            else if (testStage == 10)
+            {
+               if (!testDone)
+               {
+                  testDone = true;
+                  log("[TEST] SUMMARY pass=" + testPass + " fail=" + testFail + " skip=" + testSkipCnt
+                      + (testFail > 0 ? " failed=[" + testFailNames + "]" : ""));
+                  log("[TEST] done");
                }
             }
          }
          catch (e:*) { log("[TEST] error: " + e); }
+      }
+
+      // v1.136：断言记录——每条一行 [TEST-ASSERT]，SUMMARY 汇总
+      private function testAssert(name:String, cond:Boolean, detail:String):void
+      {
+         if (cond) { testPass++; }
+         else
+         {
+            testFail++;
+            testFailNames = testFailNames + (testFail > 1 ? ";" : "") + name;
+         }
+         log("[TEST-ASSERT] " + name + "=" + (cond ? "PASS" : "FAIL") + (detail != "" ? " (" + detail + ")" : ""));
+      }
+
+      // v1.136：扫描当前房间敌对单位（fraction∈[1,99]、sost<3、未禁用、非触发器）
+      private function testScanEnemies():Array
+      {
+         var out:Array = [];
+         try
+         {
+            var us:* = world.loc.units;
+            for each (var u:Object in us)
+            {
+               try
+               {
+                  if (u == null || u.disabled) continue;
+                  var fr:Number = Number(u.fraction);
+                  if (!(fr >= 1 && fr <= 99)) continue;
+                  if (u.sost >= 3) continue;
+                  var qn:String = flash.utils.getQualifiedClassName(u);
+                  if (qn.indexOf("UnitTrigger") >= 0) continue;
+                  out.push(u);
+               }
+               catch (eS:*) { }
+            }
+         }
+         catch (eO:*) { }
+         return out;
+      }
+
+      // v1.136：合成战斗输入（攻击脉冲 + 走位）——直接写 ctr 键位字段
+      private function testDriveCombat():void
+      {
+         try
+         {
+            var c:Object = world.ctr;
+            var ph:int = testAtkT % 40;
+            c.keyAttack = (ph < 12);
+            var mv:Boolean = ((testAtkT % 160) < 80);
+            c.keyRight = (mv && ph < 30);
+            c.keyLeft = (!mv && ph < 30);
+            c.keyBeUp = (ph >= 12 && ph < 24);
+            testAtkT++;
+         }
+         catch (e:*) { }
+      }
+
+      // v1.136：松开全部合成键位
+      private function testStopKeys():void
+      {
+         try
+         {
+            var c:Object = world.ctr;
+            c.keyAttack = false;
+            c.keyRight = false;
+            c.keyLeft = false;
+            c.keyBeUp = false;
+            c.keySit = false;
+            c.keyJump = false;
+         }
+         catch (e:*) { }
+      }
+
+      // v1.136：死亡敌人(sost>=3)攻击体采样——start 建位置快照，run 比对。
+      // v1.133 修复口径：死亡敌人的开火体在回放中必须冻结（无新增/位移）
+      private function testDeadAtkSample(phase:String):void
+      {
+         try
+         {
+            if (world.loc == null) return;
+            var o:Object = world.loc.firstObj;
+            var g:int = 0;
+            while (o != null)
+            {
+               try
+               {
+                  var qn:String = flash.utils.getQualifiedClassName(o);
+                  if (qn.indexOf("fe.weapon::") == 0 && o["owner"] != null && o["owner"] != world.gg && o["owner"].sost >= 3)
+                  {
+                     var key:String = qn + "@" + o.X + "@" + o.Y;
+                     if (phase == "start")
+                     {
+                        if (testDeadAtkSnap[key] == null) { testDeadAtkSnap[key] = 1; testDeadSnapN++; }
+                     }
+                     else if (testDeadAtkSnap[key] == null)
+                     {
+                        testDeadAtkNew++;
+                        if (testDeadAtkNew <= 3) { log("[TEST] dead-owner atk new/moved: " + qn + " X=" + o.X + " Y=" + o.Y); }
+                     }
+                  }
+               }
+               catch (eD:*) { }
+               o = o.nobj;
+               if (++g > 20000) break;
+            }
+         }
+         catch (eA:*) { }
+      }
+
+      // v1.136：回放结束断言组（动画帧驱动 / 死亡敌人开火体冻结 / 隐形与抓取残留）
+      private function testFinishReplayChecks():void
+      {
+         // ① v1.130：玩家动画帧采样——站立玩家回放中 osn.body.currentFrame 应有多个值；
+         //    倒地玩家本就只有一帧姿态（静态是正确表现）→ SKIP
+         if (testGgDowned)
+         {
+            testSkipCnt++;
+            log("[TEST-ASSERT] replay-player-anim-driven=SKIP (player downed during sandy; static downed pose is correct)");
+         }
+         else
+         {
+            var distinct:Array = [];
+            var sa:Array = testAnimSamples.split(",");
+            for each (var sf:String in sa)
+            {
+               if (sf != "" && distinct.indexOf(sf) < 0) { distinct.push(sf); }
+            }
+            testAssert("replay-player-anim-driven", distinct.length >= 2, "frames=[" + testAnimSamples + "]");
+         }
+         // ② v1.133：死亡敌人攻击体在回放中冻结（无新增/位移）
+         testAssert("dead-enemy-atk-frozen", testDeadAtkNew == 0,
+                    "new/moved=" + testDeadAtkNew + " snapSize=" + testDeadSnapN);
+         // ③ v1.132：无隐身/抓取残留——对比时停瞬间基线，只对活单位的状态"变化"报警。
+         //    invis/levitPoss 有合法状态相（钻地=inv1+lev0；部分怪自带隐身相），绝对值
+         //    断言必误报；残留的用户可见症状 = 活单位渲染消失 / 念力抓取能力丢失
+         var resInv:int = 0;
+         var resLev:int = 0;
+         var det:String = "";
+         var aliveN:int = 0;
+         var deadN:int = 0;
+         try
+         {
+            for each (var u2:Object in world.loc.units)
+            {
+               try
+               {
+                  var qn2:String = flash.utils.getQualifiedClassName(u2);
+                  if (qn2.indexOf("fe.unit::") != 0 || qn2.indexOf("UnitTrigger") >= 0) continue;
+                  var baseS:String = testFlagsBase[u2];
+                  if (baseS == null) continue;               // 无基线（新生成单位）不判
+                  if (u2.sost >= 3) { deadN++; continue; }   // 死亡引起的状态变化合法
+                  aliveN++;
+                  var nowS:String = esVisState(u2);
+                  var bInv:Boolean = testFlagOf(baseS, "inv=");
+                  var nInv:Boolean = testFlagOf(nowS, "inv=");
+                  var bLev:Boolean = testFlagOf(baseS, "lev=");
+                  var nLev:Boolean = testFlagOf(nowS, "lev=");
+                  var bVis:Boolean = testFlagOf(baseS, "vis=");
+                  var nVis:Boolean = testFlagOf(nowS, "vis=");
+                  if ((nInv && !bInv) || (bVis && !nVis))
+                  {
+                     resInv++;
+                     det += qn2.replace("fe.unit::", "") + "(inv " + (bInv ? 1 : 0) + "->" + (nInv ? 1 : 0)
+                          + " vis " + (bVis ? 1 : 0) + "->" + (nVis ? 1 : 0) + ") ";
+                  }
+                  if (bLev && !nLev)
+                  {
+                     resLev++;
+                     det += qn2.replace("fe.unit::", "") + "(lev 1->0) ";
+                  }
+               }
+               catch (eI:*) { }
+            }
+         }
+         catch (eO:*) { }
+         testAssert("no-invisibility-residue", resInv == 0, "alive=" + aliveN + " dead=" + deadN + " " + det);
+         testAssert("no-telegrab-residue", resLev == 0, "alive=" + aliveN + " dead=" + deadN + " " + det);
+         log("[TEST] replay checks done: animSamples=" + testAnimSamples);
+      }
+
+      // v1.136：从 esVisState 输出串中取 "key=" 后的 0/1 值
+      private function testFlagOf(s:String, key:String):Boolean
+      {
+         var i:int = s.indexOf(key);
+         if (i < 0) return false;
+         var c:String = s.charAt(i + key.length);
+         return c == "1" || c == "t";
+      }
+
+      // v1.136：诊断输出当前 loc 全部单位的状态（敌人等不到位时定性用）
+      private function testDiagUnits():void
+      {
+         try
+         {
+            var n:int = 0;
+            for each (var u:Object in world.loc.units)
+            {
+               try
+               {
+                  if (u == null) continue;
+                  var qn:String = flash.utils.getQualifiedClassName(u);
+                  if (qn.indexOf("fe.unit::") != 0 || qn.indexOf("UnitTrigger") >= 0) continue;
+                  log("[TEST] unit diag: " + qn.replace("fe.unit::", "")
+                      + " sost=" + u.sost + " dis=" + (u.disabled ? 1 : 0)
+                      + " fr=" + u.fraction + " hp=" + u.hp + " X=" + u.X + " Y=" + u.Y);
+                  if (++n >= 8) break;
+               }
+               catch (eU:*) { }
+            }
+         }
+         catch (eO:*) { }
       }
 
       // ==================== 选项页模组设置 ====================
@@ -3098,7 +3621,7 @@ package
       {
          if (panelTf == null) return;
          var lines:Array = [];
-         lines.push("== SandevistanMod v1.135 参数 ==");
+         lines.push("== SandevistanMod v1.136 参数 ==");
          lines.push((panelSel == 0 ? "> " : "  ") + "生效时长   " + (cfgDuration / 30).toFixed(1) + "s");
          lines.push((panelSel == 1 ? "> " : "  ") + "冷却       " + (cfgCooldown / 30).toFixed(1) + "s");
          lines.push((panelSel == 2 ? "> " : "  ") + "回放速度   x" + cfgReplaySpeed);

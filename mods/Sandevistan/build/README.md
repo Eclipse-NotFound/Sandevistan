@@ -25,11 +25,16 @@ build/
 ## 1. 编译模组 SWF
 
 ```
-cd C:\RemainsMod\mods\Sandevistan
-AIR_HOME="C:\RemainsMod\mods\Sandevistan\build\tools\flexsdk" \
-  cmd //c "build\tools\flexsdk\bin\amxmlc.bat -default-size 1280 800 \
-  -output build\out\SandevistanMod.swf src\SandevistanMod.as"
+cd D:\RemainsMod\mods\Sandevistan
+cmd //c "build\build.bat"        # 产物 build\out\SandevistanMod.swf
 ```
+
+- 2026-08-28 实测：flexsdk 自带 air-config.xml 的 `{airHome}` 令牌因 SDK 目录迁移
+  失效，直接调 amxmlc 报"无法打开 {airHome}/frameworks/libs/air"。现走
+  `build\build.bat` + `build\sandy-config.xml`（显式写 playerglobal/airglobal
+  绝对路径，同 TDFC 的 tdfc-config.xml 范本）；Java 用 Adobe Animate 2024 自带
+  JRE（`D:\Program Files\Adobe Animate 2024\jre`，本机无独立 JDK）。
+- 产物拷贝 `build\out\SandevistanMod.swf` → `release\` 后跑 `sync-to-game.bat`。
 
 - 需要：flexsdk（Apache Flex 4.16.1，清华镜像）+ airsdk（Harman 51.3.3.2，需会话流程
   下载）叠加合并。两者被 gitignore，需重新下载（本地已有可跳过）：

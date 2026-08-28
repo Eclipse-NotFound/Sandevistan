@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<flex-config xmlns="http://www.adobe.com/2006/flex-config">
+  <!-- Sandevistan 编译配置：显式指向本地 playerglobal 与 airglobal。
+       本机工具链位置（2026-08-27 探测，同 TDFC）：完整 Flex/AIR SDK 在
+       D:\RemainsMod\mods\Sandevistan\build\tools\（flexsdk + airsdk + ffdec），
+       mxmlc 需 Java：用 Adobe Animate 2024 自带 JRE（D:\Program Files\Adobe Animate 2024\jre）。
+       flexsdk 自带 air-config.xml 的 {airHome} 令牌因 SDK 目录迁移失效，
+       故用本配置整体替换（同 tdfc-config.xml 范本）。详见 build.bat -->
+  <target-player>14.0</target-player>
+
+  <default-size>
+    <width>1280</width>
+    <height>800</height>
+  </default-size>
+
+  <compiler>
+    <external-library-path>
+      <path-element>D:/RemainsMod/mods/Sandevistan/build/tools/airsdk/frameworks/libs/player/14.0/playerglobal.swc</path-element>
+      <path-element>D:/RemainsMod/mods/Sandevistan/build/tools/airsdk/frameworks/libs/air/airglobal.swc</path-element>
+    </external-library-path>
+
+    <library-path>
+      <path-element>D:/RemainsMod/mods/Sandevistan/build/tools/airsdk/frameworks/libs/player/14.0/playerglobal.swc</path-element>
+      <path-element>D:/RemainsMod/mods/Sandevistan/build/tools/airsdk/frameworks/libs/air/airglobal.swc</path-element>
+    </library-path>
+
+    <source-path>
+      <path-element>D:/RemainsMod/mods/Sandevistan/src</path-element>
+    </source-path>
+  </compiler>
+</flex-config>

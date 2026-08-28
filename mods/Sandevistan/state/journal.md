@@ -3,6 +3,13 @@
 > 协议见 GOVERNANCE.md §8：只追加不改写，**新条目插在最上面**。
 > 逐版本历史在 decisions/changelog.md（112+ 条，新行插前）；本日志记会话级脉络。
 
+## 2026-08-28 v1.136 敌桑默认关 + 内置自动测试打通 §4 验证
+
+- 做了什么：应用户要求 `esandyenabled` 默认 1→0（暂不测敌桑表现）；`stepDebugTest` 重写为全流程自动验证驱动（app id 双门控，`[TEST-ASSERT]` 断言体系 + SUMMARY 汇总）；搭测试实例（app id `pfe-sandy-test`）跑 5 轮真机迭代；编译落地 build/build.bat + sandy-config.xml；§4 清单机器可验证项全部有结论（详见 MEMORY §4）。
+- 关键决定/发现：①**F9/设置页保存功能在 AIR 下必失败**——saveConfigFile 写只读的 applicationDirectory 必抛 SecurityError: fileWriteResource，togglePanel(false) 每次关面板都触发（既有潜伏 bug，待修）；②TextField.text 内部行分隔符是  不是 
+（UI 文本断言前要归一化）；③invis/levitPoss 有钻地（inv1+lev0）等合法状态相，残留断言必须用时停瞬间基线对照而非绝对值；④random_mane 飞行怪（天角兽）飞远后会被游戏 disabled——拉怪后要等它回到可交战状态再进时停；⑤flexsdk air-config.xml 的 {airHome} 令牌因 SDK 迁移失效，须自建 config 写绝对 swc 路径（同 TDFC）。
+- 遗留/下一步：用户手测动画观感（机器验不了"好不好看"）；敌桑行为面待开 esandy 后实测；F9 保存持久化修复；删旧回退副本（仍待）。
+
 ## 2026-08-27 治理整合 + 外置记忆迁移
 
 - 回灌游戏目录侧 08-26 更新的 current-status 与交接文档（防止同步覆盖丢失）；修复 sync-to-game.bat（D 盘路径 + CRLF，实测通过）；AGENT_SCOPE 精简为薄壳（规则入 GOVERNANCE.md）。
