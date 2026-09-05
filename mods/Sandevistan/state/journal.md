@@ -3,6 +3,12 @@
 > 协议见 GOVERNANCE.md §8：只追加不改写，**新条目插在最上面**。
 > 逐版本历史在 decisions/changelog.md（112+ 条，新行插前）；本日志记会话级脉络。
 
+## 2026-09-05 v1.138 设置中枢接入打通（父域对象会合点）
+
+- 做了什么：按 MSW 侧 7d9a6ef 的方案切换注册通道——载体 MSWModAPICarrier（挂 main 下，modAPI=hub）优先，getDefinition 降备用；补端到端断言（宿主登记簿 getPages() 反查 sandevistan 页 13 项）；真机 round 11：tries=1 命中，SUMMARY pass=18 fail=0 skip=0。
+- 关键决定/发现：①对象引用跨域可用（受限的只是类定义）——会合点方案成立；②跨模组自动测试互相干扰的完整教训链：MSWAutoTest 自激活开档+开 pip → 需要 pip 守卫+恢复期治疗+清场序列（testPipGuard 模式，其他模组写自动测试可复用）；③MSW 的 sol 诊断 flush 时机滞后，跨模组注册验证以宿主登记簿活体反查为准。
+- 遗留/下一步：用户实机看双页签效果；二期聚合页由 MSW 侧推进（滚动/choice/action 控件）。
+
 ## 2026-09-05 v1.137 F9 持久化修复 + MSW 设置中枢接入（被跨域墙阻断，待宿主侧）
 
 - 做了什么：应用户要求接入 MSW 新做的哔哔小马"模组"设置聚合页——按其契约实现 hubBuildItems（13 项 get/set 回调，范围照抄 F9/设置页口径）+ 常驻注册重试；顺手根治"F9 调参重启即丢"（saveConfigFile 双写应用存储兜底 + loadConfig 覆盖层）；自动测试 10 轮迭代（pip 守卫、恢复期治疗、预压血造击杀窗口），最终 SUMMARY pass=16 fail=0 skip=1。

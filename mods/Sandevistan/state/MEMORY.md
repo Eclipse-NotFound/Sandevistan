@@ -15,9 +15,10 @@
 
 ## 3. 当前状态
 
-- **v1.137**（git master，镜像部署运行中）：本仓库（`D:\RemainsMod`）为唯一事实源，游戏目录 `mods\Sandevistan\` 由 `sync-to-game.bat` 全镜像（排除 build\ 与 release\config.txt——后者由游戏内 F9 面板直写）。
+- **v1.138**（git master，镜像部署运行中）：本仓库（`D:\RemainsMod`）为唯一事实源，游戏目录 `mods\Sandevistan\` 由 `sync-to-game.bat` 全镜像（排除 build\ 与 release\config.txt——后者由游戏内 F9 面板直写）。
 - v1.136：**敌人斯安维斯坦默认关**（`esandyenabled` 默认 0）；`stepDebugTest` 全流程自动验证驱动（app id 双门控）。
-- v1.137：**F9 调参持久化修复**（应用存储兜底层，写读双通）；MSW 设置中枢接入实现就绪（注册重试常驻，当前被跨域拓扑阻断，见 §4.6）。
+- v1.137：**F9 调参持久化修复**（应用存储兜底层，写读双通）。
+- v1.138：**MSW 设置中枢接入打通**（父域对象会合点 MSWModAPICarrier，tries=1 即命中；宿主登记簿反查 13 项 PASS）——哔哔小马"模组"页现含"斯安维斯坦"页签（需 MSW v1.3.1+ 在装）。
 - 游戏通过补丁从 `<游戏目录>\mods\Sandevistan\release\SandevistanMod.swf` 加载；补丁 SWF 的安装/还原 = 游戏目录 `mods\Sandevistan\release\安装.bat / 卸载.bat`；Steam 校验还原 DLC 后重跑安装.bat。
 
 ## 4. 正在进行与卡点（2026-09-05 自动验证轮后状态）
@@ -29,7 +30,7 @@
 3. ✅ v1.135 哔哔小马暂停——门控输入侧 PASS×多轮（pip 开→allStat=2+inGameplay()=false→关恢复）；**敌桑行为面**待开 esandy 后实测；
 4. ✅ v1.131 三控件——F9 面板+设置页 10 项渲染断言 PASS（原文比对）；v1.136 默认"关"四处 PASS；
 5. ✅ v1.127 迁移回归——projhits/swaprun 停用断言 PASS；回放全周期无错误；
-6. ⏸ **MSW 设置中枢注册（v1.137）**：我方实现+测试就绪，注册被 loader 子域拓扑阻断（各模组独立子域，跨模组类名查找必然 #1065）——**转告 MSW 开发者**：其契约（getDefinitionByName 跨模组）在现有 loader 下不可用，需共享域机制或父域中转对象；我方重试常驻，宿主修复后 10 帧内自动接上。实证见 shared-knowledge `mod-loader-cross-domain-anomaly.md`（2026-09-05 增补）。
+6. ✅ **MSW 设置中枢注册（v1.138 打通）**：经 MSW 侧父域对象会合点 `MSWModAPICarrier`（挂 main 下，modAPI=hub）注册，tries=1 命中；端到端断言从宿主登记簿 getPages() 反查到 sandevistan 页（13 项）。跨模组域拓扑教训（跨模组类名查找不可用/父域对象可用）见 shared-knowledge `mod-loader-cross-domain-anomaly.md`。
 
 **跨模组问题（已定位未越权修复）**：全敌人满装甲条 = RealisticVision 的 hideEnemies 强制 `hpbar.visible=true`——应转告 RV 开发者。
 
@@ -42,9 +43,9 @@
 
 ## 6. 下一步
 
-1. 用户手测：回放动画观感（帧级还原、残影）、TAB 暂停体验、F9 调参重启保持（v1.137 修复验证）；
-2. 想测敌人斯安维斯坦时：F9 或 config 开 `esandyenabled=1` 后实测 §4.3 行为面；
-3. **催办 MSW 侧**：跨模组注册的域可达性（§4.6），修好后 Sandevistan 页自动出现在"模组"页；
+1. 用户实机看：哔哔小马"模组"页双/三页签效果（MSW + 斯安维斯坦）；
+2. 手测：回放动画观感（帧级还原、残影）、TAB 暂停体验、F9/模组页调参重启保持（v1.137 持久化）；
+3. 想测敌人斯安维斯坦时：模组页/F9/config 开 `esandyenabled=1` 后实测 §4.3 行为面；
 4. 稳定后：删除游戏目录旧 SandevistanMod\ 回退副本、按需重打包 `dist\SandevistanMod_v<版本>.zip`。
 
 ## 7. 深入了解

@@ -313,6 +313,7 @@ package
       private var testDone:Boolean = false;              // v1.136：SUMMARY 已输出
       // ===== v1.137：MSW 设置中枢（哔哔小马"模组"页）注册 =====
       private var hubRegistered:Boolean = false;         // 已注册成功（幂等，不再重试）
+      private var hubViaCarrier:Boolean = false;         // v1.138：经 MSWModAPICarrier 会合点注册
       private var hubRegTries:int = 0;                   // 注册重试帧计数（≤300，契约见 MSW design/mod-settings-hub.md §3.3）
 
       // 彩虹色调色板（边缘行者风格，高饱和）—— alpha 由 config ghostalpha 控制
@@ -407,7 +408,7 @@ package
          // v1.101：版本标记——日志确认实际加载运行的构建版本与关键开关
          // v1.121：追加 esmark/esper/espd——排查"徽标不可见"类问题的第一手数据
          // v1.127：swaprun/projhits 已迁移 mods/MoreSkills&Weapons（此处不再输出）
-         inst.log("[SandyMod] v1.137 loaded"
+         inst.log("[SandyMod] v1.138 loaded"
              + " esmark=" + (inst.cfgESMark ? 1 : 0) + " esghost=" + (inst.cfgESGhost ? 1 : 0) + " esper=" + inst.cfgESPer
              + " esen=" + (inst.cfgESEnabled ? 1 : 0) + " esprob=" + inst.cfgESRoomProb);
          if (main != null && main.stage != null)
@@ -440,7 +441,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.137 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.138 已加载 (按 \ 触发斯安维斯坦)";
             t.autoSize = "left";   // v1.110：版本号此前显示不全（TextField 默认宽度截断）
             t.x = 10;
             t.y = 10;
@@ -1226,7 +1227,23 @@ package
                   if (hubRegistered)
                   {
                      testPass++;
-                     log("[TEST-ASSERT] hub-registered=PASS (tries=" + hubRegTries + ")");
+                     log("[TEST-ASSERT] hub-registered=PASS (via=" + (hubViaCarrier ? "carrier" : "getDefinition")
+                         + " tries=" + hubRegTries + ")");
+                     // 端到端：从宿主登记簿反查本页（13 项）——证明宿主真正收到了
+                     try
+                     {
+                        var cP:* = world.main.getChildByName("MSWModAPICarrier");
+                        var pages:Array = cP["modAPI"]["getPages"]();
+                        var foundI:int = -1;
+                        for (var ip:int = 0; ip < pages.length; ip++)
+                        {
+                           if (pages[ip]["modId"] == "sandevistan") { foundI = ip; }
+                        }
+                        testAssert("hub-page-listed", foundI >= 0 && pages[foundI]["items"].length == 13,
+                                   "pages=" + pages.length + " foundIdx=" + foundI
+                                   + (foundI >= 0 ? " items=" + pages[foundI]["items"].length : ""));
+                     }
+                     catch (eG:*) { testAssert("hub-page-listed", false, String(eG)); }
                   }
                   else
                   {
@@ -3788,7 +3805,7 @@ package
       {
          if (panelTf == null) return;
          var lines:Array = [];
-         lines.push("== SandevistanMod v1.137 参数 ==");
+         lines.push("== SandevistanMod v1.138 参数 ==");
          lines.push((panelSel == 0 ? "> " : "  ") + "生效时长   " + (cfgDuration / 30).toFixed(1) + "s");
          lines.push((panelSel == 1 ? "> " : "  ") + "冷却       " + (cfgCooldown / 30).toFixed(1) + "s");
          lines.push((panelSel == 2 ? "> " : "  ") + "回放速度   x" + cfgReplaySpeed);
@@ -3882,6 +3899,25 @@ package
       // 宿主统一调 onPageClose 供 flush。加载链 Sandy 在 MSW 之前 → 每帧重试。
       private function stepHubRegister():void
       {
+         // 通道 ①（v1.138，MSW 7d9a6ef 落地的父域对象会合点）：对象引用
+         // 跨域可用（受限的只是类定义），MSW 把 hub 挂在 main 下名为
+         // MSWModAPICarrier 的动态 MovieClip 上——按名取载体、取 modAPI 直调
+         try
+         {
+            var c:* = world.main != null ? world.main.getChildByName("MSWModAPICarrier") : null;
+            if (c != null && c["modAPI"] != null && c["modAPI"]["registerPage"] != null)
+            {
+               c["modAPI"]["registerPage"]("sandevistan", "斯安维斯坦",
+                                           hubBuildItems(), hubOnPageClose,
+                                           "时停/回放与残影特效");
+               hubRegistered = true;
+               hubViaCarrier = true;
+               log("[SandyMod] settings hub registered via MSWModAPICarrier (tries=" + hubRegTries + ")");
+               return;
+            }
+         }
+         catch (e1:*) { }
+         // 通道 ②（备用保留）：若将来 loader 把模组合并进游戏域，类名查找直接可用
          try
          {
             var hc:Class = ApplicationDomain.currentDomain.getDefinition("MoreSkillsWeaponsMod") as Class;
@@ -3893,7 +3929,7 @@ package
                if (ok)
                {
                   hubRegistered = true;
-                  log("[SandyMod] settings hub registered (tries=" + hubRegTries + ")");
+                  log("[SandyMod] settings hub registered via getDefinition (tries=" + hubRegTries + ")");
                }
             }
          }
