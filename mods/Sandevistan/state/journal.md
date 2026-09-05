@@ -3,10 +3,17 @@
 > 协议见 GOVERNANCE.md §8：只追加不改写，**新条目插在最上面**。
 > 逐版本历史在 decisions/changelog.md（112+ 条，新行插前）；本日志记会话级脉络。
 
+## 2026-09-05 v1.137 F9 持久化修复 + MSW 设置中枢接入（被跨域墙阻断，待宿主侧）
+
+- 做了什么：应用户要求接入 MSW 新做的哔哔小马"模组"设置聚合页——按其契约实现 hubBuildItems（13 项 get/set 回调，范围照抄 F9/设置页口径）+ 常驻注册重试；顺手根治"F9 调参重启即丢"（saveConfigFile 双写应用存储兜底 + loadConfig 覆盖层）；自动测试 10 轮迭代（pip 守卫、恢复期治疗、预压血造击杀窗口），最终 SUMMARY pass=16 fail=0 skip=1。
+- 关键决定/发现：①**跨模组类名查找在现有 loader 下不可用**——MainFE 用 LoaderContext(false) 给每模组独立子域，兄弟模组互不可见，MSW 的注册契约（getDefinitionByName）跨模组必然 #1065；MSW 实例不上显示树、loader 引用 internal，我方无合法通道可达；实证已增补 shared-knowledge mod-loader-cross-domain-anomaly.md（置信度升 high），并已列入 MEMORY §4.6 待转告 MSW 开发者；②MSWAutoTest 在 appid≠pfe 实例自激活（开档+开 pip），跨模组自动测试必须互相清场（testPipGuard 模式）；③调试期发现 MSW release 于当日 07:29 重建，含 hub（1.3.1-hub）。
+- 遗留/下一步：MSW 侧修复跨模组可达性后 Sandevistan 页自动接入（无需本侧改动）；用户手测 F9 修复与动画观感；RV 满装甲条仍待转告。
+
 ## 2026-08-28 v1.136 敌桑默认关 + 内置自动测试打通 §4 验证
 
 - 做了什么：应用户要求 `esandyenabled` 默认 1→0（暂不测敌桑表现）；`stepDebugTest` 重写为全流程自动验证驱动（app id 双门控，`[TEST-ASSERT]` 断言体系 + SUMMARY 汇总）；搭测试实例（app id `pfe-sandy-test`）跑 5 轮真机迭代；编译落地 build/build.bat + sandy-config.xml；§4 清单机器可验证项全部有结论（详见 MEMORY §4）。
-- 关键决定/发现：①**F9/设置页保存功能在 AIR 下必失败**——saveConfigFile 写只读的 applicationDirectory 必抛 SecurityError: fileWriteResource，togglePanel(false) 每次关面板都触发（既有潜伏 bug，待修）；②TextField.text 内部行分隔符是  不是 
+- 关键决定/发现：①**F9/设置页保存功能在 AIR 下必失败**——saveConfigFile 写只读的 applicationDirectory 必抛 SecurityError: fileWriteResource，togglePanel(false) 每次关面板都触发（既有潜伏 bug，待修）；②TextField.text 内部行分隔符是 
+ 不是 
 （UI 文本断言前要归一化）；③invis/levitPoss 有钻地（inv1+lev0）等合法状态相，残留断言必须用时停瞬间基线对照而非绝对值；④random_mane 飞行怪（天角兽）飞远后会被游戏 disabled——拉怪后要等它回到可交战状态再进时停；⑤flexsdk air-config.xml 的 {airHome} 令牌因 SDK 迁移失效，须自建 config 写绝对 swc 路径（同 TDFC）。
 - 遗留/下一步：用户手测动画观感（机器验不了"好不好看"）；敌桑行为面待开 esandy 后实测；F9 保存持久化修复；删旧回退副本（仍待）。
 

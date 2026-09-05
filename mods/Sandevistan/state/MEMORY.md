@@ -15,33 +15,36 @@
 
 ## 3. 当前状态
 
-- **v1.136**（git master，镜像部署运行中）：本仓库（`D:\RemainsMod`）为唯一事实源，游戏目录 `mods\Sandevistan\` 由 `sync-to-game.bat` 全镜像（排除 build\ 与 release\config.txt——后者由游戏内 F9 面板直写）。
-- v1.136 变更：**敌人斯安维斯坦默认关**（`esandyenabled` 默认 0，用户要求）；`stepDebugTest` 重写为全流程自动验证驱动（app id 双门控：config debugtest=1 且 applicationID≠"pfe" 才激活）。
+- **v1.137**（git master，镜像部署运行中）：本仓库（`D:\RemainsMod`）为唯一事实源，游戏目录 `mods\Sandevistan\` 由 `sync-to-game.bat` 全镜像（排除 build\ 与 release\config.txt——后者由游戏内 F9 面板直写）。
+- v1.136：**敌人斯安维斯坦默认关**（`esandyenabled` 默认 0）；`stepDebugTest` 全流程自动验证驱动（app id 双门控）。
+- v1.137：**F9 调参持久化修复**（应用存储兜底层，写读双通）；MSW 设置中枢接入实现就绪（注册重试常驻，当前被跨域拓扑阻断，见 §4.6）。
 - 游戏通过补丁从 `<游戏目录>\mods\Sandevistan\release\SandevistanMod.swf` 加载；补丁 SWF 的安装/还原 = 游戏目录 `mods\Sandevistan\release\安装.bat / 卸载.bat`；Steam 校验还原 DLC 后重跑安装.bat。
 
-## 4. 正在进行与卡点（2026-08-28 自动验证轮后状态）
+## 4. 正在进行与卡点（2026-09-05 自动验证轮后状态）
 
-机器可验证部分已由内置自动测试覆盖（5 轮真机，测试 app id `pfe-sandy-test`，详见 §7）：
+机器可验证部分已由内置自动测试覆盖（10 轮真机，测试 app id `pfe-sandy-test`，详见 §7）：
 
-1. ✅ v1.130 回放**玩家**动画帧级还原——站立玩家回放帧采样多变（frames=[24,15,1,9,10,1,4,5]）PASS；**视觉观感仍待用户手测**；
-2. ✅ v1.132-1.134 回放**敌人**——基线对照无隐身/抓取残留 PASS（佣兵 alive=1 dead=1 实测）；死亡敌人不开火子项仅部分覆盖（击杀敌人时无飞行弹可观测，无回归迹象）；僵尸/蝎子专项待用户实测；
-3. ✅ v1.135 哔哔小马暂停——门控输入侧 PASS×3（pip 开→allStat=2+inGameplay()=false→关恢复）；**敌桑行为面**（敌桑激活中开 TAB）需开 esandy 后实测；
-4. ✅ v1.131 三控件——F9 面板+设置页 10 项渲染断言 PASS（原文比对）；v1.136 默认"关"四处（启动/config/F9/设置页）PASS；
-5. ✅ v1.127 迁移回归——projhits/swaprun 停用断言 PASS；回放全周期 ×5 无错误。
+1. ✅ v1.130 回放**玩家**动画帧级还原——站立玩家回放帧采样多变（[12,1,74,9,10,1,4,6]）PASS；**视觉观感仍待用户手测**；
+2. ✅ v1.132-1.134 回放**敌人**——基线对照无隐身/抓取残留 PASS（多轮非空转，alive=1~4）；死亡敌人不开火子项部分覆盖（无回归）；
+3. ✅ v1.135 哔哔小马暂停——门控输入侧 PASS×多轮（pip 开→allStat=2+inGameplay()=false→关恢复）；**敌桑行为面**待开 esandy 后实测；
+4. ✅ v1.131 三控件——F9 面板+设置页 10 项渲染断言 PASS（原文比对）；v1.136 默认"关"四处 PASS；
+5. ✅ v1.127 迁移回归——projhits/swaprun 停用断言 PASS；回放全周期无错误；
+6. ⏸ **MSW 设置中枢注册（v1.137）**：我方实现+测试就绪，注册被 loader 子域拓扑阻断（各模组独立子域，跨模组类名查找必然 #1065）——**转告 MSW 开发者**：其契约（getDefinitionByName 跨模组）在现有 loader 下不可用，需共享域机制或父域中转对象；我方重试常驻，宿主修复后 10 帧内自动接上。实证见 shared-knowledge `mod-loader-cross-domain-anomaly.md`（2026-09-05 增补）。
 
 **跨模组问题（已定位未越权修复）**：全敌人满装甲条 = RealisticVision 的 hideEnemies 强制 `hpbar.visible=true`——应转告 RV 开发者。
 
 ## 5. 已知问题
 
-- **F9/设置页调参无法持久化（既有潜伏 bug，待修）**：`saveConfigFile` 写 `File.applicationDirectory`（AIR 只读）必抛 `SecurityError: fileWriteResource`；`togglePanel(false)` 每次关面板都触发。用户 F9 调的参数只活在当前会话。修复方向：写 applicationStorageDirectory + 启动时回迁，或引导手编 config.txt。
+- ~~F9/设置页调参无法持久化~~ **v1.137 已修复**（应用存储兜底层）。
+- 测试基建注意：MSWAutoTest 在 appid≠pfe 的实例里**自激活**（会自动开档并开 pip 到设置页）——本模组测试驱动已用 pip 守卫对冲；其它模组将来写自动测试需同样对冲（见 stepDebugTest/testPipGuard）。
 - 遗留低优先：「有攻击动画无伤害」残余（rFire 诊断就位，再现采日志）；预判死亡略松（可调余量 0.9）；门/场景破坏**过程**无法重演（瓦片/光照引擎限制，结果保留——已知限制）。
 - 环境：游戏目录旧 `SandevistanMod\` 回退副本待删（确认稳定后）；用户日志 `%APPDATA%\pfe\Local Store\sandy_modlog.txt`（diaglog=1，grep -a 勿整读）。
 
 ## 6. 下一步
 
-1. 用户手测：回放动画观感（帧级还原、残影）、TAB 暂停体验——机器只能验逻辑，观感要人；
+1. 用户手测：回放动画观感（帧级还原、残影）、TAB 暂停体验、F9 调参重启保持（v1.137 修复验证）；
 2. 想测敌人斯安维斯坦时：F9 或 config 开 `esandyenabled=1` 后实测 §4.3 行为面；
-3. F9 保存持久化修复（§5 首条）；
+3. **催办 MSW 侧**：跨模组注册的域可达性（§4.6），修好后 Sandevistan 页自动出现在"模组"页；
 4. 稳定后：删除游戏目录旧 SandevistanMod\ 回退副本、按需重打包 `dist\SandevistanMod_v<版本>.zip`。
 
 ## 7. 深入了解

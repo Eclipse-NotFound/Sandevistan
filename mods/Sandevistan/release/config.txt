@@ -1,4 +1,7 @@
 ﻿# 斯安维斯坦模组配置 (Sandevistan Mod config)
+# v1.137 注：F9 面板/哔哔小马"模组"页保存的值落在应用存储
+# (%APPDATA%\<appid>\Local Store\SandevistanMod_config.txt)，
+# 启动时后读覆盖本文件的同名键——菜单里调过的值优先
 # 修改后保存，重启游戏生效；也可在游戏中按 F9 打开参数面板实时调节
 
 # 触发热键（键码）：

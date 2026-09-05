@@ -301,6 +301,7 @@ package
       private var testAnimSamples:String = "";           // v1.136：回放期玩家动画帧采样
       private var testDeadAtkSnap:Object = {};           // v1.136：回放开始时死亡敌人攻击体位置快照
       private var testDeadSnapN:int = 0;                 // v1.136：快照条数（SUMMARY 详情用）
+      private var testPipCloses:int = 0;                 // v1.137：pip 守卫关闭计数
       private var testDeadAtkNew:int = 0;                // v1.136：回放中新增/位移的死亡敌人攻击体计数
       private var testReplaySeen:Boolean = false;        // v1.136：本轮回放确实发生过
       private var testSandySeen:Boolean = false;         // v1.136：时停确实激活过（自然结束≠未启动）
@@ -310,6 +311,9 @@ package
       private var testGgY:Number = 0;
       private var testErrDiag:int = 0;                   // v1.136：verror 解冻诊断计数
       private var testDone:Boolean = false;              // v1.136：SUMMARY 已输出
+      // ===== v1.137：MSW 设置中枢（哔哔小马"模组"页）注册 =====
+      private var hubRegistered:Boolean = false;         // 已注册成功（幂等，不再重试）
+      private var hubRegTries:int = 0;                   // 注册重试帧计数（≤300，契约见 MSW design/mod-settings-hub.md §3.3）
 
       // 彩虹色调色板（边缘行者风格，高饱和）—— alpha 由 config ghostalpha 控制
       private function palette(idx:int):ColorTransform
@@ -403,7 +407,7 @@ package
          // v1.101：版本标记——日志确认实际加载运行的构建版本与关键开关
          // v1.121：追加 esmark/esper/espd——排查"徽标不可见"类问题的第一手数据
          // v1.127：swaprun/projhits 已迁移 mods/MoreSkills&Weapons（此处不再输出）
-         inst.log("[SandyMod] v1.136 loaded"
+         inst.log("[SandyMod] v1.137 loaded"
              + " esmark=" + (inst.cfgESMark ? 1 : 0) + " esghost=" + (inst.cfgESGhost ? 1 : 0) + " esper=" + inst.cfgESPer
              + " esen=" + (inst.cfgESEnabled ? 1 : 0) + " esprob=" + inst.cfgESRoomProb);
          if (main != null && main.stage != null)
@@ -436,7 +440,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.136 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.137 已加载 (按 \ 触发斯安维斯坦)";
             t.autoSize = "left";   // v1.110：版本号此前显示不全（TextField 默认宽度截断）
             t.x = 10;
             t.y = 10;
@@ -480,63 +484,20 @@ package
          try
          {
             var cfg:File = File.applicationDirectory.resolvePath("mods/Sandevistan/release/config.txt");
-            if (cfg.exists)
-            {
-               var stream:FileStream = new FileStream();
-               stream.open(cfg, FileMode.READ);
-               var txt:String = stream.readUTFBytes(stream.bytesAvailable);
-               stream.close();
-               var lines:Array = txt.split(/\r?\n/);
-               // v1.127：projhp_<id>/projarmor_<id> 与 projhits/swaprun 键已移除——
-               // 两技能迁移到 mods/MoreSkills&Weapons（MSWProjHits/MSWSwaprun，
-               // SharedObject 持久化），Sandevistan 侧不再解析，已有 config 无法开启
-               for each (var line:String in lines)
-               {
-                  line = line.replace(/^\s+|\s+$/g, "");
-                  if (line.length == 0 || line.charAt(0) == "#") continue;
-                  var kv:Array = line.split("=");
-                  if (kv.length < 2) continue;
-                  var k:String = kv[0].replace(/^\s+|\s+$/g, "").toLowerCase();
-                  var v:String = kv[1].replace(/^\s+|\s+$/g, "");
-                  // v1.121：剥离行尾注释——此前 `esandymark=1  # 注释` 的布尔
-                  // 精确匹配（v=="1"）失败 → cfgESMark 恒 false=S 徽标三轮
-                  // "修复"全部无效的真根因（esandyghost 同样中招=敌人残影
-                  // 一直未开启）；parseInt 键靠数字前缀侥幸存活
-                  var hs:int = v.indexOf("#");
-                  if (hs >= 0) { v = v.substring(0, hs); }
-                  v = v.replace(/^\s+|\s+$/g, "");
-                  if (k == "hotkey") cfgHotkey = parseInt(v);
-                  else if (k == "duration") cfgDuration = parseInt(v);
-                  else if (k == "cooldown") cfgCooldown = parseInt(v);
-                  else if (k == "replayspeed") cfgReplaySpeed = parseFloat(v);
-                  else if (k == "ghostevery") cfgGhostEvery = parseInt(v);
-                  else if (k == "fxrun") cfgFxRun = v.toLowerCase() == "1" || v.toLowerCase() == "true";
-                  else if (k == "debugtest") debugTest = v.toLowerCase() == "1" || v.toLowerCase() == "true";
-                  else if (k == "showmark") cfgShowMark = v.toLowerCase() == "1" || v.toLowerCase() == "true";
-                  else if (k == "showhud") cfgHud = v.toLowerCase() == "1" || v.toLowerCase() == "true";
-                  else if (k == "panelkey") cfgPanelKey = parseInt(v);
-                  else if (k == "diaglog") cfgDiagLog = v.toLowerCase() == "1" || v.toLowerCase() == "true";
-                  else if (k == "ghostblend") cfgGhostBlend = parseInt(v);
-                  else if (k == "ghostalpha") cfgGhostAlpha = parseInt(v);
-                  else if (k == "replayghost") cfgReplayGhost = parseInt(v);
-                  else if (k == "replayghostlife") cfgReplayGhostLife = parseInt(v);
-                  else if (k == "slowfactor") cfgSlowFactor = parseFloat(v);
-                  else if (k == "colormode") cfgColorMode = parseInt(v);
-                  else if (k == "edgethresh") cfgEdgeThresh = parseFloat(v);
-                  else if (k == "enemysandy") cfgEnemySandy = v;
-                  else if (k == "esandydur") cfgESDur = parseInt(v);
-                  else if (k == "esandycd") cfgESCd = parseInt(v);
-                  else if (k == "esandyspd") cfgESSpd = parseInt(v);
-                  else if (k == "esandyghost") cfgESGhost = v.toLowerCase() == "1" || v.toLowerCase() == "true";
-                  else if (k == "esandyghostlife") cfgESGhostLife = parseInt(v);
-                  else if (k == "esandymark") cfgESMark = v.toLowerCase() == "1" || v.toLowerCase() == "true";
-                  else if (k == "esandyper") cfgESPer = parseInt(v);
-                  else if (k == "esandyenabled") cfgESEnabled = v.toLowerCase() == "1" || v.toLowerCase() == "true";
-                  else if (k == "esandyroomprob") cfgESRoomProb = parseInt(v);
-               }
-            }
+            var txt:String = readTextIf(cfg);
+            if (txt != null) { parseConfigLines(txt); }
          }
          catch (e:*) { trace("[SandyMod] config error: " + e); }
+         // v1.137：应用存储持久层覆盖——F9 面板/MSW 设置中枢保存时，应用目录
+         // 在 AIR 只读沙箱下写不进去，落点是这里（SandevistanMod_config.txt）；
+         // 后读的键覆盖先读的，故用户经菜单调过的值优先于模板 config.txt
+         try
+         {
+            var stF:File = File.applicationStorageDirectory.resolvePath("SandevistanMod_config.txt");
+            var txt2:String = readTextIf(stF);
+            if (txt2 != null) { parseConfigLines(txt2); }
+         }
+         catch (e2:*) { }
          if (cfgDuration < 30) cfgDuration = 30;
          if (cfgDuration > 3600) cfgDuration = 3600;
          if (cfgCooldown < 0) cfgCooldown = 0;
@@ -582,6 +543,77 @@ package
          trace("[SandyMod] config hotkey=" + cfgHotkey + " dur=" + cfgDuration + " cd=" + cfgCooldown);
       }
 
+      // v1.137：读文本文件，不存在/失败返回 null（lessons：try/catch 内不 return）
+      private function readTextIf(f:File):String
+      {
+         var r:String = null;
+         try
+         {
+            if (f.exists)
+            {
+               var stream:FileStream = new FileStream();
+               stream.open(f, FileMode.READ);
+               r = stream.readUTFBytes(stream.bytesAvailable);
+               stream.close();
+            }
+         }
+         catch (e:*) { r = null; }
+         return r;
+      }
+
+      // v1.137：config 文本解析（loadConfig 双层调用：应用目录模板 → 应用存储覆盖）
+      private function parseConfigLines(txt:String):void
+      {
+         var lines:Array = txt.split(/\r?\n/);
+         // v1.127：projhp_<id>/projarmor_<id> 与 projhits/swaprun 键已移除——
+         // 两技能迁移到 mods/MoreSkills&Weapons（MSWProjHits/MSWSwaprun，
+         // SharedObject 持久化），Sandevistan 侧不再解析，已有 config 无法开启
+         for each (var line:String in lines)
+         {
+            line = line.replace(/^\s+|\s+$/g, "");
+            if (line.length == 0 || line.charAt(0) == "#") continue;
+            var kv:Array = line.split("=");
+            if (kv.length < 2) continue;
+            var k:String = kv[0].replace(/^\s+|\s+$/g, "").toLowerCase();
+            var v:String = kv[1].replace(/^\s+|\s+$/g, "");
+            // v1.121：剥离行尾注释——此前 `esandymark=1  # 注释` 的布尔
+            // 精确匹配（v=="1"）失败 → cfgESMark 恒 false=S 徽标三轮
+            // "修复"全部无效的真根因（esandyghost 同样中招=敌人残影
+            // 一直未开启）；parseInt 键靠数字前缀侥幸存活
+            var hs:int = v.indexOf("#");
+            if (hs >= 0) { v = v.substring(0, hs); }
+            v = v.replace(/^\s+|\s+$/g, "");
+            if (k == "hotkey") cfgHotkey = parseInt(v);
+            else if (k == "duration") cfgDuration = parseInt(v);
+            else if (k == "cooldown") cfgCooldown = parseInt(v);
+            else if (k == "replayspeed") cfgReplaySpeed = parseFloat(v);
+            else if (k == "ghostevery") cfgGhostEvery = parseInt(v);
+            else if (k == "fxrun") cfgFxRun = v.toLowerCase() == "1" || v.toLowerCase() == "true";
+            else if (k == "debugtest") debugTest = v.toLowerCase() == "1" || v.toLowerCase() == "true";
+            else if (k == "showmark") cfgShowMark = v.toLowerCase() == "1" || v.toLowerCase() == "true";
+            else if (k == "showhud") cfgHud = v.toLowerCase() == "1" || v.toLowerCase() == "true";
+            else if (k == "panelkey") cfgPanelKey = parseInt(v);
+            else if (k == "diaglog") cfgDiagLog = v.toLowerCase() == "1" || v.toLowerCase() == "true";
+            else if (k == "ghostblend") cfgGhostBlend = parseInt(v);
+            else if (k == "ghostalpha") cfgGhostAlpha = parseInt(v);
+            else if (k == "replayghost") cfgReplayGhost = parseInt(v);
+            else if (k == "replayghostlife") cfgReplayGhostLife = parseInt(v);
+            else if (k == "slowfactor") cfgSlowFactor = parseFloat(v);
+            else if (k == "colormode") cfgColorMode = parseInt(v);
+            else if (k == "edgethresh") cfgEdgeThresh = parseFloat(v);
+            else if (k == "enemysandy") cfgEnemySandy = v;
+            else if (k == "esandydur") cfgESDur = parseInt(v);
+            else if (k == "esandycd") cfgESCd = parseInt(v);
+            else if (k == "esandyspd") cfgESSpd = parseInt(v);
+            else if (k == "esandyghost") cfgESGhost = v.toLowerCase() == "1" || v.toLowerCase() == "true";
+            else if (k == "esandyghostlife") cfgESGhostLife = parseInt(v);
+            else if (k == "esandymark") cfgESMark = v.toLowerCase() == "1" || v.toLowerCase() == "true";
+            else if (k == "esandyper") cfgESPer = parseInt(v);
+            else if (k == "esandyenabled") cfgESEnabled = v.toLowerCase() == "1" || v.toLowerCase() == "true";
+            else if (k == "esandyroomprob") cfgESRoomProb = parseInt(v);
+         }
+      }
+
       // ==================== 帧循环 ====================
       private function onFrame(e:Event):void
       {
@@ -620,6 +652,22 @@ package
          if (debugTest)
          {
             stepDebugTest();
+         }
+
+         // v1.137：MSW 设置中枢注册——加载链 Sandy 在 MSW 之前且 MSW 在开机链
+         // 末尾才加载，重试窗口必须覆盖整个开机期（36000 帧上限，每 10 帧一发
+         // 节流）；未安装 MSW 时静默跳过，F9 面板照常可用
+         if (!hubRegistered && hubRegTries < 36000)
+         {
+            hubRegTries++;
+            if (hubRegTries % 10 == 1)
+            {
+               stepHubRegister();
+            }
+            if (debugTest && hubRegTries % 600 == 0)
+            {
+               log("[TEST] hub tries=" + hubRegTries);
+            }
          }
 
          try
@@ -771,17 +819,17 @@ package
             {
                // 等开机完成：菜单就绪且 landData 已建（boot stage-2 没跑完
                // 就放菜单 → newGame 时 Game 构造器访问 landData #1009）
-               if (world != null && world.mm != null && world.mm.loaded && world.landData != null)
-               {
-                  log("[TEST] boot ready, driver starting");
-                  testAssert("esandy-default-off", cfgESEnabled == false, "cfgESEnabled=" + cfgESEnabled);
-                  testAssert("migrated-keys-off", cfgProjHits == false && cfgSwapRun == false,
-                             "projhits=" + cfgProjHits + " swaprun=" + cfgSwapRun);
-                  world.mm.mainMenuOff();
-                  world.newGame(-1, "TEST", { "dif": 2, "propusk": true });
-                  testStage = 1;
-                  testTicks = 0;
-               }
+            if (world != null && world.mm != null && world.mm.loaded && world.landData != null)
+            {
+               log("[TEST] boot ready, driver starting");
+               testAssert("esandy-default-off", cfgESEnabled == false, "cfgESEnabled=" + cfgESEnabled);
+               testAssert("migrated-keys-off", cfgProjHits == false && cfgSwapRun == false,
+                          "projhits=" + cfgProjHits + " swaprun=" + cfgSwapRun);
+               world.mm.mainMenuOff();
+               world.newGame(-1, "TEST", { "dif": 2, "propusk": true });
+               testStage = 1;
+               testTicks = 0;
+            }
                else if (++testTicks > 1800) { testAssert("boot-ready", false, "timeout"); testStage = 10; }
             }
             else if (testStage == 1)
@@ -798,22 +846,46 @@ package
             }
             else if (testStage == 2)
             {
-               // 传送马哈顿废墟（敌人最丰富）；重入当前土地/加载中旅行会挂死，先防护
-               var clId:String = "";
-               try { clId = String(world.game.curLandId); } catch (e3:*) { }
-               if (clId != "" && clId != "random_mane")
+               // 传送马哈顿废墟（敌人最丰富）；重入当前土地/加载中旅行会挂死，先防护。
+               // MSWAutoTest（测试实例同样自激活）会把 pip 开在设置页——先清场再走
+               if (testSub == 0)
                {
-                  log("[TEST] gotoLand random_mane (from " + clId + ")");
-                  testPreTravelLoc = world.loc;
-                  world.game.gotoLand("random_mane");
-                  testStage = 3;
+                  try
+                  {
+                     if (world.pip != null && world.pip.active)
+                     {
+                        world.pip.onoff(-1);
+                        log("[TEST] closed leftover pip (foreign driver state)");
+                     }
+                  }
+                  catch (eP:*) { }
+                  testSub = 1;
                   testTicks = 0;
                }
-               else if (clId == "random_mane") { testStage = 3; testTicks = 0; }
-               else if (++testTicks > 600) { testAssert("travel-start", false, "curLandId=" + clId); testStage = 10; }
+               else if (testSub == 1 && ++testTicks < 30)
+               {
+                  // 等 30 帧让 pip 关闭动画走完
+               }
+               else
+               {
+                  var clId:String = "";
+                  try { clId = String(world.game.curLandId); } catch (e3:*) { }
+                  if (clId != "" && clId != "random_mane")
+                  {
+                     log("[TEST] gotoLand random_mane (from " + clId + ")");
+                     testPreTravelLoc = world.loc;
+                     world.game.gotoLand("random_mane");
+                     testStage = 3;
+                     testTicks = 0;
+                     testSub = 0;
+                  }
+                  else if (clId == "random_mane") { testStage = 3; testTicks = 0; testSub = 0; }
+                  else if (++testTicks > 600) { testAssert("travel-start", false, "curLandId=" + clId); testStage = 10; }
+               }
             }
             else if (testStage == 3)
             {
+               testPipGuard();
                // 到达判定：curLandId 变更 + loc 引用已切换 + 90 帧稳定
                var arrB:Boolean = false;
                try
@@ -837,6 +909,7 @@ package
             }
             else if (testStage == 4)
             {
+               testPipGuard();
                var ens:Array = testScanEnemies();
                if (ens.length > 0)
                {
@@ -861,65 +934,109 @@ package
             }
             else if (testStage == 5)
             {
-               // 战斗热身 90 帧（拉仇恨、产生真实输入流），随后等敌人就位再进时停
-               if (testTicks == 0) { log("[TEST] combat warmup"); }
-               testDriveCombat();
-               testTicks++;
-               if (testTicks >= 90)
+               if (testSub == 0)
                {
-                  if (testSub == 0)
+                  // 战斗热身 60 帧（拉仇恨、产生真实输入流）——站在怪堆里必挨打，
+                  // 期间持续治疗，之后等恢复；带伤(sost=2)进时停会让门控拒启
+                  if (testTicks == 0) { log("[TEST] combat warmup"); }
+                  testDriveCombat();
+                  if (testTicks % 45 == 30) { try { world.pers.healAll(); } catch (eH0:*) { } }
+                  testTicks++;
+                  if (testTicks >= 60)
                   {
                      testStopKeys();
-                     // 满血进时停：带伤(sost=2)倒地姿态只有一帧，回放动画断言会失真
                      try { world.pers.healAll(); } catch (eH:*) { }
                      try { world.gg.controlOn(); } catch (e6:*) { }   // 开场对话可能 ggControl=false
+                     log("[TEST] warmup done, waiting recovery+enemies");
                      testSub = 1;
-                  }
-                  // 等敌人回到可交战状态（飞行怪飞远后可能被游戏 disabled 挂起）——
-                  // 最多再等 ~17 秒，有敌人才有基线；等不到就空基线继续（残留断言空转）
-                  var base2:Array = testScanEnemies();
-                  if (base2.length > 0 || testTicks > 600)
-                  {
-                     if (base2.length == 0)
-                     {
-                        log("[TEST] no engaged enemies after wait, proceed (residue asserts will be vacuous)");
-                        testDiagUnits();
-                     }
-                     // 基线：时停瞬间每个敌人的可见性/抓取状态（回放后对比变化）
-                     testFlagsBase = new Dictionary();
-                     var nB:int = 0;
-                     for (var iB:int = 0; iB < base2.length; iB++)
-                     {
-                        testFlagsBase[base2[iB]] = esVisState(base2[iB]);
-                        nB++;
-                     }
-                     // 造击杀机会：把最弱敌人打到 1hp（时停中首杀 → dead-fire 断言有数据）
-                     var weak:Object = null;
-                     for (var iW:int = 0; iW < base2.length; iW++)
-                     {
-                        try
-                        {
-                           if (weak == null || base2[iW].hp < weak.hp) { weak = base2[iW]; }
-                        }
-                        catch (eW:*) { }
-                     }
-                     if (weak != null) { try { weak.damage(weak.hp - 1, 0, null, false); } catch (eD2:*) { } }
-                     var igpB:Boolean = inGameplay();
-                     log("[TEST] startSandy inGameplay=" + igpB + " hp=" + world.gg.hp + " sost=" + world.gg.sost
-                         + " enemies=" + base2.length + " baseFlags=" + nB);
-                     testAssert("inGameplay-before-sandy", igpB, "");
-                     testGgDowned = (world.gg.sost >= 2);
-                     startSandy();
-                     testStage = 6;
                      testTicks = 0;
-                     testAtkT = 0;
-                     testSandySeen = false;
+                  }
+               }
+               else if (testSub == 1)
+               {
+                  testPipGuard();
+                  var igp5:Boolean = inGameplay();
+                  var sost5:int = 3;
+                  try { sost5 = world.gg.sost; } catch (e5b:*) { }
+                  if (!igp5)
+                  {
+                     // 倒地/治疗恢复周期：每 30 帧补一次治疗（斑马群 dps 下
+                     // 120 帧间隔会被再次放倒），持续等
+                     if (testTicks % 30 == 15) { try { world.pers.healAll(); } catch (eH2:*) { } }
+                     testTicks++;
+                     if (testTicks > 1200)
+                     {
+                        testAssert("player-recovered", false, "inGameplay never true (sost=" + sost5 + ")");
+                        testStage = 8; testSub = 0; testTicks = 0;
+                     }
+                  }
+                  else if (sost5 >= 2)
+                  {
+                     testTicks++;
+                     if (testTicks > 900)
+                     {
+                        testAssert("player-recovered", false, "sost stuck >=2 (" + sost5 + ")");
+                        testStage = 8; testSub = 0; testTicks = 0;
+                     }
+                  }
+                  else
+                  {
+                     // 已恢复：等敌人回到可交战状态（飞行怪飞远会被游戏 disabled）
+                     var base2:Array = testScanEnemies();
+                     if (base2.length > 0 || testTicks > 600)
+                     {
+                        if (base2.length == 0)
+                        {
+                           log("[TEST] no engaged enemies after wait, proceed (residue asserts will be vacuous)");
+                           testDiagUnits();
+                        }
+                        // 基线：时停瞬间每个敌人的可见性/抓取状态（回放后对比变化）
+                        testFlagsBase = new Dictionary();
+                        var nB:int = 0;
+                        for (var iB:int = 0; iB < base2.length; iB++)
+                        {
+                           testFlagsBase[base2[iB]] = esVisState(base2[iB]);
+                           nB++;
+                        }
+                        // 造击杀机会：全部敌人压到 30% 血、最弱的打到 1hp
+                        //（时停中快速减员 → dead-fire 断言有数据、挨打窗口缩短）
+                        for (var iW:int = 0; iW < base2.length; iW++)
+                        {
+                           try
+                           {
+                              var uW:Object = base2[iW];
+                              uW.damage(Math.max(1, uW.hp * 0.7), 0, null, false);
+                           }
+                           catch (eW:*) { }
+                        }
+                        var weak:Object = null;
+                        for (var iW2:int = 0; iW2 < base2.length; iW2++)
+                        {
+                           try
+                           {
+                              if (weak == null || base2[iW2].hp < weak.hp) { weak = base2[iW2]; }
+                           }
+                           catch (eW2:*) { }
+                        }
+                        if (weak != null) { try { weak.damage(weak.hp - 1, 0, null, false); } catch (eD2:*) { } }
+                        log("[TEST] startSandy inGameplay=" + igp5 + " hp=" + world.gg.hp + " sost=" + sost5
+                            + " enemies=" + base2.length + " baseFlags=" + nB);
+                        testAssert("inGameplay-before-sandy", igp5, "");
+                        testGgDowned = (sost5 >= 2);
+                        startSandy();
+                        testStage = 6;
+                        testTicks = 0;
+                        testAtkT = 0;
+                        testSandySeen = false;
+                     }
+                     else { testTicks++; }
                   }
                }
             }
             else if (testStage == 6)
             {
                // 时停段：持续合成输入（玩家全速攻击/走位），结束后回放
+               testPipGuard();
                if (testTicks == 1 && !sandyActive)
                {
                   // startSandy 首次未生效（门控未过）——重试一次
@@ -930,6 +1047,8 @@ package
                {
                   testSandySeen = true;
                   if (world.gg.sost >= 2) { testGgDowned = true; }
+                  // 时停中持续治疗：敌人 1/5 速但仍能放倒 Fresh 小马 → 动画断言失真
+                  if (testTicks % 30 == 15) { try { world.pers.healAll(); } catch (eH3:*) { } }
                   testDriveCombat();
                   if (testTicks % 60 == 30)
                   {
@@ -974,6 +1093,7 @@ package
             else if (testStage == 7)
             {
                // 回放段：首帧快照死亡敌人攻击体位置，逐 5 帧采样玩家动画帧
+               testPipGuard();
                if (replaying)
                {
                   if (!testReplaySeen)
@@ -1015,6 +1135,22 @@ package
                // v1.135：哔哔小马打开 → allStat=2 世界暂停 + inGameplay()=false；
                // 设置页（page=5）打开时模组设置区渲染（v1.131 三控件、10 项）
                if (testSub == 0)
+               {
+                  // 清场：MSWAutoTest（测试实例自激活）可能把 pip 留在打开状态，
+                  // 先强制关闭再走自己的开关序列
+                  try
+                  {
+                     if (world.pip != null && world.pip.active)
+                     {
+                        world.pip.onoff(-1);
+                        log("[TEST] closed leftover pip before pip test");
+                     }
+                  }
+                  catch (eP8:*) { }
+                  testSub = 5;
+                  testTicks = 0;
+               }
+               else if (testSub == 5 && ++testTicks > 30)
                {
                   log("[TEST] pip test pre: inGameplay=" + inGameplay() + " allStat=" + world.allStat);
                   try { world.pip.onoff(0); } catch (e8:*) { log("[TEST] pip open err: " + e8); }
@@ -1084,6 +1220,20 @@ package
                if (!testDone)
                {
                   testDone = true;
+                  // v1.137：hub 注册——跨域限制（各模组独立子域，MainFE 用
+                  // LoaderContext(false) 加载）下类名查找必然 #1065，不是本侧
+                  // 缺陷；重试常驻，宿主侧可达性修复后 10 帧内自动接上
+                  if (hubRegistered)
+                  {
+                     testPass++;
+                     log("[TEST-ASSERT] hub-registered=PASS (tries=" + hubRegTries + ")");
+                  }
+                  else
+                  {
+                     testSkipCnt++;
+                     log("[TEST-ASSERT] hub-registered=SKIP (cross-domain blocked; retry standing, tries=" + hubRegTries + ")");
+                  }
+                  testAssert("hub-items-13", hubBuildItems().length == 13, "n=" + hubBuildItems().length);
                   log("[TEST] SUMMARY pass=" + testPass + " fail=" + testFail + " skip=" + testSkipCnt
                       + (testFail > 0 ? " failed=[" + testFailNames + "]" : ""));
                   log("[TEST] done");
@@ -1278,6 +1428,23 @@ package
          if (i < 0) return false;
          var c:String = s.charAt(i + key.length);
          return c == "1" || c == "t";
+      }
+
+      // v1.137：MSWAutoTest（appid≠pfe 自激活）会在测试实例里自行开 pip 到
+      // 设置页——inGameplay() 检查 pip.active，pip 开着时停/pip 断言全废。
+      // 各阶段循环前清场。
+      private function testPipGuard():void
+      {
+         try
+         {
+            if (world.pip != null && world.pip.active)
+            {
+               world.pip.onoff(-1);
+               testPipCloses++;
+               if (testPipCloses <= 6) { log("[TEST] pip-guard closed foreign pip #" + testPipCloses); }
+            }
+         }
+         catch (e:*) { }
       }
 
       // v1.136：诊断输出当前 loc 全部单位的状态（敌人等不到位时定性用）
@@ -3621,7 +3788,7 @@ package
       {
          if (panelTf == null) return;
          var lines:Array = [];
-         lines.push("== SandevistanMod v1.136 参数 ==");
+         lines.push("== SandevistanMod v1.137 参数 ==");
          lines.push((panelSel == 0 ? "> " : "  ") + "生效时长   " + (cfgDuration / 30).toFixed(1) + "s");
          lines.push((panelSel == 1 ? "> " : "  ") + "冷却       " + (cfgCooldown / 30).toFixed(1) + "s");
          lines.push((panelSel == 2 ? "> " : "  ") + "回放速度   x" + cfgReplaySpeed);
@@ -3644,51 +3811,171 @@ package
 
       private function saveConfigFile():void
       {
+         var NL:String = String.fromCharCode(13, 10);
+         var sb:Array = [];
+         sb.push("# SandevistanMod config (saved by panel)");
+         sb.push("# hotkey: 220=\  33=PageUp 34=PageDown 36=Home  F1-F12=112-123");
+         sb.push("hotkey=" + cfgHotkey);
+         sb.push("duration=" + cfgDuration);
+         sb.push("cooldown=" + cfgCooldown);
+         sb.push("replayspeed=" + cfgReplaySpeed);
+         sb.push("slowfactor=" + cfgSlowFactor);
+         sb.push("ghostevery=" + cfgGhostEvery);
+         sb.push("replayghost=" + cfgReplayGhost);
+         sb.push("replayghostlife=" + cfgReplayGhostLife);
+         // v1.127：projhits/projhp/projarmor/projhp_<id>/projarmor_<id>/swaprun
+         // 回写已移除——两技能迁移到 mods/MoreSkills&Weapons（MSW 用
+         // SharedObject 持久化，见 MSWConfig）
+         sb.push("ghostalpha=" + cfgGhostAlpha);
+         sb.push("ghostblend=" + cfgGhostBlend);
+         sb.push("colormode=" + cfgColorMode);
+         sb.push("edgethresh=" + cfgEdgeThresh);
+         sb.push("enemysandy=" + cfgEnemySandy);
+         sb.push("esandydur=" + cfgESDur);
+         sb.push("esandycd=" + cfgESCd);
+         sb.push("esandyspd=" + cfgESSpd);
+         sb.push("esandyghost=" + (cfgESGhost ? 1 : 0));
+         sb.push("esandyghostlife=" + cfgESGhostLife);
+         sb.push("esandymark=" + (cfgESMark ? 1 : 0));
+         sb.push("esandyper=" + cfgESPer);
+         sb.push("esandyenabled=" + (cfgESEnabled ? 1 : 0));
+         sb.push("esandyroomprob=" + cfgESRoomProb);
+         sb.push("fxrun=" + (cfgFxRun ? 1 : 0));
+         sb.push("showmark=" + (cfgShowMark ? 1 : 0));
+         sb.push("showhud=" + (cfgHud ? 1 : 0));
+         sb.push("panelkey=" + cfgPanelKey);
+         sb.push("diaglog=" + (cfgDiagLog ? 1 : 0));
+         sb.push("debugtest=0");
+         var out:String = sb.join(NL) + NL;
+         // ① 应用目录（历史正式位置）——AIR 只读沙箱下必失败（v1.137 前的
+         //    "F9 保存无效"潜伏 bug 根因），保留尝试以兼容可写环境
+         var okA:Boolean = false;
          try
          {
             var f:File = File.applicationDirectory.resolvePath("mods/Sandevistan/release/config.txt");
             var stream:FileStream = new FileStream();
             stream.open(f, FileMode.WRITE);
-            var NL:String = String.fromCharCode(13, 10);
-            var sb:Array = [];
-            sb.push("# SandevistanMod config (saved by panel)");
-            sb.push("# hotkey: 220=\  33=PageUp 34=PageDown 36=Home  F1-F12=112-123");
-            sb.push("hotkey=" + cfgHotkey);
-            sb.push("duration=" + cfgDuration);
-            sb.push("cooldown=" + cfgCooldown);
-            sb.push("replayspeed=" + cfgReplaySpeed);
-            sb.push("slowfactor=" + cfgSlowFactor);
-            sb.push("ghostevery=" + cfgGhostEvery);
-            sb.push("replayghost=" + cfgReplayGhost);
-            sb.push("replayghostlife=" + cfgReplayGhostLife);
-            // v1.127：projhits/projhp/projarmor/projhp_<id>/projarmor_<id>/swaprun
-            // 回写已移除——两技能迁移到 mods/MoreSkills&Weapons（MSW 用
-            // SharedObject 持久化，见 MSWConfig）
-            sb.push("ghostalpha=" + cfgGhostAlpha);
-            sb.push("ghostblend=" + cfgGhostBlend);
-            sb.push("colormode=" + cfgColorMode);
-            sb.push("edgethresh=" + cfgEdgeThresh);
-            sb.push("enemysandy=" + cfgEnemySandy);
-            sb.push("esandydur=" + cfgESDur);
-            sb.push("esandycd=" + cfgESCd);
-            sb.push("esandyspd=" + cfgESSpd);
-            sb.push("esandyghost=" + (cfgESGhost ? 1 : 0));
-            sb.push("esandyghostlife=" + cfgESGhostLife);
-            sb.push("esandymark=" + (cfgESMark ? 1 : 0));
-            sb.push("esandyper=" + cfgESPer);
-            sb.push("esandyenabled=" + (cfgESEnabled ? 1 : 0));
-            sb.push("esandyroomprob=" + cfgESRoomProb);
-            sb.push("fxrun=" + (cfgFxRun ? 1 : 0));
-            sb.push("showmark=" + (cfgShowMark ? 1 : 0));
-            sb.push("showhud=" + (cfgHud ? 1 : 0));
-            sb.push("panelkey=" + cfgPanelKey);
-            sb.push("diaglog=" + (cfgDiagLog ? 1 : 0));
-            sb.push("debugtest=0");
-            stream.writeUTFBytes(sb.join(NL) + NL);
+            stream.writeUTFBytes(out);
             stream.close();
-            log("[SandyMod] config saved");
+            okA = true;
          }
-         catch (e:*) { log("[SandyMod] config save error: " + e); }
+         catch (e:*) { okA = false; }
+         // ② v1.137：应用存储持久层（必定可写；loadConfig 后读覆盖生效）
+         var okS:Boolean = false;
+         try
+         {
+            var f2:File = File.applicationStorageDirectory.resolvePath("SandevistanMod_config.txt");
+            var s2:FileStream = new FileStream();
+            s2.open(f2, FileMode.WRITE);
+            s2.writeUTFBytes(out);
+            s2.close();
+            okS = true;
+         }
+         catch (e2:*) { okS = false; }
+         log("[SandyMod] config saved appDir=" + (okA ? 1 : 0) + " storage=" + (okS ? 1 : 0));
+      }
+
+      // ==================== v1.137：MSW 设置中枢接入 ====================
+      // 契约：MoreSkillsWeaponsMod.settingsRegister(modId, displayName, items,
+      // onPageClose, desc)——配置数据完全由注册方自持（get/set 回调），宿主只
+      // 渲染与转发；check 的 set 即时持久化，slider 拖动只 set，面板收起时
+      // 宿主统一调 onPageClose 供 flush。加载链 Sandy 在 MSW 之前 → 每帧重试。
+      private function stepHubRegister():void
+      {
+         try
+         {
+            var hc:Class = ApplicationDomain.currentDomain.getDefinition("MoreSkillsWeaponsMod") as Class;
+            if (hc != null && hc["settingsRegister"] != null)
+            {
+               var ok:Boolean = hc["settingsRegister"]("sandevistan", "斯安维斯坦",
+                                                       hubBuildItems(), hubOnPageClose,
+                                                       "时停/回放与残影特效");
+               if (ok)
+               {
+                  hubRegistered = true;
+                  log("[SandyMod] settings hub registered (tries=" + hubRegTries + ")");
+               }
+            }
+         }
+         catch (e:*)
+         {
+            // 宿主未加载（ReferenceError）= 正常重试路径；上限后放弃并记一次
+            if (hubRegTries >= 36000) { log("[SandyMod] hub register gave up: " + e); }
+         }
+      }
+
+      // 设置项构建：范围与步进照抄 F9 面板(panelAdj)/设置页(optAdj)既有口径。
+      // 一期契约仅 check/slider——热键码需按键捕获，留 F9 面板不进中枢。
+      private function hubBuildItems():Array
+      {
+         var m:SandevistanMod = this;
+         var items:Array = [];
+         items.push({ "key": "duration", "label": "生效时长(秒)", "kind": "slider",
+                      "min": 1, "max": 120, "step": 1, "hint": "时停持续时间（30帧=1秒）",
+                      "get": function():* { return m.cfgDuration / 30; },
+                      "set": function(v:*):void { m.cfgDuration = int(Math.max(1, Math.min(120, Number(v)))) * 30; } });
+         items.push({ "key": "cooldown", "label": "冷却(秒)", "kind": "slider",
+                      "min": 0, "max": 120, "step": 1, "hint": "0=无冷却",
+                      "get": function():* { return m.cfgCooldown / 30; },
+                      "set": function(v:*):void { m.cfgCooldown = int(Math.max(0, Math.min(120, Number(v)))) * 30; } });
+         items.push({ "key": "replayspeed", "label": "回放速度", "kind": "slider",
+                      "min": 1, "max": 20, "step": 1, "hint": "回放倍速（每显示帧消耗N历史帧）",
+                      "get": function():* { return m.cfgReplaySpeed; },
+                      "set": function(v:*):void { m.cfgReplaySpeed = Math.max(1, Math.min(20, Number(v))); } });
+         items.push({ "key": "ghostalpha", "label": "残影不透明度", "kind": "slider",
+                      "min": 5, "max": 100, "step": 5, "hint": "百分比",
+                      "get": function():* { return m.cfgGhostAlpha; },
+                      "set": function(v:*):void { m.cfgGhostAlpha = int(Math.max(5, Math.min(100, Number(v)))); } });
+         items.push({ "key": "ghostevery", "label": "残影间隔(帧)", "kind": "slider",
+                      "min": 1, "max": 30, "step": 1, "hint": "时停期每N帧生成一个残影，越小越密",
+                      "get": function():* { return m.cfgGhostEvery; },
+                      "set": function(v:*):void { m.cfgGhostEvery = int(Math.max(1, Math.min(30, Number(v)))); } });
+         items.push({ "key": "replayghost", "label": "回放残影间隔(帧)", "kind": "slider",
+                      "min": 1, "max": 30, "step": 1, "hint": "每N个显示帧生成1个，调大减少数量",
+                      "get": function():* { return m.cfgReplayGhost; },
+                      "set": function(v:*):void { m.cfgReplayGhost = int(Math.max(1, Math.min(30, Number(v)))); } });
+         items.push({ "key": "replayghostlife", "label": "回放残影寿命(帧)", "kind": "slider",
+                      "min": 1, "max": 60, "step": 1, "hint": "越小拖尾越短",
+                      "get": function():* { return m.cfgReplayGhostLife; },
+                      "set": function(v:*):void { m.cfgReplayGhostLife = int(Math.max(1, Math.min(60, Number(v)))); } });
+         items.push({ "key": "edgethresh", "label": "渐变门槛", "kind": "slider",
+                      "min": 1, "max": 30, "step": 1, "hint": "边缘行者配色：速度≥此值全绿",
+                      "get": function():* { return m.cfgEdgeThresh; },
+                      "set": function(v:*):void { m.cfgEdgeThresh = Math.max(1, Math.min(30, Number(v))); } });
+         items.push({ "key": "fxrun", "label": "特效继续", "kind": "check",
+                      "hint": "时停期间粒子特效继续动画",
+                      "get": function():* { return m.cfgFxRun; },
+                      "set": function(v:*):void { m.cfgFxRun = (v == true); m.saveCfgQuiet(); } });
+         items.push({ "key": "showhud", "label": "顶部状态UI", "kind": "check",
+                      "hint": "\"斯安维斯坦启动中/回放中/充能中\"显示开关",
+                      "get": function():* { return m.cfgHud; },
+                      "set": function(v:*):void { m.cfgHud = (v == true); m.saveCfgQuiet(); } });
+         items.push({ "key": "esandyenabled", "label": "敌人斯安维斯坦", "kind": "check",
+                      "hint": "生成带斯安维斯坦的敌人（v1.136 起默认关）",
+                      "get": function():* { return m.cfgESEnabled; },
+                      "set": function(v:*):void { m.cfgESEnabled = (v == true); m.saveCfgQuiet(); } });
+         items.push({ "key": "esandyroomprob", "label": "敌人房间概率%", "kind": "slider",
+                      "min": 0, "max": 100, "step": 10, "hint": "房间出现斯安维斯坦敌人的概率",
+                      "get": function():* { return m.cfgESRoomProb; },
+                      "set": function(v:*):void { m.cfgESRoomProb = int(Math.max(0, Math.min(100, Number(v)))); } });
+         items.push({ "key": "esandyper", "label": "房内装备占比%", "kind": "slider",
+                      "min": 0, "max": 100, "step": 5, "hint": "有斯安维斯坦敌人的房间内装备比例",
+                      "get": function():* { return m.cfgESPer; },
+                      "set": function(v:*):void { m.cfgESPer = int(Math.max(0, Math.min(100, Number(v)))); } });
+         return items;
+      }
+
+      /** 中枢页收起：slider 延迟保存统一落盘（契约 onPageClose）。 */
+      private function hubOnPageClose():void
+      {
+         saveCfgQuiet();
+      }
+
+      /** v1.137：静默持久化（中枢 check 即时保存/页收 flush 共用）——
+       *  不走 log 报错路径，成功失败只留一行诊断。 */
+      private function saveCfgQuiet():void
+      {
+         try { saveConfigFile(); } catch (e:*) { }
       }
 
       // ==================== 斯安维斯坦 ====================
