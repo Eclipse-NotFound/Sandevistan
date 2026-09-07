@@ -3,6 +3,12 @@
 > 协议见 GOVERNANCE.md §8：只追加不改写，**新条目插在最上面**。
 > 逐版本历史在 decisions/changelog.md（112+ 条，新行插前）；本日志记会话级脉络。
 
+## 2026-09-07 v1.139 时停主题曲（断点续播）
+
+- 做了什么：应用户需求实现时停 BGM——startSandy 沿播放 release/sandy_theme.mp3，回放结束沿 90 帧线性淡出；断点续播（淡出停止时记 channel.position，再次时停从断点起播，播完整首归零，会话内有效）；还在放时取消淡出恢复音量。musicon/musicvol/musicfade 三键进 config/F9（13 项）/设置页/MSW 模组页（16 项）。mp3 不入 git（gitignore+仓库侧同步）。真机 round 12：SUMMARY pass=22 fail=0 skip=0。
+- 关键决定/发现：①状态沿检测（prevSandyActive/prevReplaying）挂 onFrameInner，不入侵 startSandy/endReplay 热函数——测试直调与玩家按键两条路径统一覆盖；②断点取"实际停止位置"（含淡出段）而非淡出起点——避免淡出尾音全音量重播的突兀；③孤儿兜底：无时停无回放但在放 60 帧自动补淡出，防错误路径漏关；④ADL 测试环境特效期掉帧明显（时停+回放实际帧率远低于 30），音乐按墙钟走导致歌位置与游戏帧时间脱钩——断点设计天然兼容。
+- 遗留/下一步：用户实机听感验收（音量 70% 是否合适、淡出 3 秒手感）；其余同 MEMORY §6。
+
 ## 2026-09-05 v1.138 设置中枢接入打通（父域对象会合点）
 
 - 做了什么：按 MSW 侧 7d9a6ef 的方案切换注册通道——载体 MSWModAPICarrier（挂 main 下，modAPI=hub）优先，getDefinition 降备用；补端到端断言（宿主登记簿 getPages() 反查 sandevistan 页 13 项）；真机 round 11：tries=1 命中，SUMMARY pass=18 fail=0 skip=0。

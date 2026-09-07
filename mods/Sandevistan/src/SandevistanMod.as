@@ -24,6 +24,11 @@ package
    import flash.geom.ColorTransform;
    import flash.geom.Matrix;
    import flash.geom.Rectangle;
+   import flash.media.Sound;
+   import flash.media.SoundChannel;
+   import flash.media.SoundTransform;
+   import flash.events.IOErrorEvent;
+   import flash.net.URLRequest;
    import flash.system.ApplicationDomain;
    import flash.text.TextField;
    import flash.text.TextFormat;
@@ -197,6 +202,10 @@ package
       private var cfgESPer:int = 50;             // v1.119：每房间装备百分比（50=一半；0=关闭；100=全部）
       private var cfgESEnabled:Boolean = false;  // v1.136：默认关（用户要求——不生成斯安维斯坦敌人）；config/F9/设置页可开
       private var cfgESRoomProb:int = 100;       // v1.131：房间出现斯安维斯坦敌人的概率%（100=每个候选房间都有）
+      // ===== v1.139：时停主题曲 =====
+      private var cfgMusicOn:Boolean = true;     // 主题曲开关（默认开，用户选定）
+      private var cfgMusicVol:int = 70;          // 音量 0-100%（独立于游戏音效，默认 70）
+      private var cfgMusicFade:int = 90;         // 回放结束后淡出帧数（默认 90 = 3 秒）
       private var esClasses:Array = [];          // 白名单类名（config enemysandy 解析）
       private var esEnemies:Dictionary = new Dictionary(); // 敌人 → {st,left,cd,px,py}
       private var esRoomCnt:Object = {};         // v1.119：roomId → 已装备敌人数（名额=房间候选数×esandyper%）
@@ -408,7 +417,7 @@ package
          // v1.101：版本标记——日志确认实际加载运行的构建版本与关键开关
          // v1.121：追加 esmark/esper/espd——排查"徽标不可见"类问题的第一手数据
          // v1.127：swaprun/projhits 已迁移 mods/MoreSkills&Weapons（此处不再输出）
-         inst.log("[SandyMod] v1.138 loaded"
+         inst.log("[SandyMod] v1.139 loaded"
              + " esmark=" + (inst.cfgESMark ? 1 : 0) + " esghost=" + (inst.cfgESGhost ? 1 : 0) + " esper=" + inst.cfgESPer
              + " esen=" + (inst.cfgESEnabled ? 1 : 0) + " esprob=" + inst.cfgESRoomProb);
          if (main != null && main.stage != null)
@@ -423,6 +432,7 @@ package
 
          }
          inst.log("[SandyMod] hooks registered");
+         inst.loadThemeSound();
          if (inst.cfgShowMark)
          {
             inst.showBootMark(main);
@@ -441,7 +451,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.138 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.139 已加载 (按 \ 触发斯安维斯坦)";
             t.autoSize = "left";   // v1.110：版本号此前显示不全（TextField 默认宽度截断）
             t.x = 10;
             t.y = 10;
@@ -527,6 +537,13 @@ package
          if (isNaN(cfgESGhostLife)) cfgESGhostLife = 12;   // v1.122：敌人残影寿命
          if (cfgESGhostLife < 1) cfgESGhostLife = 1;
          if (cfgESGhostLife > 120) cfgESGhostLife = 120;
+         // v1.139：主题曲
+         if (isNaN(cfgMusicVol)) cfgMusicVol = 70;
+         if (cfgMusicVol < 0) cfgMusicVol = 0;
+         if (cfgMusicVol > 100) cfgMusicVol = 100;
+         if (isNaN(cfgMusicFade)) cfgMusicFade = 90;
+         if (cfgMusicFade < 30) cfgMusicFade = 30;
+         if (cfgMusicFade > 600) cfgMusicFade = 600;
          esClasses = [];
          var arrES:Array = cfgEnemySandy.split(",");
          for (var iES:int = 0; iES < arrES.length; iES++)
@@ -612,6 +629,9 @@ package
             else if (k == "esandyper") cfgESPer = parseInt(v);
             else if (k == "esandyenabled") cfgESEnabled = v.toLowerCase() == "1" || v.toLowerCase() == "true";
             else if (k == "esandyroomprob") cfgESRoomProb = parseInt(v);
+            else if (k == "musicon") cfgMusicOn = v.toLowerCase() == "1" || v.toLowerCase() == "true";
+            else if (k == "musicvol") cfgMusicVol = parseInt(v);
+            else if (k == "musicfade") cfgMusicFade = parseInt(v);
          }
       }
 
@@ -721,6 +741,13 @@ package
          // 注：疾跑切枪（swaprun）拦截在 KEY_DOWN 事件层（onKey）——游戏
          // World.step 的 ENTER_FRAME 先于模组注册，帧层拦截永远晚于游戏
          // 按键处理（v1.100 教训，见 onKey 内 v1.104 注释）。
+
+         // v1.139：主题曲状态沿——时停开始沿放/续播，回放结束沿淡出
+         tickMusic();
+         if (sandyActive && !prevSandyActive) { playTheme(); }
+         if (!replaying && prevReplaying) { fadeTheme(); }
+         prevSandyActive = sandyActive;
+         prevReplaying = replaying;
 
          // v1.89：投掷物击落**独立化**——常规游戏（无时停/回放）中每帧
          // 也执行判定：射击手雷/导弹/榴弹至血量归零随时引爆（projhits
@@ -1178,8 +1205,8 @@ package
                   {
                      if (ln8.replace(/^\s+|\s+$/g, "") != "") { nonEmpty8++; }
                   }
-                  // 行构成：标题 + 10 个条目(0-9) + 空行 + 提示 = 非空 12 行
-                  testAssert("opt-page-10-items", nonEmpty8 == 12, "nonEmptyLines=" + nonEmpty8);
+                  // 行构成：标题 + 13 个条目(0-12) + 空行 + 提示 = 非空 15 行
+                  testAssert("opt-page-13-items", nonEmpty8 == 15, "nonEmptyLines=" + nonEmpty8);
                   testAssert("opt-esandy-default-off", norm8.indexOf("敌人斯安维斯坦 关") >= 0,
                              "esen=" + cfgESEnabled + " raw=[" + norm8.replace(/\r?\n/g, "|") + "]");
                   try { world.pip.onoff(-1); } catch (e11:*) { }
@@ -1212,8 +1239,38 @@ package
                              "esen=" + cfgESEnabled);
                   togglePanel(false);
                   testSub = 0;
-                  testStage = 10;
+                  testStage = 11;
                   testTicks = 0;
+               }
+            }
+            else if (testStage == 11)
+            {
+               // v1.139：第二周目——第二次 startSandy 应从断点续播主题曲
+               testPipGuard();
+               if (testSub == 0)
+               {
+                  try { world.gg.controlOn(); } catch (eS2:*) { }
+                  if (inGameplay())
+                  {
+                     startSandy();
+                     log("[TEST] second sandy cycle (music resume check)");
+                     testSub = 1;
+                     testTicks = 0;
+                  }
+                  else if (++testTicks > 300)
+                  {
+                     testAssert("second-sandy", false, "not in gameplay");
+                     testStage = 10; testSub = 0; testTicks = 0;
+                  }
+               }
+               else if (testSub == 1)
+               {
+                  // 时停自然结束→回放→回放结束（第二次淡出）后收尾
+                  testTicks++;
+                  if (testTicks > 900 || (!sandyActive && !replaying && testTicks > 90))
+                  {
+                     testStage = 10; testSub = 0; testTicks = 0;
+                  }
                }
             }
             else if (testStage == 10)
@@ -1239,7 +1296,7 @@ package
                         {
                            if (pages[ip]["modId"] == "sandevistan") { foundI = ip; }
                         }
-                        testAssert("hub-page-listed", foundI >= 0 && pages[foundI]["items"].length == 13,
+                        testAssert("hub-page-listed", foundI >= 0 && pages[foundI]["items"].length == 16,
                                    "pages=" + pages.length + " foundIdx=" + foundI
                                    + (foundI >= 0 ? " items=" + pages[foundI]["items"].length : ""));
                      }
@@ -1250,7 +1307,12 @@ package
                      testSkipCnt++;
                      log("[TEST-ASSERT] hub-registered=SKIP (cross-domain blocked; retry standing, tries=" + hubRegTries + ")");
                   }
-                  testAssert("hub-items-13", hubBuildItems().length == 13, "n=" + hubBuildItems().length);
+                  testAssert("hub-items-16", hubBuildItems().length == 16, "n=" + hubBuildItems().length);
+                  // v1.139：主题曲链路断言（start/断点续播/fade/stop 旗标由音乐模块埋设）
+                  testAssert("music-start", musStartSeen, "");
+                  testAssert("music-resume-breakpoint", musResumeSeen, "lastPos=" + int(musLastPos));
+                  testAssert("music-fade", musFadeSeen, "");
+                  testAssert("music-stop", musStopSeen, "");
                   log("[TEST] SUMMARY pass=" + testPass + " fail=" + testFail + " skip=" + testSkipCnt
                       + (testFail > 0 ? " failed=[" + testFailNames + "]" : ""));
                   log("[TEST] done");
@@ -1609,6 +1671,23 @@ package
             // v1.131：有斯安维斯坦敌人的房间内装备占比（0-100%，步进 5%）
             cfgESPer = Math.max(0, Math.min(100, cfgESPer + dir * 5));
          }
+         else if (optSel == 10)
+         {
+            // v1.139：主题曲开关
+            cfgMusicOn = !cfgMusicOn;
+            if (!cfgMusicOn) { musHardStop(); }
+         }
+         else if (optSel == 11)
+         {
+            // v1.139：主题曲音量（0-100%，步进 5%）
+            cfgMusicVol = Math.max(0, Math.min(100, cfgMusicVol + dir * 5));
+            applyMusVol(musFadeLeft > 0 ? musFadeLeft / Math.max(1, cfgMusicFade) : 1);
+         }
+         else if (optSel == 12)
+         {
+            // v1.139：主题曲淡出时长（30-600 帧，步进 15 帧 = 0.5 秒）
+            cfgMusicFade = Math.max(30, Math.min(600, cfgMusicFade + dir * 15));
+         }
       }
 
       private function renderOptPanel():void
@@ -1628,6 +1707,9 @@ package
             lines.push((optSel == 7 ? "> " : "  ") + "敌人斯安维斯坦 " + (cfgESEnabled ? "开" : "关"));
             lines.push((optSel == 8 ? "> " : "  ") + "敌人房间概率 " + cfgESRoomProb + "%");
             lines.push((optSel == 9 ? "> " : "  ") + "房内装备占比 " + cfgESPer + "%");
+            lines.push((optSel == 10 ? "> " : "  ") + "时停主题曲 " + (cfgMusicOn ? "开" : "关"));
+            lines.push((optSel == 11 ? "> " : "  ") + "主题曲音量 " + cfgMusicVol + "%");
+            lines.push((optSel == 12 ? "> " : "  ") + "主题曲淡出 " + (cfgMusicFade / 30).toFixed(1) + "s");
             lines.push("");
             lines.push("上下选择 左右调值 Enter保存");
             optTf.text = lines.join(String.fromCharCode(10));
@@ -3777,8 +3859,8 @@ package
       private function panelKey(kc:int):void
       {
          if (kc == Keyboard.ESCAPE || kc == cfgPanelKey) { togglePanel(false); return; }
-         if (kc == Keyboard.UP) { panelSel = (panelSel + 10 - 1) % 10; return; }
-         if (kc == Keyboard.DOWN) { panelSel = (panelSel + 1) % 10; return; }
+         if (kc == Keyboard.UP) { panelSel = (panelSel + 13 - 1) % 13; return; }
+         if (kc == Keyboard.DOWN) { panelSel = (panelSel + 1) % 13; return; }
          if (kc == Keyboard.LEFT) { panelAdj(-1); return; }
          if (kc == Keyboard.RIGHT) { panelAdj(1); return; }
          if (kc == Keyboard.ENTER) { togglePanel(false); return; }
@@ -3798,6 +3880,13 @@ package
             case 7: cfgESEnabled = !cfgESEnabled; break;                 // v1.131：敌人斯安维斯坦总开关
             case 8: cfgESRoomProb = Math.max(0, Math.min(100, cfgESRoomProb + dir * 10)); break;  // 房间出现概率
             case 9: cfgESPer = Math.max(0, Math.min(100, cfgESPer + dir * 5)); break;            // 房内装备占比
+            // v1.139：主题曲
+            case 10: cfgMusicOn = !cfgMusicOn; if (!cfgMusicOn) { musHardStop(); } break;
+            case 11:
+               cfgMusicVol = Math.max(0, Math.min(100, cfgMusicVol + dir * 5));
+               applyMusVol(musFadeLeft > 0 ? musFadeLeft / Math.max(1, cfgMusicFade) : 1);
+               break;
+            case 12: cfgMusicFade = Math.max(30, Math.min(600, cfgMusicFade + dir * 15)); break;
          }
       }
 
@@ -3805,7 +3894,7 @@ package
       {
          if (panelTf == null) return;
          var lines:Array = [];
-         lines.push("== SandevistanMod v1.138 参数 ==");
+         lines.push("== SandevistanMod v1.139 参数 ==");
          lines.push((panelSel == 0 ? "> " : "  ") + "生效时长   " + (cfgDuration / 30).toFixed(1) + "s");
          lines.push((panelSel == 1 ? "> " : "  ") + "冷却       " + (cfgCooldown / 30).toFixed(1) + "s");
          lines.push((panelSel == 2 ? "> " : "  ") + "回放速度   x" + cfgReplaySpeed);
@@ -3816,6 +3905,9 @@ package
          lines.push((panelSel == 7 ? "> " : "  ") + "敌人斯安维斯坦 " + (cfgESEnabled ? "开" : "关"));
          lines.push((panelSel == 8 ? "> " : "  ") + "敌人房间概率 " + cfgESRoomProb + "%");
          lines.push((panelSel == 9 ? "> " : "  ") + "房内装备占比 " + cfgESPer + "%");
+         lines.push((panelSel == 10 ? "> " : "  ") + "时停主题曲 " + (cfgMusicOn ? "开" : "关"));
+         lines.push((panelSel == 11 ? "> " : "  ") + "主题曲音量 " + cfgMusicVol + "%");
+         lines.push((panelSel == 12 ? "> " : "  ") + "主题曲淡出 " + (cfgMusicFade / 30).toFixed(1) + "s");
          lines.push("");
          lines.push("上下选择 左右调节 Enter保存 Esc关闭");
          panelTf.text = lines.join(String.fromCharCode(10));
@@ -3855,8 +3947,11 @@ package
          sb.push("esandyghostlife=" + cfgESGhostLife);
          sb.push("esandymark=" + (cfgESMark ? 1 : 0));
          sb.push("esandyper=" + cfgESPer);
-         sb.push("esandyenabled=" + (cfgESEnabled ? 1 : 0));
-         sb.push("esandyroomprob=" + cfgESRoomProb);
+            sb.push("esandyenabled=" + (cfgESEnabled ? 1 : 0));
+            sb.push("esandyroomprob=" + cfgESRoomProb);
+            sb.push("musicon=" + (cfgMusicOn ? 1 : 0));
+            sb.push("musicvol=" + cfgMusicVol);
+            sb.push("musicfade=" + cfgMusicFade);
          sb.push("fxrun=" + (cfgFxRun ? 1 : 0));
          sb.push("showmark=" + (cfgShowMark ? 1 : 0));
          sb.push("showhud=" + (cfgHud ? 1 : 0));
@@ -3998,6 +4093,19 @@ package
                       "min": 0, "max": 100, "step": 5, "hint": "有斯安维斯坦敌人的房间内装备比例",
                       "get": function():* { return m.cfgESPer; },
                       "set": function(v:*):void { m.cfgESPer = int(Math.max(0, Math.min(100, Number(v)))); } });
+         // v1.139：主题曲
+         items.push({ "key": "musicon", "label": "时停主题曲", "kind": "check",
+                      "hint": "时停+回放期间播放主题曲（sandy_theme.mp3），回放结束淡出",
+                      "get": function():* { return m.cfgMusicOn; },
+                      "set": function(v:*):void { m.cfgMusicOn = (v == true); if (!m.cfgMusicOn) { m.musHardStop(); } m.saveCfgQuiet(); } });
+         items.push({ "key": "musicvol", "label": "主题曲音量%", "kind": "slider",
+                      "min": 0, "max": 100, "step": 5, "hint": "独立于游戏音效音量",
+                      "get": function():* { return m.cfgMusicVol; },
+                      "set": function(v:*):void { m.cfgMusicVol = int(Math.max(0, Math.min(100, Number(v)))); m.applyMusVol(m.musFadeLeft > 0 ? m.musFadeLeft / Math.max(1, m.cfgMusicFade) : 1); m.saveCfgQuiet(); } });
+         items.push({ "key": "musicfade", "label": "主题曲淡出(帧)", "kind": "slider",
+                      "min": 30, "max": 600, "step": 15, "hint": "回放结束后淡出时长（30帧=1秒）",
+                      "get": function():* { return m.cfgMusicFade; },
+                      "set": function(v:*):void { m.cfgMusicFade = int(Math.max(30, Math.min(600, Number(v)))); m.saveCfgQuiet(); } });
          return items;
       }
 
@@ -4007,11 +4115,174 @@ package
          saveCfgQuiet();
       }
 
-      /** v1.137：静默持久化（中枢 check 即时保存/页收 flush 共用）——
+      /** v1.139：静默持久化（中枢 check 即时保存/页收 flush 共用）——
        *  不走 log 报错路径，成功失败只留一行诊断。 */
       private function saveCfgQuiet():void
       {
          try { saveConfigFile(); } catch (e:*) { }
+      }
+
+      // ==================== v1.139：时停主题曲 ====================
+      // 用户选定行为：仅玩家时停触发（startSandy 唯一入口，经 onFrameInner
+      // 状态沿检测）；还在放（含淡出中）→ 取消淡出恢复音量继续放；已停 →
+      // 从上次实际停止位置续播（断点，自然播完整首则归零；会话内有效，重启
+      // 归零）；回放结束（endReplay 后回放沿）线性淡出。独立 SoundTransform，
+      // 不受游戏音量影响；文件缺失/加载失败全程静默降级。
+      private var musSound:Sound = null;
+      private var musChan:SoundChannel = null;
+      private var musFadeLeft:int = 0;           // >0 = 淡出剩余帧
+      private var musLastPos:Number = 0;         // 断点（ms）
+      private var musFailed:Boolean = false;     // 加载失败——静默禁用
+      private var musOrphanT:int = 0;            // 无时停无回放但音乐在放的兜底计时
+      private var musStartSeen:Boolean = false;  // 测试断言旗标
+      private var musFadeSeen:Boolean = false;
+      private var musStopSeen:Boolean = false;
+      private var musResumeSeen:Boolean = false;
+      private var prevSandyActive:Boolean = false;   // v1.139：时停状态沿检测
+      private var prevReplaying:Boolean = false;     // v1.139：回放状态沿检测
+
+      // init 时预加载：第一次时停不承担 10MB 读取延迟
+      private function loadThemeSound():void
+      {
+         var r:String = null;
+         try
+         {
+            var f:File = File.applicationDirectory.resolvePath("mods/Sandevistan/release/sandy_theme.mp3");
+            if (!f.exists)
+            {
+               r = "absent";
+            }
+            else
+            {
+               musSound = new Sound();
+               musSound.addEventListener(IOErrorEvent.IO_ERROR, onMusLoadError);
+               musSound.load(new URLRequest(f.url));
+               r = "loading";
+            }
+         }
+         catch (e:*) { musFailed = true; r = "threw " + e; }
+         log("[MUSIC] theme preload: " + r);
+      }
+
+      private function onMusLoadError(e:Event):void
+      {
+         musFailed = true;
+         log("[MUSIC] theme load error, feature silent");
+      }
+
+      // 时停沿：开始/续播
+      private function playTheme():void
+      {
+         try
+         {
+            if (!cfgMusicOn || musFailed || musSound == null) return;
+            if (musChan != null)
+            {
+               // 还在放：淡出中则取消淡出恢复音量，不打断
+               if (musFadeLeft > 0)
+               {
+                  musFadeLeft = 0;
+                  applyMusVol(1);
+                  log("[MUSIC] defade resume @" + int(musChan.position));
+               }
+               return;
+            }
+            var len:Number = 0;
+            try { len = musSound.length; } catch (eL:*) { }
+            // 断点续播：上次位置有效（且未到歌尾）则从断点起，否则从头
+            var off:Number = (musLastPos > 0 && (len <= 0 || musLastPos < len - 500)) ? musLastPos : 0;
+            musChan = musSound.play(off);
+            if (musChan == null) { musLastPos = 0; return; }
+            musChan.addEventListener(Event.SOUND_COMPLETE, onMusComplete);
+            applyMusVol(1);
+            if (off > 0) { musResumeSeen = true; }
+            musStartSeen = true;
+            log("[MUSIC] start @" + int(off) + (off > 0 ? " (resume)" : ""));
+         }
+         catch (e:*) { log("[MUSIC] play error: " + e); }
+      }
+
+      // 回放结束沿：开始淡出
+      private function fadeTheme():void
+      {
+         try
+         {
+            if (musChan == null || musFadeLeft > 0) return;
+            musFadeLeft = Math.max(1, cfgMusicFade);
+            musFadeSeen = true;
+            log("[MUSIC] fade @" + int(musChan.position) + " over " + musFadeLeft + "f");
+         }
+         catch (e:*) { }
+      }
+
+      // 每帧：淡出推进 + 孤儿兜底（无时停无回放但音乐在放超过 60 帧 → 补淡出，
+      // 防 endReplay 未达的错误路径把歌留在外面）
+      private function tickMusic():void
+      {
+         try
+         {
+            if (musChan == null) { musOrphanT = 0; return; }
+            if (musFadeLeft > 0)
+            {
+               musFadeLeft--;
+               if (musFadeLeft <= 0)
+               {
+                  musLastPos = musChan.position;   // 断点 = 实际停止位置（含淡出段）
+                  musChan.removeEventListener(Event.SOUND_COMPLETE, onMusComplete);
+                  musChan.stop();
+                  musChan = null;
+                  musStopSeen = true;
+                  log("[MUSIC] stopped, breakpoint @" + int(musLastPos));
+                  return;
+               }
+               applyMusVol(musFadeLeft / Math.max(1, cfgMusicFade));
+               return;
+            }
+            if (!sandyActive && !replaying)
+            {
+               if (++musOrphanT == 60) { log("[MUSIC] orphan playback, fading"); fadeTheme(); }
+            }
+            else { musOrphanT = 0; }
+         }
+         catch (e:*) { }
+      }
+
+      private function applyMusVol(k:Number):void
+      {
+         try
+         {
+            if (musChan == null) return;
+            var v:Number = Math.max(0, Math.min(1, k)) * (cfgMusicVol / 100);
+            musChan.soundTransform = new SoundTransform(v);
+         }
+         catch (e:*) { }
+      }
+
+      // musicon 关闭时立即停（断点保留，重开后从断点续）
+      private function musHardStop():void
+      {
+         try
+         {
+            if (musChan != null)
+            {
+               musLastPos = musChan.position;
+               musChan.removeEventListener(Event.SOUND_COMPLETE, onMusComplete);
+               musChan.stop();
+               musChan = null;
+            }
+            musFadeLeft = 0;
+            log("[MUSIC] hard stop, breakpoint @" + int(musLastPos));
+         }
+         catch (e:*) { }
+      }
+
+      private function onMusComplete(e:Event):void
+      {
+         // 自然播完整首：断点归零（下次从头），通道作废
+         musChan = null;
+         musLastPos = 0;
+         musFadeLeft = 0;
+         log("[MUSIC] complete, breakpoint reset");
       }
 
       // ==================== 斯安维斯坦 ====================
@@ -6944,8 +7215,8 @@ package
          // ===== 选项页模组设置面板（主菜单/游戏内 Options 页）=====
          if (optPanelOn)
          {
-            if (e.keyCode == Keyboard.UP) { optSel = (optSel + 10 - 1) % 10; return; }
-            if (e.keyCode == Keyboard.DOWN) { optSel = (optSel + 1) % 10; return; }
+            if (e.keyCode == Keyboard.UP) { optSel = (optSel + 13 - 1) % 13; return; }
+            if (e.keyCode == Keyboard.DOWN) { optSel = (optSel + 1) % 13; return; }
             if (e.keyCode == Keyboard.LEFT) { optAdj(-1); return; }
             if (e.keyCode == Keyboard.RIGHT) { optAdj(1); return; }
             if (e.keyCode == Keyboard.ENTER) { saveConfigFile(); return; }
