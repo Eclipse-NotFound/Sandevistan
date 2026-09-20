@@ -1,5 +1,10 @@
 # Sandevistan —— 开发记忆入口
 
+## 2026-09-20 当前发布覆盖：v1.140
+用户已授权独立 ModSettings 安装及客户端迁移。当前源码/正式 release 为 v1.140（49928 字节，SHA256 0506615963176D937C596F43B8FF6D865B3BAC5D2DECE8490A47629D65A9A0BA），通过 ModSettingsCarrier 直接注册 16 项，移除旧 MSW 类名备用路径；独立面板打开时旧选项浮层让位，F9/配置/时停玩法保持。下文 v1.139 及 MSW 宿主叙述为历史。
+完整组合 27 项 + 重启 4 项、无 MSW 组合 20 项 + 重启 4 项通过；正式七模组同字节副本启动、frames=900、入口响应通过。测试未写真实 pfe 存档。当前根 pfe 已有独立第七个 loader，用户需正常重启。
+源码先提交 3727c65，再定向同步本次源码/说明/状态/release，不执行可能覆盖公共库的全量镜像。源 release 回滚：build/out/SandevistanMod.before-v1.140-20260920.swf。整套迁移回滚与结果见游戏 mods/ModSettings/knowledge/experiments/2026-09-20-migration.md；应同时恢复旧宿主与客户端，不能单独混装。
+
 > 新会话从这里开始。协议见工作区 GOVERNANCE.md §8；本模组参数与镜像特例见 ../AGENT_SCOPE.md。
 
 ## 1. 这个模组是什么
