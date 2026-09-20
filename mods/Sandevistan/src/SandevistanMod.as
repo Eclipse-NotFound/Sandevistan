@@ -320,10 +320,10 @@ package
       private var testGgY:Number = 0;
       private var testErrDiag:int = 0;                   // v1.136：verror 解冻诊断计数
       private var testDone:Boolean = false;              // v1.136：SUMMARY 已输出
-      // ===== v1.137：MSW 设置中枢（哔哔小马"模组"页）注册 =====
+      // ===== v1.140：独立 ModSettings 中枢注册 =====
       private var hubRegistered:Boolean = false;         // 已注册成功（幂等，不再重试）
-      private var hubViaCarrier:Boolean = false;         // v1.138：经 MSWModAPICarrier 会合点注册
-      private var hubRegTries:int = 0;                   // 注册重试帧计数（≤300，契约见 MSW design/mod-settings-hub.md §3.3）
+      private var hubViaCarrier:Boolean = false;         // v1.138：经 ModSettingsCarrier 会合点注册
+      private var hubRegTries:int = 0;                   // 注册重试帧计数（≤300，契约见 ModSettings/README.md）
 
       // 彩虹色调色板（边缘行者风格，高饱和）—— alpha 由 config ghostalpha 控制
       private function palette(idx:int):ColorTransform
@@ -417,7 +417,7 @@ package
          // v1.101：版本标记——日志确认实际加载运行的构建版本与关键开关
          // v1.121：追加 esmark/esper/espd——排查"徽标不可见"类问题的第一手数据
          // v1.127：swaprun/projhits 已迁移 mods/MoreSkills&Weapons（此处不再输出）
-         inst.log("[SandyMod] v1.139 loaded"
+         inst.log("[SandyMod] v1.140 loaded"
              + " esmark=" + (inst.cfgESMark ? 1 : 0) + " esghost=" + (inst.cfgESGhost ? 1 : 0) + " esper=" + inst.cfgESPer
              + " esen=" + (inst.cfgESEnabled ? 1 : 0) + " esprob=" + inst.cfgESRoomProb);
          if (main != null && main.stage != null)
@@ -451,7 +451,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.139 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.140 已加载 (按 \ 触发斯安维斯坦)";
             t.autoSize = "left";   // v1.110：版本号此前显示不全（TextField 默认宽度截断）
             t.x = 10;
             t.y = 10;
@@ -675,9 +675,8 @@ package
             stepDebugTest();
          }
 
-         // v1.137：MSW 设置中枢注册——加载链 Sandy 在 MSW 之前且 MSW 在开机链
-         // 末尾才加载，重试窗口必须覆盖整个开机期（36000 帧上限，每 10 帧一发
-         // 节流）；未安装 MSW 时静默跳过，F9 面板照常可用
+         // 独立 ModSettings 异步加载；36000 帧内每 10 帧重试一次。
+         // 未安装设置中枢时静默跳过，F9 面板照常可用。
          if (!hubRegistered && hubRegTries < 36000)
          {
             hubRegTries++;
@@ -1289,7 +1288,7 @@ package
                      // 端到端：从宿主登记簿反查本页（13 项）——证明宿主真正收到了
                      try
                      {
-                        var cP:* = world.main.getChildByName("MSWModAPICarrier");
+                        var cP:* = world.main.getChildByName("ModSettingsCarrier");
                         var pages:Array = cP["modAPI"]["getPages"]();
                         var foundI:int = -1;
                         for (var ip:int = 0; ip < pages.length; ip++)
@@ -1566,6 +1565,16 @@ package
             }
          }
          catch (e:*) { }
+         // The independent panel owns this space while open; F9 stays available.
+         if (on && hubRegistered)
+         {
+            try
+            {
+               var settingsCarrier:* = world.main.getChildByName("ModSettingsCarrier");
+               if (settingsCarrier != null && settingsCarrier.modAPI.isOpen()) on = false;
+            }
+            catch (settingsError:*) { }
+         }
          if (on != optPanelOn)
          {
             optPanelOn = on;
@@ -3894,7 +3903,7 @@ package
       {
          if (panelTf == null) return;
          var lines:Array = [];
-         lines.push("== SandevistanMod v1.139 参数 ==");
+         lines.push("== SandevistanMod v1.140 参数 ==");
          lines.push((panelSel == 0 ? "> " : "  ") + "生效时长   " + (cfgDuration / 30).toFixed(1) + "s");
          lines.push((panelSel == 1 ? "> " : "  ") + "冷却       " + (cfgCooldown / 30).toFixed(1) + "s");
          lines.push((panelSel == 2 ? "> " : "  ") + "回放速度   x" + cfgReplaySpeed);
@@ -3988,51 +3997,20 @@ package
       }
 
       // ==================== v1.137：MSW 设置中枢接入 ====================
-      // 契约：MoreSkillsWeaponsMod.settingsRegister(modId, displayName, items,
-      // onPageClose, desc)——配置数据完全由注册方自持（get/set 回调），宿主只
-      // 渲染与转发；check 的 set 即时持久化，slider 拖动只 set，面板收起时
-      // 宿主统一调 onPageClose 供 flush。加载链 Sandy 在 MSW 之前 → 每帧重试。
+      // Independent ModSettings registry; values, F9 and config persistence stay here.
       private function stepHubRegister():void
       {
-         // 通道 ①（v1.138，MSW 7d9a6ef 落地的父域对象会合点）：对象引用
-         // 跨域可用（受限的只是类定义），MSW 把 hub 挂在 main 下名为
-         // MSWModAPICarrier 的动态 MovieClip 上——按名取载体、取 modAPI 直调
          try
          {
-            var c:* = world.main != null ? world.main.getChildByName("MSWModAPICarrier") : null;
-            if (c != null && c["modAPI"] != null && c["modAPI"]["registerPage"] != null)
-            {
-               c["modAPI"]["registerPage"]("sandevistan", "斯安维斯坦",
-                                           hubBuildItems(), hubOnPageClose,
-                                           "时停/回放与残影特效");
-               hubRegistered = true;
-               hubViaCarrier = true;
-               log("[SandyMod] settings hub registered via MSWModAPICarrier (tries=" + hubRegTries + ")");
-               return;
-            }
+            var c:* = world.main != null ? world.main.getChildByName("ModSettingsCarrier") : null;
+            if(c == null || c["modAPI"] == null) return;
+            c["modAPI"]["registerPage"]("sandevistan", "斯安维斯坦",
+               hubBuildItems(), hubOnPageClose, "时停/回放与残影特效");
+            hubRegistered = true;
+            hubViaCarrier = true;
+            log("[SandyMod] settings hub registered via ModSettingsCarrier (tries=" + hubRegTries + ")");
          }
-         catch (e1:*) { }
-         // 通道 ②（备用保留）：若将来 loader 把模组合并进游戏域，类名查找直接可用
-         try
-         {
-            var hc:Class = ApplicationDomain.currentDomain.getDefinition("MoreSkillsWeaponsMod") as Class;
-            if (hc != null && hc["settingsRegister"] != null)
-            {
-               var ok:Boolean = hc["settingsRegister"]("sandevistan", "斯安维斯坦",
-                                                       hubBuildItems(), hubOnPageClose,
-                                                       "时停/回放与残影特效");
-               if (ok)
-               {
-                  hubRegistered = true;
-                  log("[SandyMod] settings hub registered via getDefinition (tries=" + hubRegTries + ")");
-               }
-            }
-         }
-         catch (e:*)
-         {
-            // 宿主未加载（ReferenceError）= 正常重试路径；上限后放弃并记一次
-            if (hubRegTries >= 36000) { log("[SandyMod] hub register gave up: " + e); }
-         }
+         catch(e:*) { if(hubRegTries >= 36000) log("[SandyMod] hub register gave up: " + e); }
       }
 
       // 设置项构建：范围与步进照抄 F9 面板(panelAdj)/设置页(optAdj)既有口径。
