@@ -10,13 +10,13 @@
 
 - 唯一源码仓 D:\RemainsMod（master），项目 mods\Sandevistan；游戏同名目录是镜像。先源仓提交再定向同步；避免全量脚本覆盖公共资料。
 - 先读 design/user-preferences.md。时停正常攻速，保留真实弹药消耗；回放加速攻击、无换弹中断、不二次扣库存。
-- 本轮用户明确要求修复掠夺者、尸鬼等马形生物回放动画僵死，已完成实现和隔离验证，准备同步发布。
+- 本轮用户明确要求修复掠夺者、尸鬼等马形生物回放动画僵死，已完成实现、隔离验证与游戏目录部署。
 - 正式 release/config.txt 保留玩家配置。游戏原始 SWF 和其他模组保持只读；不杀用户实例、不写真实 pfe 存档。用户需正常重启加载新版。
 - 接手前未跟踪的源仓 AGENTS.md 保留，未暂存。代码发布同步更新 MEMORY、journal、changelog、说明。
 
 ## 3. 当前状态
 
-- 源仓正式 release **v1.141**，50,878 字节，SHA256 `F556C0728DA406A4A6A05399DF93E9A0349C4225107547F1E12FE88A2AEE3E48`。当前处于提交后定向同步前。
+- 源仓正式 release **v1.141**，50,878 字节，SHA256 `F556C0728DA406A4A6A05399DF93E9A0349C4225107547F1E12FE88A2AEE3E48`。源仓与游戏发布副本哈希一致；实现提交 f6ac18a，发布后隔离启动通过。
 - 新增 src/SandyBlitReplay.as，通过公开的精灵图和实际身体 Bitmap 精确匹配帧坐标。recordReplayObjects 保存 bp，回放在原 AI/动画处理完成后重绘该帧；不改战斗、弹药和玩家 MovieClip 路径。
 - v1.140 独立 ModSettingsCarrier 注册 16 项，旧 MSW 宿主依赖已移除；F9 继续工作。敌人斯安维斯坦默认关。
 - v1.137 配置有 applicationStorageDirectory 覆盖兜底；v1.139 主题曲默认音量 70、90 帧淡出、实际停止位置续播。release/sandy_theme.mp3 被 gitignore，打包须另带。
@@ -26,7 +26,7 @@
 
 - 旧版已复现：原录像掠夺者 17 种/尸鬼 24 种身体画面，回放均只有 1 种，移动 29 次。只改 idx+1→idx+5 可恢复动作变化，仍 0/30 与录像相符；所以不能仅靠位移重算动画。
 - 新版像素回归：两类敌人 × 五档速度（1/3/5/8/20）以及正常 AI 模式，共 12 组 **574/574 帧**逐像素相同，12 项尸体姿态保护通过。
-- 候选与最终 SWF 各跑一次完整隔离流程：均 **20 PASS / 0 FAIL / 1 SKIP**。覆盖时停/回放、玩家动画、可见/可抓状态、TAB 暂停、F9、主题曲两轮；跳过的是测试实例未安装 ModSettings 的注册。
+- 候选、最终构建、已部署 SWF 各跑一次完整隔离流程：均 **20 PASS / 0 FAIL / 1 SKIP**。覆盖时停/回放、玩家动画、可见/可抓状态、TAB 暂停、F9、主题曲两轮；跳过的是测试实例未安装 ModSettings 的注册。
 - 死亡攻击检查本轮 snapSize=0，不据此宣称新增了死亡攻击覆盖；专用夹具验证的是尸体不被活体录像覆盖。所有怪物/联机/七模组战斗组合未在本轮全面验证。
 - 测试脚本 build/tests/run-replay-animation.ps1；测试代码只注入 build/out 副本，未进入正式 SWF。每次用独立 app id，结束清理自身进程与描述符。
 - 详细证据、失败实验、粗测边界：knowledge/experiments/replay-animation-freeze-2026-09-23.md 与同级 replay-animation-20260923/。
@@ -41,10 +41,10 @@
 
 ## 6. 发布与恢复
 
-- 发布门禁：已正式构建、更新版本、完成核心/流程断言。源 release 有回滚备份，提交后仅同步本次文件，再核对游戏副本哈希与隔离启动。
+- 发布门禁完成：正式构建、版本标记、核心/流程断言、备份、提交后定向同步、哈希校验与发布文件隔离重启均完成。部署日志见 deployed-smoke.txt；没有重启用户实例。
 - 回滚备份：D:\RemainsMod\mods\Sandevistan\build\out\SandevistanMod.before-v1.141-20260923.swf（v1.140，49,928 字节，SHA256 `0506615963176D937C596F43B8FF6D865B3BAC5D2DECE8490A47629D65A9A0BA`）。恢复模组 release 后重启即可；此次没有宿主补丁要回滚。
 - 游戏 pfe.swf 本轮基线 SHA256 `252E7B34FC8BF0DD8CF566F45876597FE999562BE0F2E6AB596215D1A514C6DB`。
-- 当前停点：源仓准备提交；同步及发布启动结果在本节更新。
+- 当前停点：v1.141 已部署；用户正常重启后加载修复。游戏侧旧版备份在 mods/Sandevistan/release/SandevistanMod.before-v1.141-20260923.swf，SHA256 与上述源仓备份相同。
 
 ## 7. 深入了解
 

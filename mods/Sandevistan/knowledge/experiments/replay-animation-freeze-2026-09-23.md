@@ -45,4 +45,4 @@ recordReplayObjects 在已有快照增加 bp；replayObjects 完成原来的 AI/
 
 实机帧比较覆盖掠夺者/尸鬼的上述姿态，不能据此宣布所有怪物、所有特效及联机组合完全验证。独立 ModSettings 的接口未修改；敌人斯安维斯坦继续默认关。
 
-正式版本 v1.141，50,878 字节，SHA256 F556C0728DA406A4A6A05399DF93E9A0349C4225107547F1E12FE88A2AEE3E48；release-smoke.txt 为此最终产物的独立复验，20 PASS/0 FAIL/1 SKIP。部署结果和回滚文件见 state/MEMORY.md。旧的“Blit 动画只能 animate、无法逐帧录像”资料已经追加当前限定，内部动画计数仍不可访问，但公开的渲染结果可精确匹配原图。
+正式版本 v1.141，50,878 字节，SHA256 F556C0728DA406A4A6A05399DF93E9A0349C4225107547F1E12FE88A2AEE3E48；release-smoke.txt 为此最终产物的独立复验，20 PASS/0 FAIL/1 SKIP。从已部署文件再次启动验证，deployed-smoke.txt 同样 20 PASS/0 FAIL/1 SKIP，新版加载标记和完整两轮技能入口有效。部署结果和回滚文件见 state/MEMORY.md。旧的“Blit 动画只能 animate、无法逐帧录像”资料已经追加当前限定，内部动画计数仍不可访问，但公开的渲染结果可精确匹配原图。
