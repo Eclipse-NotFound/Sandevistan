@@ -1,0 +1,20 @@
+Final deployment verified 2026-09-23
+Implementation commits: 58b73e2, eaa5956
+Run: 20260923194628482 / fps=90 / actual installed host + actual installed mod
+Result: 21 PASS / 0 FAIL / 0 SKIP
+Dead-owner observer: new=0 deadOwners=1
+Loader receipt: exactly 2 requested, ok_SandevistanMod and ok_ModSettingsMod, no err_
+Mod source release = installed release = isolated tested copy:
+  51243 bytes / SHA256 2C26EADCFE760EC3BD998DDBEDF0FAD333151E203B0688AF268BDF0612BA0263
+pfe60 installed = isolated tested copy:
+  15099039 bytes / SHA256 D88D19A11B7100491A8EDD6153499AB92D59545C1576693368762C9C0AB7E97B
+Rollback mod: release/SandevistanMod.before-v1.144-20260923.swf
+  SHA256 B8805DBACC9A1313FD96BB68889911195AC6EAFCBB526E50C313B86AD1E9C748
+Rollback host: pfe60_before_sandevistan_v1144_20260923.swf
+  SHA256 FC19AF4A43438273A19D7CFBAC7A1CF584647CE94254F8D503A359C43E81091B
+Final classes: SandevistanMod, fe.serv.SandyHighFpsClock, SandyBlitReplay, SandyHighFpsView, SandyDamagePredictor
+No Gov60 implementation embedded.
+Default pfe.swf, application.xml, app60.xml, manifest and player mod config unchanged.
+At 19:32:27 pfe60.cfg changed externally from fps=60 to fps=90; retained the new configuration.
+Initial null-backup File.Replace attempt failed before target replacement; backups restored and verified.
+Successful redeploy used explicit additional backup paths. Original named backups retained.

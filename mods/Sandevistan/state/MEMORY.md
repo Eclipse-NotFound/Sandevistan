@@ -1,63 +1,56 @@
 # Sandevistan —— 开发记忆入口
 
-> 更新：2026-09-23，v1.144高帧率适配已验证；首次部署因旧测试误判回滚，观察器已修正，正在复验后重新部署。权限见 AGENT_SCOPE.md 与工作区 GOVERNANCE.md。
+> 更新：2026-09-23，v1.144已接入高帧入口并部署，实际90帧复验通过。权限见AGENT_SCOPE.md与工作区GOVERNANCE.md。
 
 ## 1. 这个模组是什么
 
-斯安维斯坦让玩家全速、世界默认 1/5 速，结束后默认 5 倍速重演录像，配合彩色残影及断点续播音乐。入口 SandevistanMod.init(main)。疾跑切枪/投射物击落已在 v1.127 迁出至 MoreSkills&Weapons。
+斯安维斯坦让玩家全速、世界默认1/5速，结束后默认5倍速重演录像，配合彩色残影及断点续播音乐。入口SandevistanMod.init(main)。疾跑切枪/投射物击落已在v1.127迁出至MoreSkills&Weapons。
 
 ## 2. 用户偏好与协作约定
 
-- 最新请求：适配游戏高帧率模式；用户已明确同意接入并部署 pfe60 加载器，保留原默认启动入口。独立F9及旧绿色设置浮层在v1.143已移除。
-
-- 唯一源码仓 D:\RemainsMod（master），项目 mods\Sandevistan；游戏同名目录是镜像。先源仓提交再定向同步，避免全量脚本覆盖公共资料。
+- 最新请求：适配游戏高帧率模式；用户已明确同意接入并部署pfe60加载器，保留默认启动入口。本轮已完成。
+- 唯一源码仓D:/RemainsMod（master），项目mods/Sandevistan；游戏同名目录是镜像。先提交后定向同步，不跑全量镜像脚本覆盖公共资料。
 - design/user-preferences.md：时停正常攻速，保留真实弹药消耗；回放加速攻击、无换弹中断、不二次扣库存。
-- v1.142用户明确“打出足够致死的攻击，敌人仍不出现预判死亡”，要求详细研究并优化；不是玩家死亡问题。上一轮马形敌人动画修复已完成。
-- 正式 release/config.txt 保留玩家配置。游戏原始 SWF/其他模组只读；不杀用户实例、不写真实 pfe 存档。重启游戏才加载新版。
-- 接手前未跟踪的源仓 AGENTS.md 保留，未暂存；代码发布同步 MEMORY、journal、changelog、说明。
+- 用户“死亡判定过严”指足够致死的攻击却不出现预判死亡，v1.142已优化。马形敌人回放动画v1.141已修复；v1.143已删除F9独立设置和旧绿色浮层，仅保留主菜单16项。
+- 正式release/config.txt保留玩家配置。不杀用户实例、不写真实pfe存档。修改其他游戏SWF仍需明确授权；本次授权仅pfe60接入。
+- 源仓接手前未跟踪的根AGENTS.md保留，不暂存。重启游戏才加载新文件。
 
 ## 3. 当前状态
 
-- v1.144修正后候选51,243字节，SHA256 `2C26EADCFE760EC3BD998DDBEDF0FAD333151E203B0688AF268BDF0612BA0263`。Gov60包内只读桥接，主循环按宿主逻辑帧运行；SandyHighFpsView同步手动步进后的玩家/武器插值端点，普通宿主保持原路径。
-- 30/60/90/120/auto与运行中切换通过；90/120真实开火各15项通过（5枪、60移动步、995余弹）；最终正式字节+限定loader+七项清单21项通过，实际只加载本模组与ModSettings。详见knowledge/experiments/high-fps-adaptation-2026-09-23.md。
-- 原pfe60无loader，候选D88D19A1…，原SHA FC19AF4A…。首次已部署60帧检查20/1/0后回滚，确认旧观察器把旧弹体飞行错当死亡后新开火；7项固定用例旧版4失败、新版全通过，正式60帧21/0/0。用户接入部署授权持续有效，普通pfe、pfe60.cfg和默认启动描述符不改。
+- 已部署v1.144，源release/游戏release/实际测试副本均51,243字节，SHA256 `2C26EADCFE760EC3BD998DDBEDF0FAD333151E203B0688AF268BDF0612BA0263`。核心实现58b73e2，观察器纠正与最终产物eaa5956。
+- 模组通过fe.serv同包只读桥接读取Gov60逻辑步；所有计时/录像/回放跟随真实逻辑步。SandyHighFpsView同步手动步进后的玩家/悬浮武器显示端点；普通宿主不依赖Gov60。
+- pfe60已接入限定清单加载器，仅加载Sandevistan和ModSettings。15,099,039字节，SHA256 `D88D19A11B7100491A8EDD6153499AB92D59545C1576693368762C9C0AB7E97B`。仅MainFE所在ABC块变更，原Gov60/Camera/MainMenu回读一致。
+- 当前pfe60.cfg为fps=90、hud=0（19:32:27外部更改，本轮保留）；普通application.xml仍指向pfe.swf，app60.xml仍指向pfe60.swf。未切换默认启动入口。
+- v1.142使用SandyDamagePredictor对齐原生护甲/护盾、破甲顺序、暴击/偷袭/分解，9点积分处理随机伤害；修复离场子弹、延迟近战和连续挥击漏记，WKick内联伤害不重复记。
+- v1.141 SandyBlitReplay记录真实精灵图帧，保留尸体姿态。敌方时停默认关。主题曲release/sandy_theme.mp3被gitignore，分发需另带。
 
-- 上轮源仓与游戏 release **v1.143**，49,994 字节，SHA256 `B8805DBACC9A1313FD96BB68889911195AC6EAFCBB526E50C313B86AD1E9C748`；两侧哈希一致，实现提交c05a2d4，发布复验通过。删除F9独立弹窗及旧Options绿色浮层，只保留ModSettings统一菜单设置；16项、保存和hotkey配置保留，panelkey停止读写。
-- v1.142新增 SandyDamagePredictor：按真实命中短路、物理/能量甲、先破甲后减伤、护盾、暴击/偷袭/分解及全局易伤顺序估计。9 点积分处理随机伤害，独立累计预计耐久，不改真实实体状态；取消二次武器耐久惩罚及固定0.9折扣。
-- slowStepWorld 保存步前攻击体引用，步后仍读取已离场子弹碰撞；近战缓存原伤害，以 parr 引用区分挥击且持续读取晚接触；去掉位置盒猜测。WKick 内联扣血不再补记延后伤害。
-- v1.141 SandyBlitReplay 记录真实精灵图帧坐标，回放后恢复，保持尸体保护。v1.140 独立 ModSettingsCarrier 16 项（v1.143起无F9弹窗）；敌人斯安维斯坦默认关。v1.139 主题曲默认音量70、90帧淡出、断点续播。
-- 当前宿主已是通用 mods/loader-manifest.txt 七模组清单；不沿用旧六 loader 矩阵或旧安装器。主题曲 release/sandy_theme.mp3 被 gitignore，分发需另带。
+## 4. 验证与停点
 
-## 4. 证据与当前停点
-
-- v1.142验证：有效旧版基线52项中47项失败；新版53/53通过，原生 damage/udarBullet 对照、真实近战延迟接触和 WKick 防双记。出链测试必须断言 in_chain=false 和实际目标一致。
-- v1.142验证：动画回归12组574/574帧逐像素相同，12项尸体保护通过；最后的 WKick 防双记调整不涉及动画路径。
-- v1.142验证：正式构建与实际部署字节各自 -Smoke -Artifact 完整流程20 PASS/0 FAIL/1 SKIP；跳过未安装 ModSettings 的注册。死亡攻击检查 snapSize=0，不能视作实质覆盖。
-- 详细研究、失败夹具纠正、源码顺序与日志：knowledge/experiments/death-prediction-2026-09-23.md、death-prediction-20260923/。上一轮动画证据保留 replay-animation-freeze-2026-09-23.md。
-- 上轮停点：v1.143已部署；正式构建及实际部署字节与ModSettings副本分别隔离验收21/0/0通过；菜单打开、保存重读、F9放行均已通过。详见knowledge/experiments/menu-settings-only-2026-09-23.md。上述53项和574帧属于上一版验证，本轮未改其代码。
+- 本轮高帧专项：旧版60帧11项中6失败；新版普通30、高帧60/90/120/auto、四次运行中切换通过；90/120真实开火各15项通过（60移动步、5枪、995余弹）。不据此声称机器稳定达到120fps。
+- 最终正式文件普通30与高帧60各21 PASS/0 FAIL/0 SKIP；实际安装文件高帧90复验20260923194628482同样21/0/0，菜单16项、打开/保存重读、音乐/暂停及录像回放均通过。加载器回执只请求并成功初始化两项。
+- 首次部署60帧20/1/0后按门禁回滚，查明旧测试把旧弹体按录像移动误判为尸体开火。修正仅涉及隔离测试：按对象引用查死亡后新增攻击，无死亡样本明确SKIP。固定7项旧版4失败、新版全过，故意新增异常弹体仍会报警；本次部署样本deadOwners=1、new=0。
+- 详细机制、测试、首次失败与回滚、最终哈希和部署回执：knowledge/experiments/high-fps-adaptation-2026-09-23.md、high-fps-20260923/。没有待完成的本次部署工作。
+- 先前证据：v1.142预判53/53、动画574/574帧和12项尸体保护；本轮未重新跑这些专项，也未改其实现。
 
 ## 5. 已知问题与边界
 
-- 预判是伤害期望，回放重新抽随机；预计耐久用均值状态，伤害浮动用9点近似，不能保证每次预告都对应真实击杀。无碰撞的在途子弹不凭瞄准提前记账。
-- 爆炸范围/气体、持续毒火、念力撞墙等未补齐预判入口；穿透后续衰减及特殊 Boss 覆盖也未全面建模。炮塔临时护盾已专项验证。过去“预判偏松”的泛化记录以本次具体证据和这些边界代替。
-- 1.03/1.04、联机及全模组混战未在本轮全面验证；敌人斯安维斯坦开启后的表现仍需单独场景验证。
-- 有攻击动画无伤害的历史残余需采 rFire；门/地形破坏过程不能完全重演。Shift/中文输入法吞键可用 Ctrl+Space 切英文。
-- architecture/lessons 有过时机制与旧路径；公共 bullet-explosion-flow 已明确更正旧伤害期望公式，详细本体链见 combat-pipeline-source-audit-2026-09-09.md。旧 dist 安装器未随通用 loader 更新，不直接运行。
+- 预判是伤害期望，回放重新抽随机；均值耐久/9点近似不保证每次预告都对应真实击杀。无碰撞的在途子弹不凭瞄准记账。
+- 爆炸范围/气体、持续毒火、念力撞墙等预判入口仍未补齐；穿透后续衰减及特殊Boss未全面建模。
+- 本轮未全面验证DLC1.03/1.04、敌方时停、联机、七模组混战及全部武器。高帧入口只启用已验证的本模组与菜单组件。
+- 出生区剧情可改变ggControl；专项只验证world.onPause/godMode恢复，不宣称修复旧控制恢复问题。门/地形破坏过程仍不能完全重演。
+- architecture/lessons含过时机制和路径，旧dist安装器未随通用loader更新，不直接运行。
 
 ## 6. 发布与恢复
 
-- v1.144回滚：游戏根pfe60_before_sandevistan_v1144_20260923.swf（SHA FC19AF4A43438273A19D7CFBAC7A1CF584647CE94254F8D503A359C43E81091B）；游戏release及源build/out的SandevistanMod.before-v1.144-20260923.swf为v1.143（B8805D…）。两者一起换回并重启。正式配置不覆盖。
-
-- v1.143回滚到v1.142：源仓build/out/SandevistanMod.before-v1.143-20260923.swf，51,623字节，SHA256 28449B2646223A8EEE20EB4BB361DDA2D5DC0572C6AAA9CD5FCB5D072A374C44。
-
-- 源仓 v1.141 回滚：build/out/SandevistanMod.before-v1.142-20260923.swf，50,878字节，SHA256 `F556C0728DA406A4A6A05399DF93E9A0349C4225107547F1E12FE88A2AEE3E48`。游戏 release 已另留同名备份且哈希一致；换回后重启即可；本轮高帧宿主回滚另见下项。
-- 当前 pfe.swf 指纹 `B78244657ED407D03808C90E97325509DB35F802122835F58933FFF8003305AC`，与上一轮不同（文件时间10:54:55，来源未调查）；最终专项/动画/流程均在该宿主副本运行。普通宿主和清单本轮未改；高帧宿主pfe60已获授权接入限定loader。
-- 玩家 config SHA256 `D91C4C2889ABA19B1BCFB356885921B0605A50188B270A9E7619D2116E7EBDC3`，同步不得覆盖。更早 v1.140 回滚 before-v1.141 保留。
+- v1.144回滚需恢复两项并重启：游戏根pfe60_before_sandevistan_v1144_20260923.swf，SHA `FC19AF4A43438273A19D7CFBAC7A1CF584647CE94254F8D503A359C43E81091B`；游戏release及源build/out的SandevistanMod.before-v1.144-20260923.swf是v1.143，49,994字节，SHA `B8805DBACC9A1313FD96BB68889911195AC6EAFCBB526E50C313B86AD1E9C748`。原始备份未覆盖。
+- 普通pfe.swf仍为 `B78244657ED407D03808C90E97325509DB35F802122835F58933FFF8003305AC`；玩家config仍为 `D91C4C2889ABA19B1BCFB356885921B0605A50188B270A9E7619D2116E7EBDC3`。清单、描述符保持原值。
+- 更早v1.141/v1.142/v1.143回滚备份继续保留，完整历史见journal及各版研究记录。
 
 ## 7. 深入了解
 
-- design/user-preferences.md / architecture.md；decisions/lessons.md / changelog.md；state/journal.md。
-- 构建：build/build.bat → build/out/SandevistanMod.swf；Java=Animate 2024 JRE，Flex/AIR SDK=build/tools。helper均随主SWF编译。v1.144构建先生成external Gov60存根到build/out，不得嵌入游戏类；高帧入口须有loader。
-- 专项：build/tests/run-death-prediction.ps1，-Source 旧源码 -ExpectFailure 对照；run-replay-animation.ps1 做动画。-Smoke -Artifact 指定 SWF 验证正式字节。
-- 日志：%APPDATA%\pfe\Local Store\sandy_modlog.txt；隔离实例用 pfe-sandy-death-时间戳 / pfe-sandy-anim-时间戳。测试只杀自己 PID。
-- 本轮沿用 remains-mod-memory、runtime-debug、mod-build、auto-testing、release-gate、knowledge-contribution 与 diagnosing-bugs。公共机制总图见 game-mechanism-atlas-2026-09-09.md。
+- design/user-preferences.md、architecture.md；decisions/lessons.md、changelog.md；state/journal.md。
+- 构建build/build.bat输出build/out/SandevistanMod.swf；Java=Animate2024 JRE，Flex/AIR SDK=build/tools。先生成external Gov60存根，不得把游戏类实现编进模组。
+- build/tests/run-high-fps.ps1：-HostSwf高帧宿主、-Fps、-SwitchModes、-Combat；-AttackObserver专测检查器。-Smoke -Artifact验证无注入正式字节，-WithSettings -InstalledManifest验证正式七项清单下的两项限定加载。
+- run-death-prediction.ps1、run-replay-animation.ps1为旧专项。prepare-high-fps-host.ps1仅从无loader原版生成候选，不对已部署文件重复叠加。
+- 日志：%APPDATA%/pfe/Local Store/sandy_modlog.txt；隔离实例用pfe-sandy-fps-时间戳，只杀自己PID、清理自己的临时描述符。
+- 本轮沿用memory、runtime-debug、mod-build、auto-testing、swf-patching、release-gate、knowledge-contribution与diagnosing-bugs技能。公共高帧机制见shared-knowledge/rendering/discoveries/high-fps-gov60-clock-2026-09-23.md。

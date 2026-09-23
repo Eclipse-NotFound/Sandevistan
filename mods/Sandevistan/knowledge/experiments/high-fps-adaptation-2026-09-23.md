@@ -19,7 +19,7 @@ date-updated: 2026-09-23
 
 ## 游戏实际机制
 
-当前根 pfe60.swf 为 1.02 高帧衍生版，原 SHA256 `FC19AF4A43438273A19D7CFBAC7A1CF584647CE94254F8D503A359C43E81091B`。app60.xml 指向它，pfe60.cfg 当前 fps=60。普通 application.xml 仍指向 pfe.swf。
+当前根 pfe60.swf 为 1.02 高帧衍生版，原 SHA256 `FC19AF4A43438273A19D7CFBAC7A1CF584647CE94254F8D503A359C43E81091B`。app60.xml 指向它；调查开始时 pfe60.cfg 为 fps=60，发布时外部已改为90，本轮保留该变化。普通 application.xml 仍指向 pfe.swf。
 
 MainMenu.mainStep 每显示帧调用一次 Gov60.frame()；返回 0 才执行菜单/世界逻辑，返回 1 仅调用 Camera.applyInterp(alpha)。Gov60 用 getTimer、累积余量与节拍锁定维持 30 Hz 逻辑，最多每显示帧一步，不是简单每 N 帧一步。配置支持 30/60/90/120/auto。disabled/N=1 时每帧一步。freeze/resume 同时管理原生 MovieClip 的播放。
 
@@ -80,3 +80,10 @@ MainMenu.mainStep 每显示帧调用一次 Gov60.frame()；返回 0 才执行菜
 内置检查改为每个逻辑步按对象引用登记攻击体、记录已观察到的死亡射手，对其新增攻击报警；无死亡样本明确 SKIP。测试从未尝试冻结已有弹体，也未改变正式战斗机制。最后一次源码变更仅涉及隔离自动测试路径，高帧调度、插值、伤害与动画路径均未变。
 
 修正后正式候选：51,243 字节，SHA256 `2C26EADCFE760EC3BD998DDBEDF0FAD333151E203B0688AF268BDF0612BA0263`。后续正式字节/部署复验见发布回执。
+## 最终发布回执
+
+修正后的正式字节：普通30帧（20260923194052453）与高帧60（20260923193909399）各21 PASS / 0 FAIL / 0 SKIP。源码/证据/产物提交 eaa5956 后重新定向部署；实际安装文件的90帧隔离重启（20260923194628482）再次21 PASS / 0 FAIL / 0 SKIP，死亡后新增攻击采样 new=0、deadOwners=1；ModLoader.sol确认七项清单只请求并成功加载Sandevistan、ModSettings两项。测试复制件与源release、游戏release同为最终2C26EADC…字节。
+
+当前部署为v1.144，pfe60为D88D19A1…；原始宿主备份pfe60_before_sandevistan_v1144_20260923.swf、旧模组备份release/SandevistanMod.before-v1.144-20260923.swf均保留并校验。普通pfe、两份启动描述符、清单和玩家配置未改，真实存档未写、用户进程未动。配置文件在19:32:27由本轮部署以外的操作改为fps=90，发现后保留并按90帧复验。测试结果和完整哈希见high-fps-20260923/deployment-receipt.txt。
+
+首次失败和回滚记录保留；不得把此前snapSize=0的旧检查当成已验证尸体弹体冻结，也不应为迎合错误检查而禁止生前弹体飞行。重新部署中的空备份路径调用失败在替换前发生，已核验恢复；最终使用明确的额外备份路径完成原子替换，原始备份未覆盖。
