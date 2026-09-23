@@ -1,0 +1,18 @@
+[SandyMod] v1.144 loaded esmark=1 esghost=1 esper=50 esen=0 esprob=100
+[FPS] host clock connected; simulation=host logic
+[FPS-COST] recorded60 wallMs=2372 render=70 logic=60 skipped=10
+[FPS-TEST] heartbeat phase=4 loaded=true landData=true allStat=1 gg=true ng=0 ctrl=true pause=false
+[FPS-TEST] heartbeat phase=4 loaded=true landData=true allStat=1 gg=true ng=0 ctrl=true pause=false
+[FPS-TEST] record-count PASS samples=69
+[FPS-TEST] player-camera-target PASS samples=71
+[FPS-TEST] slow-world-clock PASS samples=69
+[FPS-TEST] replay-clock PASS samples=11
+[FPS-TEST] real-extra-frames PASS samples=1
+[FPS-TEST] cooldown-clock PASS samples=152
+[FPS-TEST] live-mode-switches PASS samples=1
+[FPS-TEST] record-exactly-60 PASS samples=1
+[FPS-TEST] intermediate-no-physics PASS samples=10
+[FPS-TEST] restored-world PASS samples=1
+[FPS-TEST] intermediate-interpolation PASS samples=10
+[FPS-TEST] record-clock PASS samples=69
+[FPS-TEST] SUMMARY PASS checks=12 fail=0 raw=234 logic=132 skipped=102 wallMs=4829

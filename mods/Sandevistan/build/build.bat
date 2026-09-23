@@ -11,6 +11,8 @@ set "PATH=%JAVA_HOME%\bin;%PATH%"
 set "FLEXBIN=D:\RemainsMod\mods\Sandevistan\build\tools\flexsdk\bin"
 cd /d "%~dp0.."
 if not exist build\out mkdir build\out
+call "%FLEXBIN%\compc.bat" -load-config build\sandy-config.xml -external-library-path=build\tools\airsdk\frameworks\libs\air\airglobal.swc -source-path=build\stubs-high-fps -include-classes=fe.serv.Gov60 -output build\out\Gov60Stubs.swc
+if errorlevel 1 exit /b 1
 "%FLEXBIN%\mxmlc.bat" -load-config build\sandy-config.xml -output build\out\SandevistanMod.swf src\SandevistanMod.as
 if errorlevel 1 exit /b 1
 echo [OK] SandevistanMod.swf built

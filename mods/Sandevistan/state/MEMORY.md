@@ -1,6 +1,6 @@
 # Sandevistan —— 开发记忆入口
 
-> 更新：2026-09-23，v1.143 统一设置入口已部署，发布字节隔离重启21项通过。权限见 AGENT_SCOPE.md 与工作区 GOVERNANCE.md。
+> 更新：2026-09-23，v1.144高帧率适配已验证，用户已批准pfe60接入，待提交部署复验。权限见 AGENT_SCOPE.md 与工作区 GOVERNANCE.md。
 
 ## 1. 这个模组是什么
 
@@ -18,7 +18,11 @@
 
 ## 3. 当前状态
 
-- 源仓与游戏 release **v1.143**，49,994 字节，SHA256 `B8805DBACC9A1313FD96BB68889911195AC6EAFCBB526E50C313B86AD1E9C748`；两侧哈希一致，实现提交c05a2d4，发布复验通过。删除F9独立弹窗及旧Options绿色浮层，只保留ModSettings统一菜单设置；16项、保存和hotkey配置保留，panelkey停止读写。
+- v1.144候选51,085字节，SHA256 `0642842AD78FF55599AD88371F5CBD34E9DED1F5F1CB6A2F0615BC1B38DBED29`。Gov60包内只读桥接，主循环按宿主逻辑帧运行；SandyHighFpsView同步手动步进后的玩家/武器插值端点，普通宿主保持原路径。
+- 30/60/90/120/auto与运行中切换通过；90/120真实开火各15项通过（5枪、60移动步、995余弹）；最终正式字节+限定loader+七项清单21项通过，实际只加载本模组与ModSettings。详见knowledge/experiments/high-fps-adaptation-2026-09-23.md。
+- 原pfe60无loader，候选D88D19A1…，原SHA FC19AF4A…。用户已明确批准接入部署；普通pfe、pfe60.cfg和默认启动描述符不改。
+
+- 上轮源仓与游戏 release **v1.143**，49,994 字节，SHA256 `B8805DBACC9A1313FD96BB68889911195AC6EAFCBB526E50C313B86AD1E9C748`；两侧哈希一致，实现提交c05a2d4，发布复验通过。删除F9独立弹窗及旧Options绿色浮层，只保留ModSettings统一菜单设置；16项、保存和hotkey配置保留，panelkey停止读写。
 - v1.142新增 SandyDamagePredictor：按真实命中短路、物理/能量甲、先破甲后减伤、护盾、暴击/偷袭/分解及全局易伤顺序估计。9 点积分处理随机伤害，独立累计预计耐久，不改真实实体状态；取消二次武器耐久惩罚及固定0.9折扣。
 - slowStepWorld 保存步前攻击体引用，步后仍读取已离场子弹碰撞；近战缓存原伤害，以 parr 引用区分挥击且持续读取晚接触；去掉位置盒猜测。WKick 内联扣血不再补记延后伤害。
 - v1.141 SandyBlitReplay 记录真实精灵图帧坐标，回放后恢复，保持尸体保护。v1.140 独立 ModSettingsCarrier 16 项（v1.143起无F9弹窗）；敌人斯安维斯坦默认关。v1.139 主题曲默认音量70、90帧淡出、断点续播。
@@ -30,7 +34,7 @@
 - v1.142验证：动画回归12组574/574帧逐像素相同，12项尸体保护通过；最后的 WKick 防双记调整不涉及动画路径。
 - v1.142验证：正式构建与实际部署字节各自 -Smoke -Artifact 完整流程20 PASS/0 FAIL/1 SKIP；跳过未安装 ModSettings 的注册。死亡攻击检查 snapSize=0，不能视作实质覆盖。
 - 详细研究、失败夹具纠正、源码顺序与日志：knowledge/experiments/death-prediction-2026-09-23.md、death-prediction-20260923/。上一轮动画证据保留 replay-animation-freeze-2026-09-23.md。
-- 当前停点：v1.143已部署；正式构建及实际部署字节与ModSettings副本分别隔离验收21/0/0通过；菜单打开、保存重读、F9放行均已通过。详见knowledge/experiments/menu-settings-only-2026-09-23.md。上述53项和574帧属于上一版验证，本轮未改其代码。
+- 上轮停点：v1.143已部署；正式构建及实际部署字节与ModSettings副本分别隔离验收21/0/0通过；菜单打开、保存重读、F9放行均已通过。详见knowledge/experiments/menu-settings-only-2026-09-23.md。上述53项和574帧属于上一版验证，本轮未改其代码。
 
 ## 5. 已知问题与边界
 
@@ -51,7 +55,7 @@
 ## 7. 深入了解
 
 - design/user-preferences.md / architecture.md；decisions/lessons.md / changelog.md；state/journal.md。
-- 构建：build/build.bat → build/out/SandevistanMod.swf；Java=Animate 2024 JRE，Flex/AIR SDK=build/tools。两个 helper 都随主 SWF 编译，无新增 loader。
+- 构建：build/build.bat → build/out/SandevistanMod.swf；Java=Animate 2024 JRE，Flex/AIR SDK=build/tools。helper均随主SWF编译。v1.144构建先生成external Gov60存根到build/out，不得嵌入游戏类；高帧入口须有loader。
 - 专项：build/tests/run-death-prediction.ps1，-Source 旧源码 -ExpectFailure 对照；run-replay-animation.ps1 做动画。-Smoke -Artifact 指定 SWF 验证正式字节。
 - 日志：%APPDATA%\pfe\Local Store\sandy_modlog.txt；隔离实例用 pfe-sandy-death-时间戳 / pfe-sandy-anim-时间戳。测试只杀自己 PID。
 - 本轮沿用 remains-mod-memory、runtime-debug、mod-build、auto-testing、release-gate、knowledge-contribution 与 diagnosing-bugs。公共机制总图见 game-mechanism-atlas-2026-09-09.md。

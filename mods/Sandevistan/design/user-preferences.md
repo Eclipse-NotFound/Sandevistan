@@ -16,3 +16,5 @@
    recAtk/recBox/boom/sandyBoom/replayHit/rFix/ghostScan/partsKillDeep。
 
 7. **设置入口（2026-09-23）**：用户要求去掉模组独立面板，只保留游戏菜单中的设置区。本轮按统一 ModSettings 接入实现，删除 F9 弹窗与旧 Options 浮层；触发键配置继续沿用。
+
+8. **高帧率适配（2026-09-23）**：用户要求兼容游戏高帧率模式，并明确批准接入和部署pfe60加载器（本模组及菜单设置）。本轮保留默认启动入口和玩家帧率配置。

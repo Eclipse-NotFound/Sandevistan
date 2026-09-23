@@ -1,0 +1,23 @@
+[SandyMod] v1.144 loaded esmark=1 esghost=1 esper=50 esen=0 esprob=100
+[FPS] host clock connected; simulation=host logic
+[FPS-TEST] heartbeat phase=2 loaded=true landData=true allStat=1 gg=true ng=0 ctrl=true pause=true
+[FPS-COST] combat shots=5 movementSteps=60 hold=995
+[FPS-COST] recorded60 wallMs=2528 render=116 logic=60 skipped=56
+[FPS-COST] restore pause=false saved=false god=true savedGod=true control=false capturedControl=true
+[FPS-TEST] heartbeat phase=4 loaded=true landData=true allStat=1 gg=true ng=0 ctrl=false pause=false
+[FPS-TEST] record-clock PASS samples=115
+[FPS-TEST] cooldown-clock PASS samples=196
+[FPS-TEST] replay-clock PASS samples=11
+[FPS-TEST] intermediate-interpolation PASS samples=56
+[FPS-TEST] player-camera-target PASS samples=71
+[FPS-TEST] nonempty-movement PASS samples=1
+[FPS-TEST] ammo-preserved PASS samples=1
+[FPS-TEST] real-extra-frames PASS samples=1
+[FPS-TEST] slow-world-clock PASS samples=115
+[FPS-TEST] nonempty-shooting PASS samples=1
+[FPS-TEST] restored-world PASS samples=1
+[FPS-TEST] record-exactly-60 PASS samples=1
+[FPS-TEST] weapon-interpolation PASS samples=56
+[FPS-TEST] record-count PASS samples=115
+[FPS-TEST] intermediate-no-physics PASS samples=56
+[FPS-TEST] SUMMARY PASS checks=15 fail=0 raw=324 logic=132 skipped=192 wallMs=4944

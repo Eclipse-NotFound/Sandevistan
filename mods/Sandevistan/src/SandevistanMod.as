@@ -10,6 +10,7 @@
  */
 package
 {
+   import fe.serv.SandyHighFpsClock;
    import flash.desktop.NativeApplication;
    import flash.display.Bitmap;
    import flash.display.BitmapData;
@@ -49,6 +50,9 @@ package
       // ---------- 运行时状态 ----------
       private static var inst:SandevistanMod = null;
       private var world:Object;                         // fe.World.World.w
+      private var highFpsChecked:Boolean = false;
+      private var highFpsHost:Class = null;
+      private var highFpsView:SandyHighFpsView = new SandyHighFpsView();
       private var hooked:Boolean = false;
 
       private var sandyActive:Boolean = false;
@@ -411,7 +415,7 @@ package
          // v1.101：版本标记——日志确认实际加载运行的构建版本与关键开关
          // v1.121：追加 esmark/esper/espd——排查"徽标不可见"类问题的第一手数据
          // v1.127：swaprun/projhits 已迁移 mods/MoreSkills&Weapons（此处不再输出）
-         inst.log("[SandyMod] v1.143 loaded"
+         inst.log("[SandyMod] v1.144 loaded"
              + " esmark=" + (inst.cfgESMark ? 1 : 0) + " esghost=" + (inst.cfgESGhost ? 1 : 0) + " esper=" + inst.cfgESPer
              + " esen=" + (inst.cfgESEnabled ? 1 : 0) + " esprob=" + inst.cfgESRoomProb);
          if (main != null && main.stage != null)
@@ -652,6 +656,22 @@ package
             log("[SandyMod] World found");
          }
 
+         // The high-FPS host schedules one 30 Hz logic step and optional render-only
+         // frames. Read its already-computed result; calling Gov60.frame() here
+         // would advance the scheduler twice. Ordinary hosts keep the original path.
+         if (!highFpsChecked)
+         {
+            highFpsChecked = true;
+            try { highFpsHost = ApplicationDomain.currentDomain.getDefinition("fe.serv.Gov60") as Class; }
+            catch (noHighFps:*) { }
+            if (highFpsHost != null) log("[FPS] host clock connected; simulation=host logic");
+         }
+         if (highFpsHost != null && !SandyHighFpsClock.isLogicFrame()) return;
+         var manualFrame:Boolean = sandyActive || replaying;
+         var wasSandy:Boolean = sandyActive;
+         var wasReplay:Boolean = replaying;
+         var oldPlayerX:Number = world.gg != null ? world.gg.X : 0;
+         var oldPlayerY:Number = world.gg != null ? world.gg.Y : 0;
          try
          {
             if (world != null && world.verror != null && world.verror.visible)
@@ -762,6 +782,12 @@ package
 
          updateHud();
          updateGhosts();
+         if (highFpsHost != null)
+         {
+            highFpsView.finish(world, Number(highFpsHost["alpha"]),
+               manualFrame || sandyActive || replaying, oldPlayerX, oldPlayerY,
+               wasSandy != sandyActive || wasReplay != replaying);
+         }
          if (cfgDiagLog)
          {
             if (diagTick++ % 60 == 0)

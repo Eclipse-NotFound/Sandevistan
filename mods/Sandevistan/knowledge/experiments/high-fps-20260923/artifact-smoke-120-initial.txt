@@ -1,0 +1,24 @@
+[SandyMod] v1.144 loaded esmark=1 esghost=1 esper=50 esen=0 esprob=100
+[FPS] host clock connected; simulation=host logic
+[TEST-ASSERT] esandy-default-off=PASS (cfgESEnabled=false)
+[TEST-ASSERT] migrated-keys-off=PASS (projhits=false swaprun=false)
+[TEST-ASSERT] inGameplay-before-sandy=PASS
+[TEST-ASSERT] replay-player-anim-driven=PASS (frames=[13,4,29,9,20,1,8,5,])
+[TEST-ASSERT] dead-enemy-atk-frozen=PASS (new/moved=0 snapSize=0)
+[TEST-ASSERT] no-invisibility-residue=PASS (alive=4 dead=0 )
+[TEST-ASSERT] no-telegrab-residue=PASS (alive=4 dead=0 )
+[TEST-ASSERT] pip-open=PASS
+[TEST-ASSERT] pip-pauses-gameplay=PASS (pip=true inGameplay=false allStat=2)
+[TEST-ASSERT] legacy-settings-overlay-removed=PASS
+[TEST-ASSERT] settings-menu-opens=PASS
+[TEST-ASSERT] menu-settings-save-reload=PASS (duration=270)
+[TEST-ASSERT] pip-resume=PASS (pip=false inGameplay=true)
+[TEST-ASSERT] standalone-f9-removed=PASS (children=15->15 forwarded=true)
+[TEST-ASSERT] hub-registered=PASS (via=carrier tries=11)
+[TEST-ASSERT] hub-page-listed=PASS (pages=1 foundIdx=0 items=16)
+[TEST-ASSERT] hub-items-16=PASS (n=16)
+[TEST-ASSERT] music-start=PASS
+[TEST-ASSERT] music-resume-breakpoint=PASS (lastPos=11702)
+[TEST-ASSERT] music-fade=PASS
+[TEST-ASSERT] music-stop=PASS
+[TEST] SUMMARY pass=21 fail=0 skip=0

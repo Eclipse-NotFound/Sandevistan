@@ -15,6 +15,7 @@
 
   <compiler>
     <external-library-path>
+      <path-element>D:/RemainsMod/mods/Sandevistan/build/out/Gov60Stubs.swc</path-element>
       <path-element>D:/RemainsMod/mods/Sandevistan/build/tools/airsdk/frameworks/libs/player/14.0/playerglobal.swc</path-element>
       <path-element>D:/RemainsMod/mods/Sandevistan/build/tools/airsdk/frameworks/libs/air/airglobal.swc</path-element>
     </external-library-path>
