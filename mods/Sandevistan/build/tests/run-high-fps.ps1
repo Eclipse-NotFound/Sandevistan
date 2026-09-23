@@ -1,5 +1,6 @@
-param([string]$GameRoot='D:\Program Files\Steam\steamapps\common\Remains', [string]$Source='', [switch]$ExpectFailure, [switch]$Smoke, [string]$Artifact='', [switch]$WithSettings, [string]$HostSwf="", [string]$Fps="60", [switch]$SwitchModes, [switch]$Combat, [switch]$InstalledManifest)
+param([string]$GameRoot='D:\Program Files\Steam\steamapps\common\Remains', [string]$Source='', [switch]$ExpectFailure, [switch]$Smoke, [string]$Artifact='', [switch]$WithSettings, [string]$HostSwf="", [string]$Fps="60", [switch]$SwitchModes, [switch]$Combat, [switch]$InstalledManifest, [switch]$AttackObserver)
 $ErrorActionPreference='Stop'
+if($AttackObserver -and $Smoke){throw 'Attack observer requires probe mode'}
 if($Artifact -and !$Smoke){throw 'Artifact mode requires -Smoke'}
 $modRoot=Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 if(!$Source){$Source=Join-Path $modRoot 'src\SandevistanMod.as'}
@@ -35,7 +36,7 @@ $srcText=[IO.File]::ReadAllText($Source)
 if(!$Smoke){
  $anchor='      private function stepDebugTest():void'
  if(!$srcText.Contains($anchor)){throw 'Probe anchor missing'}
- $srcText=$srcText.Replace($anchor,[IO.File]::ReadAllText((Join-Path $PSScriptRoot 'high-fps-probe.inc'))+$anchor)
+ $srcText=$srcText.Replace($anchor,[IO.File]::ReadAllText((Join-Path $PSScriptRoot $(if($AttackObserver){'attack-observer-probe.inc'}else{'high-fps-probe.inc'})))+$anchor)
 
  $anchor='            onFrameInner();'
  if(!$srcText.Contains($anchor)){throw 'Frame driver anchor missing'}

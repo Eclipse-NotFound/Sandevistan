@@ -306,10 +306,11 @@ package
       private var testEnemy:Object = null;               // v1.136：拉怪目标
       private var testAtkT:int = 0;                      // v1.136：合成攻击脉冲相位
       private var testAnimSamples:String = "";           // v1.136：回放期玩家动画帧采样
-      private var testDeadAtkSnap:Object = {};           // v1.136：回放开始时死亡敌人攻击体位置快照
-      private var testDeadSnapN:int = 0;                 // v1.136：快照条数（SUMMARY 详情用）
+      private var testDeadAtkSnap:Dictionary = new Dictionary(); // v1.144：已存在弹体，按对象身份登记
+      private var testDeadOwners:Dictionary = new Dictionary(); // 上一次采样已死亡的非 postDie 单位
+      private var testDeadSnapN:int = 0;                 // v1.144：有死亡样本时才给出死亡开火检查结论
       private var testPipCloses:int = 0;                 // v1.137：pip 守卫关闭计数
-      private var testDeadAtkNew:int = 0;                // v1.136：回放中新增/位移的死亡敌人攻击体计数
+      private var testDeadAtkNew:int = 0;                // v1.144：已死亡敌人新生成的攻击体计数
       private var testReplaySeen:Boolean = false;        // v1.136：本轮回放确实发生过
       private var testSandySeen:Boolean = false;         // v1.136：时停确实激活过（自然结束≠未启动）
       private var testGgDowned:Boolean = false;          // v1.136：时停期间玩家曾倒地（sost>=2，动画断言作废）
@@ -1105,7 +1106,7 @@ package
                   testStage = 7;
                   testTicks = 0;
                   testAnimSamples = "";
-                  testDeadAtkSnap = {};
+                  testDeadAtkSnap = new Dictionary();
                   testDeadSnapN = 0;
                   testDeadAtkNew = 0;
                   testReplaySeen = false;
@@ -1124,7 +1125,7 @@ package
                   testStage = 7;
                   testTicks = 0;
                   testAnimSamples = "";
-                  testDeadAtkSnap = {};
+                  testDeadAtkSnap = new Dictionary();
                   testDeadSnapN = 0;
                   testDeadAtkNew = 0;
                   testReplaySeen = false;
@@ -1132,7 +1133,7 @@ package
             }
             else if (testStage == 7)
             {
-               // 回放段：首帧快照死亡敌人攻击体位置，逐 5 帧采样玩家动画帧
+               // 回放段：逐逻辑步检查死亡后新增攻击，逐 5 帧采样玩家动画帧
                testPipGuard();
                if (replaying)
                {
@@ -1146,7 +1147,7 @@ package
                   {
                      testAnimSamples += animFrameOf(world.gg) + ",";
                   }
-                  if (testTicks % 60 == 30) { testDeadAtkSample("run"); }
+                  testDeadAtkSample("run");
                   testTicks++;
                   if (testTicks > 5400)
                   {
@@ -1420,43 +1421,60 @@ package
          catch (e:*) { }
       }
 
-      // v1.136：死亡敌人(sost>=3)攻击体采样——start 建位置快照，run 比对。
-      // v1.133 修复口径：死亡敌人的开火体在回放中必须冻结（无新增/位移）
+      // v1.144：死亡禁止新开火，已发射的弹体仍可飞行/按录像移动。
+      // 先按引用登记攻击体，再记录死亡状态，避免将同一步先开火后死亡误判。
       private function testDeadAtkSample(phase:String):void
       {
-         try
+         if (world.loc == null) return;
+         if (phase == "start")
          {
-            if (world.loc == null) return;
-            var o:Object = world.loc.firstObj;
-            var g:int = 0;
-            while (o != null)
-            {
-               try
-               {
-                  var qn:String = flash.utils.getQualifiedClassName(o);
-                  if (qn.indexOf("fe.weapon::") == 0 && o["owner"] != null && o["owner"] != world.gg && o["owner"].sost >= 3)
-                  {
-                     var key:String = qn + "@" + o.X + "@" + o.Y;
-                     if (phase == "start")
-                     {
-                        if (testDeadAtkSnap[key] == null) { testDeadAtkSnap[key] = 1; testDeadSnapN++; }
-                     }
-                     else if (testDeadAtkSnap[key] == null)
-                     {
-                        testDeadAtkNew++;
-                        if (testDeadAtkNew <= 3) { log("[TEST] dead-owner atk new/moved: " + qn + " X=" + o.X + " Y=" + o.Y); }
-                     }
-                  }
-               }
-               catch (eD:*) { }
-               o = o.nobj;
-               if (++g > 20000) break;
-            }
+            testDeadAtkSnap = new Dictionary();
+            testDeadOwners = new Dictionary();
+            testDeadSnapN = 0;
+            testDeadAtkNew = 0;
+            // 录像可能持有已离开链表的旧弹体，重新可见仍不是新开火。
+            for each (var recorded:Object in replayObjArr) testDeadAtkSnap[recorded] = true;
          }
-         catch (eA:*) { }
+         var o:Object = world.loc.firstObj;
+         var g:int = 0;
+         while (o != null)
+         {
+            try
+            {
+               var qn:String = flash.utils.getQualifiedClassName(o);
+               if (qn.indexOf("fe.weapon::") == 0)
+               {
+                  var owner:Object = o["owner"];
+                  if (phase != "start" && testDeadAtkSnap[o] == null && owner != null
+                      && owner != world.gg && testDeadOwners[owner] == true
+                      && int(owner.sost) >= 3 && !Boolean(owner.postDie))
+                  {
+                     testDeadAtkNew++;
+                     if (testDeadAtkNew <= 3) log("[TEST] new shot from already-dead owner: " + qn);
+                  }
+                  testDeadAtkSnap[o] = true;
+               }
+            }
+            catch (eD:*) { }
+            o = o.nobj;
+            if (++g > 20000) break;
+         }
+         var units:Array = world.loc.units.concat(replayObjArr);
+         for each (var u:Object in units)
+         {
+            try
+            {
+               if (u != world.gg && int(u.sost) >= 3 && !Boolean(u.postDie)
+                   && testDeadOwners[u] == null)
+               {
+                  testDeadOwners[u] = true;
+                  testDeadSnapN++;
+               }
+            }
+            catch (eU:*) { }
+         }
       }
-
-      // v1.136：回放结束断言组（动画帧驱动 / 死亡敌人开火体冻结 / 隐形与抓取残留）
+      // 回放结束断言组（动画帧驱动 / 尸体新增攻击 / 隐形与抓取残留）
       private function testFinishReplayChecks():void
       {
          // ① v1.130：玩家动画帧采样——站立玩家回放中 osn.body.currentFrame 应有多个值；
@@ -1476,9 +1494,14 @@ package
             }
             testAssert("replay-player-anim-driven", distinct.length >= 2, "frames=[" + testAnimSamples + "]");
          }
-         // ② v1.133：死亡敌人攻击体在回放中冻结（无新增/位移）
-         testAssert("dead-enemy-atk-frozen", testDeadAtkNew == 0,
-                    "new/moved=" + testDeadAtkNew + " snapSize=" + testDeadSnapN);
+         // ② 已死亡且非 postDie 的敌人不得新开火；无死亡样本时明确跳过。
+         if (testDeadSnapN == 0)
+         {
+            testSkipCnt++;
+            log("[TEST-ASSERT] dead-enemy-no-new-attacks=SKIP (no dead owner observed)");
+         }
+         else testAssert("dead-enemy-no-new-attacks", testDeadAtkNew == 0,
+                         "new=" + testDeadAtkNew + " deadOwners=" + testDeadSnapN);
          // ③ v1.132：无隐身/抓取残留——对比时停瞬间基线，只对活单位的状态"变化"报警。
          //    invis/levitPoss 有合法状态相（钻地=inv1+lev0；部分怪自带隐身相），绝对值
          //    断言必误报；残留的用户可见症状 = 活单位渲染消失 / 念力抓取能力丢失

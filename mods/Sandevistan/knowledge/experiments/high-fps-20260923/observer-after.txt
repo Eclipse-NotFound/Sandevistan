@@ -1,0 +1,29 @@
+[SandyMod] app id=pfe-sandy-fps-20260923193832409
+[SandyMod] v1.144 loaded esmark=1 esghost=1 esper=50 esen=0 esprob=100
+[SandyMod] hooks registered
+[MUSIC] theme preload: absent
+[SandyMod] World found
+[FPS] host clock connected; simulation=host logic
+[SandyMod] keyMap built: keyLeft/keyRight/keyJump/undefined
+[DIAG] recObj: cls=fe.loc::Box X=1380 Y=959 arr=0 frameN=0
+[DIAG] recObj: cls=fe.loc::Box X=540 Y=959 arr=0 frameN=0
+[DIAG] recObj: cls=fe.loc::Box X=540 Y=319 arr=0 frameN=0
+[DIAG] recObj: cls=fe.loc::Box X=1760 Y=960 arr=0 frameN=0
+[DIAG] recObj: cls=fe.loc::CheckPoint X=960 Y=799 arr=0 frameN=0
+[DIAG] recObj: cls=fe.loc::Box X=1800 Y=640 arr=0 frameN=0
+[DIAG] recDoor: X=1380 vf=2 dop=0 seen=1
+[DIAG] recDoor: X=540 vf=2 dop=0 seen=1
+[DIAG] recDoor: X=540 vf=2 dop=0 seen=1
+[FPS-TEST] actual-two-frame-projectile-record PASS
+[DIAG] rFix: cls=fe.weapon::PhisBullet stX=960 stY=759 X=960 Y=759 visX=-1 visPar=0
+[DIAG] rFix: cls=fe.weapon::PhisBullet stX=985 stY=759 X=985 Y=759 visX=-1 visPar=0
+[FPS-TEST] recorded-flight-after-owner-death PASS
+[FPS-TEST] existing-unrecorded-flight PASS
+[TEST] new shot from already-dead owner: fe.weapon::PhisBullet
+[FPS-TEST] injected-dead-owner-shot-detected PASS
+[FPS-TEST] shot-before-new-death-allowed PASS
+[TEST] new shot from already-dead owner: fe.weapon::PhisBullet
+[FPS-TEST] shot-after-observed-death-detected PASS
+[FPS-TEST] native-post-die-exception PASS
+[FPS-TEST] SUMMARY PASS checks=7 fail=0
+[DIAG] esandy: roomChange id=room_0_0 allow=0 prob=100 en=0

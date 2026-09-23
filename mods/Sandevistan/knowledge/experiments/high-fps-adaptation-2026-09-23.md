@@ -64,7 +64,19 @@ MainMenu.mainStep 每显示帧调用一次 Gov60.frame()；返回 0 才执行菜
 
 原 pfe60 MainFE 无模组加载器。`build/tests/prepare-high-fps-host.ps1` 在 build/out 生成候选，仅为 MainFE 接入现有清单加载器，并限 Sandevistan + ModSettings 两项；不自动开启其他尚未适配的玩法模组。
 
-候选 `pfe60-with-loader.swf` 为 15,099,039 字节，SHA `D88D19A11B7100491A8EDD6153499AB92D59545C1576693368762C9C0AB7E97B`。5039 个 SWF 标签数与顺序相同，仅 index332 的 DoABC 数据块变化（5,629,791→5,639,773字节）；导出回读 Gov60、MainMenu、Camera 与原文件逐字节一致。正式宿主尚未替换，需用户明确批准接入；普通入口与默认启动描述符不随本任务切换。
+候选 `pfe60-with-loader.swf` 为 15,099,039 字节，SHA `D88D19A11B7100491A8EDD6153499AB92D59545C1576693368762C9C0AB7E97B`。5039 个 SWF 标签数与顺序相同，仅 index332 的 DoABC 数据块变化（5,629,791→5,639,773字节）；导出回读 Gov60、MainMenu、Camera 与原文件逐字节一致。用户已明确批准接入并部署；普通入口与默认启动描述符不随本任务切换。首次部署复验发现旧观察器误判，按门禁回滚后完成下述定位。
 
 回滚：发布前保留 v1.143 SWF；若批准高帧加载器，额外保留原 pfe60.swf，并在替换前重新核对原 SHA。玩家 config、pfe60.cfg 和真实存档不改。
-最终正式构建：51,085字节，SHA256 0642842AD78FF55599AD88371F5CBD34E9DED1F5F1CB6A2F0615BC1B38DBED29。20260923192018325在最终限定加载器、正式七项清单副本下21 PASS/0 FAIL/0 SKIP；ModLoader.sol确认仅请求并成功初始化两项。用户随后明确同意接入并部署pfe60加载器。
+首次待部署构建：51,085字节，SHA256 0642842AD78FF55599AD88371F5CBD34E9DED1F5F1CB6A2F0615BC1B38DBED29。20260923192018325在最终限定加载器、正式七项清单副本下21 PASS/0 FAIL/0 SKIP；ModLoader.sol确认仅请求并成功初始化两项。用户随后明确同意接入并部署pfe60加载器。
+
+## 部署复验触发的旧观察器误报
+
+20260923192858343 使用已部署的 60 FPS 宿主及正式 0642842A… 字节，20 PASS / 1 FAIL：`dead-enemy-atk-frozen` 报 new/moved=3、snapSize=3。按门禁先恢复 v1.143 与原 pfe60，再调查；失败原始日志见 deployed-60-failed.txt。
+
+日志 rStart 显示 3 个 PhisBullet 都有 rec=1。生产 replayObjects 按录像更新旧弹体坐标；stepUnrecordedAtk 同样允许已发射弹体继续飞行。v1.133 的真实规则是禁止尸体重跑 AI 后新开火（postDie 例外），并不是射手死亡后所有旧投射物静止。旧观察器把“类名+位置”当身份，既把移动当新生，也会误报刚死亡单位和原生 postDie 例外。
+
+新增 `run-high-fps.ps1 -AttackObserver`：隔离新档中创建真实 UnitRaider、PhisBullet，调用正式 recordReplayObjects/replayObjects 录放两帧，并直接验证内置采样器。旧版稳定 7 项中 4 项失败（20260923193651366）；修正后 7/7（20260923193832409）。覆盖录制弹体移动、未录制旧弹体移动、新死亡前已发射弹体、postDie 例外；故意生成“已死亡射手的新弹体”两项负向检查均能报警。此专项验证观察器判别，不声称覆盖所有尸体 AI 行为。
+
+内置检查改为每个逻辑步按对象引用登记攻击体、记录已观察到的死亡射手，对其新增攻击报警；无死亡样本明确 SKIP。测试从未尝试冻结已有弹体，也未改变正式战斗机制。最后一次源码变更仅涉及隔离自动测试路径，高帧调度、插值、伤害与动画路径均未变。
+
+修正后正式候选：51,243 字节，SHA256 `2C26EADCFE760EC3BD998DDBEDF0FAD333151E203B0688AF268BDF0612BA0263`。后续正式字节/部署复验见发布回执。
