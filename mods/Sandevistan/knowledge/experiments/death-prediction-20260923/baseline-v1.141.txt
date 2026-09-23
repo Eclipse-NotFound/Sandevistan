@@ -1,0 +1,56 @@
+[SandyMod] v1.141 loaded esmark=1 esghost=1 esper=50 esen=0 esprob=100
+[DEATH-TEST] boot stage=0 allStat=0 mm=false land=false
+[DEATH-TEST] unarmored FAIL expected=90 native=100
+[DEATH-TEST] weapon fixture=punch
+[DEATH-TEST] worn-already-in-projectile FAIL expected=76.5 native=100
+[DEATH-TEST] laser-uses-magic-armor FAIL expected=27 native=90
+[DEATH-TEST] armor-break-on-this-hit FAIL expected=27 native=100
+[DEATH-TEST] critical-after-armor FAIL expected=162 native=160
+[DEATH-TEST] lethal-preview FAIL credited=90 hp=95 sost=1
+[DEATH-TEST] same-swing-not-duplicated PASS once=36
+[DEATH-TEST] second-swing-counted FAIL twoSwings=36
+[DEATH-TEST] removed-projectile-credited FAIL inChain=false contacts=1 targetMatch=true raw=100 credited=undefined
+[DEATH-TEST] damage-type-1 FAIL expected=36 native=40
+[DEATH-TEST] damage-type-2 FAIL expected=36 native=40
+[DEATH-TEST] damage-type-3 FAIL expected=36 native=85
+[DEATH-TEST] damage-type-4 FAIL expected=36 native=40
+[DEATH-TEST] damage-type-6 FAIL expected=36 native=85
+[DEATH-TEST] damage-type-7 FAIL expected=36 native=100
+[DEATH-TEST] damage-type-8 FAIL expected=36 native=100
+[DEATH-TEST] damage-type-9 FAIL expected=36 native=85
+[DEATH-TEST] damage-type-10 FAIL expected=36 native=40
+[DEATH-TEST] damage-type-11 FAIL expected=36 native=85
+[DEATH-TEST] damage-type-12 FAIL expected=36 native=100
+[DEATH-TEST] damage-type-13 FAIL expected=36 native=100
+[DEATH-TEST] damage-type-14 FAIL expected=36 native=40
+[DEATH-TEST] damage-type-15 FAIL expected=36 native=100
+[DEATH-TEST] damage-type-16 FAIL expected=36 native=100
+[DEATH-TEST] damage-type-17 FAIL expected=36 native=100
+[DEATH-TEST] damage-type-18 FAIL expected=36 native=85
+[DEATH-TEST] damage-type-19 FAIL expected=36 native=100
+[DEATH-TEST] damage-type-100 FAIL expected=36 native=100
+[DEATH-TEST] species-before-armor FAIL expected=108 native=130
+[DEATH-TEST] virtual-defense-is-read-only-false PASS realHP=10000
+[DEATH-TEST] consecutive-defense-break-false FAIL expected=27 native=230
+[DEATH-TEST] virtual-defense-is-read-only-true PASS realHP=10000
+[DEATH-TEST] consecutive-defense-break-true FAIL expected=45 native=200
+[DEATH-TEST] full-dodge FAIL p=1
+[DEATH-TEST] zero-dex-bypasses-dodge PASS p=1
+[DEATH-TEST] zero-precision-bypasses-dex FAIL p=0.09950248756218905
+[DEATH-TEST] guaranteed-miss PASS damage=0
+[DEATH-TEST] invulnerable FAIL damage=8.955223880597014
+[DEATH-TEST] no-contact-no-credit FAIL credited=8.955223880597014
+[DEATH-TEST] partial-coverage-floor FAIL expected=0 nativeMean2400=49.083333333333336
+[DEATH-TEST] random-spread-armor-threshold FAIL expected=0 analytic=1.875 nativeMean2400=1.9490376405534335
+[DEATH-TEST] turret-direction--1 FAIL expected=67.5 native=75
+[DEATH-TEST] turret-direction-1 FAIL expected=90 native=100
+[DEATH-TEST] global-vulnerability-0 FAIL expected=45 native=50
+[DEATH-TEST] global-vulnerability-12 FAIL expected=45 native=100
+[DEATH-TEST] global-vulnerability-13 FAIL expected=45 native=100
+[DEATH-TEST] global-vulnerability-100 FAIL expected=45 native=100
+[DEATH-TEST] sneak-critical FAIL expected=90 native=200
+[DEATH-TEST] disintegration FAIL expected=90 native=1200
+[DEATH-TEST] airborne-spark FAIL expected=90 native=50
+[DEATH-TEST] melee-later-contact FAIL credited=undefined
+[DEATH-TEST] melee-next-swing FAIL credited=undefined
+[DEATH-TEST] SUMMARY FAIL checks=52 fails=47

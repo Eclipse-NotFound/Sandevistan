@@ -92,7 +92,8 @@ package
       // 预判死亡（时停中统计玩家攻击本应造成的伤害，≥血量则放死亡动画，不真杀）
       private var predDam:Dictionary = new Dictionary();   // 敌人 → 预判累计伤害
       private var origDam:Dictionary = new Dictionary();   // 攻击体 → 原始伤害（清零前捕获）
-      private var hitCred:Dictionary = new Dictionary();   // 攻击体 → 已记入的敌人（去重）
+      private var hitCred:Dictionary = new Dictionary();   // 攻击体 → {parr, targets}：按挥击代次去重
+      private var damagePredictor:SandyDamagePredictor = new SandyDamagePredictor();
       private var predDead:Dictionary = new Dictionary();  // 敌人 → true（时停中放死亡动画）
       private var replayBlit:SandyBlitReplay = new SandyBlitReplay();
       private var replayAnimCat:Dictionary = new Dictionary();  // 回放动画档位迟滞（防 walk/run 抖动）
@@ -418,7 +419,7 @@ package
          // v1.101：版本标记——日志确认实际加载运行的构建版本与关键开关
          // v1.121：追加 esmark/esper/espd——排查"徽标不可见"类问题的第一手数据
          // v1.127：swaprun/projhits 已迁移 mods/MoreSkills&Weapons（此处不再输出）
-         inst.log("[SandyMod] v1.141 loaded"
+         inst.log("[SandyMod] v1.142 loaded"
              + " esmark=" + (inst.cfgESMark ? 1 : 0) + " esghost=" + (inst.cfgESGhost ? 1 : 0) + " esper=" + inst.cfgESPer
              + " esen=" + (inst.cfgESEnabled ? 1 : 0) + " esprob=" + inst.cfgESRoomProb);
          if (main != null && main.stage != null)
@@ -452,7 +453,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.141 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.142 已加载 (按 \ 触发斯安维斯坦)";
             t.autoSize = "left";   // v1.110：版本号此前显示不全（TextField 默认宽度截断）
             t.x = 10;
             t.y = 10;
@@ -3217,6 +3218,7 @@ package
             catch (e:*) { }
             // 2. 玩家攻击体清零 + 原始伤害捕获（必须在 loc.step 前——玩家刚手动
             //    step 完，本帧新生成的子弹尚未结算）
+            var pendingHits:Array = []; // 步后即使子弹已被 remObj，仍能读取本次碰撞。
             var oS:Object = locS.firstObj;
             var gS:int = 0;
             while (oS != null)
@@ -3227,6 +3229,7 @@ package
                   if (flash.utils.getQualifiedClassName(oS).indexOf("fe.weapon::") == 0 && oS["owner"] == world.gg)
                   {
                      if (origDam[oS] == null && oS.damage > 0) { origDam[oS] = oS.damage; }
+                     if (origDam[oS] > 0) pendingHits.push(oS);
                      oS.damage = 0;
                      oS.damageExpl = 0;
                   }
@@ -3361,28 +3364,16 @@ package
                }
             }
             catch (e:*) { }
-            // 4. 攻击体移动后的命中检测（预判伤害记入）
-            oS = locS.firstObj;
-            gS = 0;
-            while (oS != null)
+            // 4. 读取步前保留的引用；正常子弹命中后已移出 loc 链表。
+            // 每步重新查 parr 的新增接触，去重交给 creditHit。
+            for each (var hitBody:Object in pendingHits)
             {
-               var nxS2:Object = oS.nobj;
-               try
-               {
-                  if (flash.utils.getQualifiedClassName(oS).indexOf("fe.weapon::") == 0 && oS["owner"] == world.gg
-                      && hitCred[oS] == null && origDam[oS] != null && origDam[oS] > 0)
-                  {
-                     creditHit(oS, origDam[oS]);
-                  }
-               }
-               catch (e:*) { }
-               oS = nxS2;
-               if (++gS > 20000) break;
+               creditHit(hitBody, origDam[hitBody]);
             }
+            freezeMeleeDamage();
          }
          catch (e:*) { }
       }
-
       // ===== 发射器计数维护（World.step 守卫内的每帧重置，时停中由模组代做）=====
       private function resetFxCounter():void
       {
@@ -3398,208 +3389,74 @@ package
          catch (e:*) { }
       }
 
-      // ===== 时停中近战复用攻击体伤害清零（WClub 的 b 不在 loc 链表，直接清）=====
+      // WClub 的攻击体不在 loc 链表，而且伤害设定、真正接触发生在不同帧。
+      // 保存本挥击伤害，每帧读取其接触列表；零伤害后仍继续追踪。
       private function freezeMeleeDamage():void
       {
          try
          {
-            var cwM:* = world.gg.currentWeapon;
+            var cwM:Object = world.gg.currentWeapon;
             if (cwM == null || cwM.b == null) return;
             var qnM:String = flash.utils.getQualifiedClassName(cwM);
-            if (qnM != "fe.weapon::WClub" && qnM != "fe.weapon::WPunch" && qnM != "fe.weapon::WKick") return;
-            // 预判伤害：每次挥击（shoot 重设 damage）在清零前捕获并记入命中敌人
-            var dmgM:Number = cwM.b.damage;
-            if (dmgM > 0)
-            {
-               creditHit(cwM.b, dmgM);
-            }
-            cwM.b.damage = 0;
-            cwM.b.damageExpl = 0;
+            // WKick.actions resets damage and calls bindMove inline: its HP loss has
+            // already happened. Do not add that real loss again as deferred damage.
+            if (qnM == "fe.weapon::WKick") { cwM.b.damage = 0; cwM.b.damageExpl = 0; return; }
+            if (qnM != "fe.weapon::WClub" && qnM != "fe.weapon::WPunch") return;
+            var b:Object = cwM.b;
+            if (b.damage > 0) origDam[b] = b.damage;
+            if (origDam[b] > 0) creditHit(b, origDam[b]);
+            b.damage = 0;
+            b.damageExpl = 0;
          }
          catch (e:*) { }
       }
 
-      // ===== 期望命中率（预判死亡用）：按 udarBullet 的命中判定期望值——
-      // miss 判定 ×（弹道类：accuracy=precision/dist 与 dexter 的对抗；
-      // 近战类 tipBullet==1：闪避 dodge 判定）
       private function expectedHitCh(body:Object, enemy:Object):Number
       {
-         var p:Number = 1;
-         try
-         {
-            if (body.miss > 0) { p *= 1 - body.miss; }
-            if (body.tipBullet == 1)
-            {
-               var dg:Number = enemy.dodge != null ? enemy.dodge : 0;
-               if (dg < 1) { p *= (dg <= 0 ? 1 : 1 - dg); }
-            }
-            else
-            {
-               var acc:Number = 1;
-               if (body.precision != 0 && body.dist > 0)
-               {
-                  acc = body.precision / body.dist;
-                  if (body.antiprec > 0 && body.dist < body.antiprec)
-                  {
-                     acc = body.dist / body.antiprec * 0.75 + 0.25;
-                  }
-               }
-               var dex:Number = (enemy.dexter != null ? enemy.dexter : 0) + (enemy.dexterPlus != null ? enemy.dexterPlus : 0) + 0.05;
-               if (enemy.dexter > 0 && acc < dex) { p *= acc / dex; }
-            }
-            if (p > 1) { p = 1; }
-            if (p < 0) { p = 0; }
-         }
-         catch (e:*) { }
-         return p;
+         return damagePredictor.hitChance(body, enemy);
       }
 
-      // ===== 期望伤害估算（预判死亡用）：按游戏 damage() 公式的期望值——
-      // 类型易伤 × 期望暴击 − 护甲减伤（(skin + armor_qual×armor + shitArmor)×
-      // armorMult − pier 穿甲）× 全局易伤 × 武器耐久减伤（breaking——武器每射
-      // 一发掉耐久，回放时比时停记录时更破）× 玩家特攻（damPony 等）×
-      // 期望命中率（距离/精度/闪避）× 回放损耗余量。
-      private function expectedDam(body:Object, enemy:Object, dmg:Number):Number
+      // Projectile damage already includes weapon condition. Use the native damage
+      // order, type-specific defenses and virtual durability; no blanket safety tax.
+      private function expectedDam(body:Object, enemy:Object, dmg:Number, commit:Boolean = false):Number
       {
-         var ed:Number = dmg;
-         try
-         {
-            // 1) 伤害类型易伤
-            if (enemy.vulner != null && body.tipDamage != null && body.tipDamage < enemy.vulner.length)
-            {
-               ed *= enemy.vulner[body.tipDamage];
-            }
-            // 2) 期望暴击（critCh 概率 × critDamMult）
-            if (body.critCh != null && body.critCh > 0)
-            {
-               ed *= 1 + body.critCh * (body.critDamMult - 1);
-            }
-            // 3) 护甲减伤 − 穿甲（期望值；isrnd(armor_qual) 期望 = armor_qual）
-            var dr:Number = enemy.skin != null ? enemy.skin : 0;
-            if (enemy.armor_qual > 0) { dr += enemy.armor_qual * (enemy.armor != null ? enemy.armor : 0); }
-            if (enemy.shithp > 0) { dr += enemy.shitArmor != null ? enemy.shitArmor : 0; }
-            // 3b) 炮塔 turret3 的临时护盾（damage() 内每次受击临时设
-            //     shithp=1000/shitArmor=25，受击后立刻清零——模型平时读不到，
-            //     预测偏松的根源）：护盾在子弹速度与朝向同向（dx*storona>0，
-            //     即绕到炮塔后方）时失效，正面/侧向命中减伤 25
-            try
-            {
-               if (enemy.id != null && String(enemy.id).indexOf("turret3") == 0
-                   && body.dx != null && body.dx * enemy.storona <= 0)
-               {
-                  dr += 25;
-               }
-            }
-            catch (e:*) { }
-            dr = dr * (body.armorMult != null ? body.armorMult : 1) - (body.pier != null ? body.pier : 0);
-            if (dr > 0) { ed -= dr; }
-            // 4) 全局易伤倍率
-            if (enemy.allVulnerMult != null) { ed *= enemy.allVulnerMult; }
-            // 5) 武器耐久减伤：breaking = (maxhp-hp)/maxhp×2−1（hp<maxhp/2 时）
-            //    枪械 resultDamage 用 ×(1−0.3×brk)、近战 ×(1−0.6×brk)——
-            //    武器每发掉耐久，回放时比时停记录时更破，取类对应系数
-            try
-            {
-               var wpn:* = body.weap;
-               if (wpn != null && wpn.hp != null && wpn.maxhp != null && wpn.hp < wpn.maxhp / 2)
-               {
-                  var brk:Number = (wpn.maxhp - wpn.hp) / wpn.maxhp * 2 - 1;
-                  if (brk > 0)
-                  {
-                     var qnW2:String = flash.utils.getQualifiedClassName(wpn);
-                     var brkK:Number = (qnW2 == "fe.weapon::WClub" || qnW2 == "fe.weapon::WPunch" || qnW2 == "fe.weapon::WKick") ? 0.6 : 0.3;
-                     ed *= 1 - brk * brkK;
-                  }
-               }
-            }
-            catch (e:*) { }
-            // 6) 玩家对敌类型的特攻倍率（pers.damPony/damZombie/...，默认 1）
-            try
-            {
-               if (body.owner != null && body.owner.player && enemy.opt != null && body.owner.pers != null)
-               {
-                  var po:* = body.owner.pers;
-                  if (enemy.opt.pony && po.damPony != null) { ed *= po.damPony; }
-                  if (enemy.opt.zombie && po.damZombie != null) { ed *= po.damZombie; }
-                  if (enemy.opt.robot && po.damRobot != null) { ed *= po.damRobot; }
-                  if (enemy.opt.insect && po.damInsect != null) { ed *= po.damInsect; }
-                  if (enemy.opt.monster && po.damMonster != null) { ed *= po.damMonster; }
-                  if (enemy.opt.alicorn && po.damAlicorn != null) { ed *= po.damAlicorn; }
-               }
-            }
-            catch (e:*) { }
-            // 7) 期望命中率（回放中命中随机重掷——时停的"已命中"以真实概率折算）
-            ed *= expectedHitCh(body, enemy);
-            // 8) 回放损耗余量（回放时武器额外损耗、未建模的随机项）
-            ed *= 0.9;
-            if (ed < 0) { ed = 0; }
-         }
-         catch (e:*) { }
-         return ed;
+         var remaining:Number = enemy.hp - (predDam[enemy] != null ? Number(predDam[enemy]) : 0);
+         return damagePredictor.estimate(body, enemy, dmg, remaining, !world.testDam, commit);
       }
 
-      // ===== 预判伤害记入：优先用攻击体 parr（真实碰撞命中的单位——时停中碰撞
-      // 仍发生，只是伤害被清零）；parr 为空时（近战捕获早于 bindMove 窗口）退回
-      // 位置盒检测。伤害按游戏公式期望值估算（含护甲/穿甲）。
       private function creditHit(body:Object, dmg:Number):void
       {
          try
          {
-            // 1) 精确路径：真实碰撞证据 parr（public）
-            try
+            var contacts:Array = body.parr as Array;
+            if (contacts == null || contacts.length == 0) return;
+            // Bullet.udar adds parr BEFORE its RNG hit test. This is a contact, not
+            // proof of a hit; expectedDam retains native miss / dodge probabilities.
+            // WClub replaces parr for each swing while retaining the same Bullet.
+            var credited:Object = hitCred[body];
+            if (credited == null || credited.parr !== contacts)
             {
-               var parrA:Array = body.parr;
-               if (parrA != null && parrA.length > 0)
-               {
-                  var credArr:Array = hitCred[body];
-                  if (credArr == null) { credArr = []; hitCred[body] = credArr; }
-                  for each (var u2:Object in parrA)
-                  {
-                     if (u2 == null || u2 == world.gg) continue;
-                     try
-                     {
-                        if (credArr.indexOf(u2) != -1) continue;
-                        if (u2.sost != 1) continue;
-                        if (u2.fraction == world.gg.fraction) continue;
-                        if (predDam[u2] == null) { predDam[u2] = 0; }
-                        predDam[u2] += expectedDam(body, u2, dmg);
-                        credArr.push(u2);
-                        checkPredDeath(u2);
-                     }
-                     catch (e:*) { }
-                  }
-                  return;
-               }
+               credited = { parr: contacts, targets: [] };
+               hitCred[body] = credited;
             }
-            catch (e:*) { }
-            // 2) 兜底：位置盒检测（近战挥击捕获时 parr 尚未命中）
-            if (hitCred[body] != null) return;
-            var unitsU:Object = world.loc != null ? world.loc.units : null;
-            if (unitsU == null) return;
-            var bx:Number = body.X;
-            var by:Number = body.Y;
-            for each (var u:Object in unitsU)
+            for each (var u:Object in contacts)
             {
-               if (u == world.gg) continue;
+               if (u == null || u == world.gg || credited.targets.indexOf(u) >= 0) continue;
                try
                {
-                  if (u.sost != 1) continue;
-                  if (u.fraction == world.gg.fraction) continue;
-                  if (bx >= u.X1 && bx <= u.X2 && by >= u.Y1 && by <= u.Y2)
-                  {
-                     if (predDam[u] == null) { predDam[u] = 0; }
-                     predDam[u] += expectedDam(body, u, dmg);
-                     hitCred[body] = u;
-                     checkPredDeath(u);
-                     return;
-                  }
+                  if (u.sost != 1 || u.fraction == world.gg.fraction) continue;
+                  var amount:Number = expectedDam(body, u, dmg, true);
+                  credited.targets.push(u);
+                  if (!isFinite(amount) || amount <= 0) continue;
+                  if (predDam[u] == null) predDam[u] = 0;
+                  predDam[u] += amount;
+                  checkPredDeath(u);
                }
                catch (e:*) { }
             }
          }
          catch (e:*) { }
       }
-
       // ===== 预判死亡判定：累计伤害 ≥ 血量 → sost=3 死亡姿态（慢速死亡动画+停止行动）=====
       // 不真杀（不调 die()）：回放中才真实结算死亡——时停只是"预告"
       private function checkPredDeath(enemy:Object):void
@@ -3609,7 +3466,7 @@ package
             if (enemy == null || predDead[enemy]) return;
             if (enemy.sost != 1) return;
             var pd:Number = predDam[enemy] != null ? predDam[enemy] : 0;
-            if (pd >= enemy.hp)
+            if (pd > 0 && enemy.hp > 0 && pd >= enemy.hp)
             {
                predDead[enemy] = true;
                enemy.sost = 3;   // 死亡姿态：control 早退（Monstrik 检查 sost==3）+
@@ -3657,6 +3514,7 @@ package
             }
          }
          catch (e:*) { }
+         damagePredictor.reset();
          predDam = new Dictionary();
          origDam = new Dictionary();
          hitCred = new Dictionary();
@@ -3917,7 +3775,7 @@ package
       {
          if (panelTf == null) return;
          var lines:Array = [];
-         lines.push("== SandevistanMod v1.141 参数 ==");
+         lines.push("== SandevistanMod v1.142 参数 ==");
          lines.push((panelSel == 0 ? "> " : "  ") + "生效时长   " + (cfgDuration / 30).toFixed(1) + "s");
          lines.push((panelSel == 1 ? "> " : "  ") + "冷却       " + (cfgCooldown / 30).toFixed(1) + "s");
          lines.push((panelSel == 2 ? "> " : "  ") + "回放速度   x" + cfgReplaySpeed);
@@ -4619,6 +4477,7 @@ package
             mouseAtkPulse = false;   // 脉冲每帧消费一次
             var loc:Object = world.loc;
             loc.gg.step();   // 玩家全速手动 step
+            freezeMeleeDamage(); // 本帧新挥击先存伤害，随后帧的接触才记账
             // v1.115：敌人斯安维斯坦（场景 B）——活跃 Sandy 敌人与玩家同权
             // 每帧全速 step（敌我"正常关系"，其余世界 1/N 慢放）；节流帧的
             // loc.step 会再步到它一次（1/N 慢步）——与玩家"自由物理步"同款

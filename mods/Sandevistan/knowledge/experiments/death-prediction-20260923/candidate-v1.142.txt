@@ -1,0 +1,57 @@
+[SandyMod] v1.142 loaded esmark=1 esghost=1 esper=50 esen=0 esprob=100
+[DEATH-TEST] boot stage=0 allStat=0 mm=false land=true
+[DEATH-TEST] unarmored PASS expected=100 native=100
+[DEATH-TEST] weapon fixture=punch
+[DEATH-TEST] worn-already-in-projectile PASS expected=100 native=100
+[DEATH-TEST] laser-uses-magic-armor PASS expected=90 native=90
+[DEATH-TEST] armor-break-on-this-hit PASS expected=100 native=100
+[DEATH-TEST] critical-after-armor PASS expected=160 native=160
+[DEATH-TEST] lethal-preview PASS credited=100 hp=95 sost=3
+[DEATH-TEST] same-swing-not-duplicated PASS once=40
+[DEATH-TEST] second-swing-counted PASS twoSwings=80
+[DEATH-TEST] removed-projectile-credited PASS inChain=false contacts=1 targetMatch=true raw=100 credited=100
+[DEATH-TEST] damage-type-1 PASS expected=40 native=40
+[DEATH-TEST] damage-type-2 PASS expected=40 native=40
+[DEATH-TEST] damage-type-3 PASS expected=85 native=85
+[DEATH-TEST] damage-type-4 PASS expected=40 native=40
+[DEATH-TEST] damage-type-6 PASS expected=85 native=85
+[DEATH-TEST] damage-type-7 PASS expected=100 native=100
+[DEATH-TEST] damage-type-8 PASS expected=100 native=100
+[DEATH-TEST] damage-type-9 PASS expected=85 native=85
+[DEATH-TEST] damage-type-10 PASS expected=40 native=40
+[DEATH-TEST] damage-type-11 PASS expected=85 native=85
+[DEATH-TEST] damage-type-12 PASS expected=100 native=100
+[DEATH-TEST] damage-type-13 PASS expected=100 native=100
+[DEATH-TEST] damage-type-14 PASS expected=40 native=40
+[DEATH-TEST] damage-type-15 PASS expected=100 native=100
+[DEATH-TEST] damage-type-16 PASS expected=100 native=100
+[DEATH-TEST] damage-type-17 PASS expected=100 native=100
+[DEATH-TEST] damage-type-18 PASS expected=85 native=85
+[DEATH-TEST] damage-type-19 PASS expected=100 native=100
+[DEATH-TEST] damage-type-100 PASS expected=100 native=100
+[DEATH-TEST] species-before-armor PASS expected=130 native=130
+[DEATH-TEST] virtual-defense-is-read-only-false PASS realHP=10000
+[DEATH-TEST] consecutive-defense-break-false PASS expected=230 native=230
+[DEATH-TEST] virtual-defense-is-read-only-true PASS realHP=10000
+[DEATH-TEST] consecutive-defense-break-true PASS expected=200 native=200
+[DEATH-TEST] full-dodge PASS p=0
+[DEATH-TEST] zero-dex-bypasses-dodge PASS p=1
+[DEATH-TEST] zero-precision-bypasses-dex PASS p=1
+[DEATH-TEST] guaranteed-miss PASS damage=0
+[DEATH-TEST] invulnerable PASS damage=0
+[DEATH-TEST] no-contact-no-credit PASS credited=undefined
+[DEATH-TEST] partial-coverage-floor PASS expected=50 nativeMean2400=50.583333333333336
+[DEATH-TEST] random-spread-armor-threshold PASS expected=1.8518518518518507 analytic=1.875 nativeMean2400=1.8019874743651598
+[DEATH-TEST] turret-direction--1 PASS expected=75 native=75
+[DEATH-TEST] turret-direction-1 PASS expected=100 native=100
+[DEATH-TEST] global-vulnerability-0 PASS expected=50 native=50
+[DEATH-TEST] global-vulnerability-12 PASS expected=100 native=100
+[DEATH-TEST] global-vulnerability-13 PASS expected=100 native=100
+[DEATH-TEST] global-vulnerability-100 PASS expected=100 native=100
+[DEATH-TEST] sneak-critical PASS expected=200 native=200
+[DEATH-TEST] disintegration PASS expected=1200 native=1200
+[DEATH-TEST] airborne-spark PASS expected=50 native=50
+[DEATH-TEST] melee-later-contact PASS credited=40
+[DEATH-TEST] melee-next-swing PASS credited=80
+[DEATH-TEST] inline-kick-not-double-counted PASS realLoss=40 deferred=undefined
+[DEATH-TEST] SUMMARY PASS checks=53 fails=0
