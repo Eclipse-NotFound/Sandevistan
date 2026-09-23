@@ -1,6 +1,6 @@
 # Sandevistan —— 开发记忆入口
 
-> 更新：2026-09-23，v1.142 死亡预判优化候选验证完毕，待源仓提交、同步和部署复验。权限见 AGENT_SCOPE.md 与工作区 GOVERNANCE.md。
+> 更新：2026-09-23，v1.142 死亡预判优化已部署，发布字节隔离重启复验通过。权限见 AGENT_SCOPE.md 与工作区 GOVERNANCE.md。
 
 ## 1. 这个模组是什么
 
@@ -16,7 +16,7 @@
 
 ## 3. 当前状态
 
-- 源仓 release 候选 **v1.142**，51,623 字节，SHA256 `28449B2646223A8EEE20EB4BB361DDA2D5DC0572C6AAA9CD5FCB5D072A374C44`；源仓构建与 release 相同，待提交和同步游戏副本。
+- 源仓与游戏 release **v1.142**，51,623 字节，SHA256 `28449B2646223A8EEE20EB4BB361DDA2D5DC0572C6AAA9CD5FCB5D072A374C44`；源仓构建与两侧 release 哈希一致；实现提交 e821a76，发布后复验通过。
 - 新增 SandyDamagePredictor：按真实命中短路、物理/能量甲、先破甲后减伤、护盾、暴击/偷袭/分解及全局易伤顺序估计。9 点积分处理随机伤害，独立累计预计耐久，不改真实实体状态；取消二次武器耐久惩罚及固定0.9折扣。
 - slowStepWorld 保存步前攻击体引用，步后仍读取已离场子弹碰撞；近战缓存原伤害，以 parr 引用区分挥击且持续读取晚接触；去掉位置盒猜测。WKick 内联扣血不再补记延后伤害。
 - v1.141 SandyBlitReplay 记录真实精灵图帧坐标，回放后恢复，保持尸体保护。v1.140 独立 ModSettingsCarrier 16 项与 F9；敌人斯安维斯坦默认关。v1.139 主题曲默认音量70、90帧淡出、断点续播。
@@ -26,9 +26,9 @@
 
 - 有效旧版基线52项中47项失败；新版53/53通过，原生 damage/udarBullet 对照、真实近战延迟接触和 WKick 防双记。出链测试必须断言 in_chain=false 和实际目标一致。
 - 动画回归12组574/574帧逐像素相同，12项尸体保护通过；最后的 WKick 防双记调整不涉及动画路径。
-- 正式构建字节 -Smoke -Artifact 完整流程20 PASS/0 FAIL/1 SKIP；跳过未安装 ModSettings 的注册。死亡攻击检查 snapSize=0，不能视作实质覆盖。
+- 正式构建与实际部署字节各自 -Smoke -Artifact 完整流程20 PASS/0 FAIL/1 SKIP；跳过未安装 ModSettings 的注册。死亡攻击检查 snapSize=0，不能视作实质覆盖。
 - 详细研究、失败夹具纠正、源码顺序与日志：knowledge/experiments/death-prediction-2026-09-23.md、death-prediction-20260923/。上一轮动画证据保留 replay-animation-freeze-2026-09-23.md。
-- 当前停点：源仓候选和回滚备份就绪，先提交再定向部署；部署后必须从实际发布字节隔离重启并更新本节。
+- 当前停点：v1.142 已部署并完成发布复验（deployed-smoke.txt）；用户正常完全退出并重启即可加载。研究与实现均已归档。
 
 ## 5. 已知问题与边界
 
@@ -40,7 +40,7 @@
 
 ## 6. 发布与恢复
 
-- 源仓 v1.141 回滚：build/out/SandevistanMod.before-v1.142-20260923.swf，50,878字节，SHA256 `F556C0728DA406A4A6A05399DF93E9A0349C4225107547F1E12FE88A2AEE3E48`。游戏部署时另留同名 release 备份；换回后重启即可，本轮没有宿主补丁需要回滚。
+- 源仓 v1.141 回滚：build/out/SandevistanMod.before-v1.142-20260923.swf，50,878字节，SHA256 `F556C0728DA406A4A6A05399DF93E9A0349C4225107547F1E12FE88A2AEE3E48`。游戏 release 已另留同名备份且哈希一致；换回后重启即可，本轮没有宿主补丁需要回滚。
 - 当前 pfe.swf 指纹 `B78244657ED407D03808C90E97325509DB35F802122835F58933FFF8003305AC`，与上一轮不同（文件时间10:54:55，来源未调查）；最终专项/动画/流程均在该宿主副本运行。本轮未写宿主和清单。
 - 玩家 config SHA256 `D91C4C2889ABA19B1BCFB356885921B0605A50188B270A9E7619D2116E7EBDC3`，同步不得覆盖。更早 v1.140 回滚 before-v1.141 保留。
 
