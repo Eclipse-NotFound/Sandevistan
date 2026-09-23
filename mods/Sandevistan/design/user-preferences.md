@@ -14,3 +14,5 @@
    `C:\Users\micha\AppData\Roaming\pfe\Local Store\sandy_modlog.txt`（47MB+，用
    `grep -a`/`tail` 取 DIAG 行，勿整读）；关键诊断行：rStart/recEnd/rFire/sAtk/
    recAtk/recBox/boom/sandyBoom/replayHit/rFix/ghostScan/partsKillDeep。
+
+7. **设置入口（2026-09-23）**：用户要求去掉模组独立面板，只保留游戏菜单中的设置区。本轮按统一 ModSettings 接入实现，删除 F9 弹窗与旧 Options 浮层；触发键配置继续沿用。

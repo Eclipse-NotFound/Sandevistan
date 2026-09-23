@@ -109,11 +109,6 @@ package
       private var doorPrevDop:Dictionary = new Dictionary();  // 门重演：上一帧 dop（防重复 setVisState 音效）
       private var lastGhostX:Number = 0;   // 上一残影位置（叠加防护：最小位移门槛）
       private var lastGhostY:Number = 0;
-      private var panelOpen:Boolean = false;
-      private var optPanelOn:Boolean = false;      // 选项页模组设置面板
-      private var optSel:int = 0;                  // 0=生效 1=冷却 2=残影不透明度 3=残影频率 4=渐变门槛 5=回放残影间隔 6=回放残影寿命
-      private var optTf:TextField = null;
-      private var optBg:Sprite = null;
       private var lastGgControl:Boolean = true;
       private var savedInter:Object = null;
       private var keyPressTime:Array = [];      // 按键按下时间戳（防 UP 丢失卡键）
@@ -152,8 +147,6 @@ package
          }
          catch (e:*) { log("[SandyMod] buildKeyMap error: " + e); }
       }
-      private var panelSel:int = 0;
-      private var panelTf:TextField = null;
       private var prevVisX:Number = 0;
       private var prevVisY:Number = 0;
 
@@ -162,7 +155,6 @@ package
       private var debugTest:Boolean = false;             // 自动测试模式（config debugtest=1）
       private var cfgShowMark:Boolean = true;            // 启动时显示模组已加载标记
       private var cfgHud:Boolean = true;                 // v1.125：顶部状态 UI（启动中/回放中/充能中）显示开关
-      private var cfgPanelKey:int = Keyboard.F9;         // 参数面板热键
       private var cfgGhostBlend:int = 1;                  // 残影混合: 1=normal柔和 0=add发光
       private var cfgGhostAlpha:int = 70;                 // 残影不透明度（百分比，默认 70）
       private var cfgReplayGhost:int = 1;                 // 回放残影生成间隔（每 N 个显示帧 1 个）
@@ -298,7 +290,7 @@ package
          if (arr == null) { arr = []; enemyAtks[u] = arr; }
          arr.push(ev);
       }
-      private var testStage:int = 0;                     // v1.136 状态机：0=开机 1=进游戏 2=传送 3=到达 4=拉怪 5=热身 6=时停 7=回放 8=pip 9=F9面板 10=总结
+      private var testStage:int = 0;                     // v1.136 状态机：0=开机 1=进游戏 2=传送 3=到达 4=拉怪 5=热身 6=时停 7=回放 8=pip/菜单设置 9=独立面板移除 10=总结
       private var testTicks:int = 0;
       private var testSub:int = 0;                       // v1.136：子步骤（pip/面板细分阶段）
       private var testPass:int = 0;                      // v1.136：断言通过计数
@@ -419,7 +411,7 @@ package
          // v1.101：版本标记——日志确认实际加载运行的构建版本与关键开关
          // v1.121：追加 esmark/esper/espd——排查"徽标不可见"类问题的第一手数据
          // v1.127：swaprun/projhits 已迁移 mods/MoreSkills&Weapons（此处不再输出）
-         inst.log("[SandyMod] v1.142 loaded"
+         inst.log("[SandyMod] v1.143 loaded"
              + " esmark=" + (inst.cfgESMark ? 1 : 0) + " esghost=" + (inst.cfgESGhost ? 1 : 0) + " esper=" + inst.cfgESPer
              + " esen=" + (inst.cfgESEnabled ? 1 : 0) + " esprob=" + inst.cfgESRoomProb);
          if (main != null && main.stage != null)
@@ -453,7 +445,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.142 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.143 已加载 (按 \ 触发斯安维斯坦)";
             t.autoSize = "left";   // v1.110：版本号此前显示不全（TextField 默认宽度截断）
             t.x = 10;
             t.y = 10;
@@ -612,7 +604,6 @@ package
             else if (k == "debugtest") debugTest = v.toLowerCase() == "1" || v.toLowerCase() == "true";
             else if (k == "showmark") cfgShowMark = v.toLowerCase() == "1" || v.toLowerCase() == "true";
             else if (k == "showhud") cfgHud = v.toLowerCase() == "1" || v.toLowerCase() == "true";
-            else if (k == "panelkey") cfgPanelKey = parseInt(v);
             else if (k == "diaglog") cfgDiagLog = v.toLowerCase() == "1" || v.toLowerCase() == "true";
             else if (k == "ghostblend") cfgGhostBlend = parseInt(v);
             else if (k == "ghostalpha") cfgGhostAlpha = parseInt(v);
@@ -678,7 +669,7 @@ package
          }
 
          // 独立 ModSettings 异步加载；36000 帧内每 10 帧重试一次。
-         // 未安装设置中枢时静默跳过，F9 面板照常可用。
+         // 未安装设置中枢时静默跳过；不创建独立设置弹窗。
          if (!hubRegistered && hubRegTries < 36000)
          {
             hubRegTries++;
@@ -712,13 +703,7 @@ package
             buildKeyMap();
          }
 
-         checkOptPanel();
 
-         if (panelOpen)
-         {
-            renderPanel();
-            return;
-         }
 
          if (sandyActive)
          {
@@ -1197,20 +1182,43 @@ package
                }
                else if (testSub == 3 && ++testTicks > 45)
                {
-                  testAssert("opt-page-detected", optPanelOn, "");
-                  var txt8:String = optTf != null ? optTf.text : "";
-                  // TextField 内部以 \r 存行——归一化后再数行/找子串
-                  var norm8:String = txt8.split(String.fromCharCode(13)).join(String.fromCharCode(10));
-                  var nonEmpty8:int = 0;
-                  for each (var ln8:String in norm8.split(String.fromCharCode(10)))
+                  var legacyOverlay:Boolean = false;
+                  for (var childIndex:int = 0; childIndex < world.main.numChildren; childIndex++)
                   {
-                     if (ln8.replace(/^\s+|\s+$/g, "") != "") { nonEmpty8++; }
+                     var settingsText:TextField = world.main.getChildAt(childIndex) as TextField;
+                     if (settingsText != null && settingsText.visible && settingsText.text.indexOf("-- SandevistanMod --") >= 0) legacyOverlay = true;
                   }
-                  // 行构成：标题 + 13 个条目(0-12) + 空行 + 提示 = 非空 15 行
-                  testAssert("opt-page-13-items", nonEmpty8 == 15, "nonEmptyLines=" + nonEmpty8);
-                  testAssert("opt-esandy-default-off", norm8.indexOf("敌人斯安维斯坦 关") >= 0,
-                             "esen=" + cfgESEnabled + " raw=[" + norm8.replace(/\r?\n/g, "|") + "]");
-                  try { world.pip.onoff(-1); } catch (e11:*) { }
+                  testAssert("legacy-settings-overlay-removed", !legacyOverlay, "");
+                  if (hubRegistered)
+                  {
+                     try
+                     {
+                        var menuAPI:Object = world.main.getChildByName("ModSettingsCarrier")["modAPI"];
+                        var menuOpened:Boolean = menuAPI.selectPage("sandevistan");
+                        testAssert("settings-menu-opens", menuOpened && menuAPI.isOpen(), "");
+                        var registeredPage:Object = null;
+                        for each (var settingPage:Object in menuAPI.getPages())
+                           if (settingPage.modId == "sandevistan") registeredPage = settingPage;
+                        var durationItem:Object = null;
+                        for each (var settingItem:Object in registeredPage.items)
+                           if (settingItem.key == "duration") durationItem = settingItem;
+                        var originalDuration:Number = durationItem.get();
+                        var trialDuration:Number = originalDuration == 9 ? 10 : 9;
+                        durationItem.set(trialDuration);
+                        menuAPI.togglePage("sandevistan"); // Real close callback flushes sliders.
+                        var storageFile:File = File.applicationStorageDirectory.resolvePath("SandevistanMod_config.txt");
+                        var storageStream:FileStream = new FileStream();
+                        storageStream.open(storageFile, FileMode.READ);
+                        var savedSettings:String = storageStream.readUTFBytes(storageStream.bytesAvailable);
+                        storageStream.close();
+                        cfgDuration = 30; loadConfig(); debugTest = true; // Saved config disables automation; keep this isolated test running.
+                        testAssert("menu-settings-save-reload", cfgDuration == trialDuration * 30
+                           && savedSettings.indexOf("duration=" + int(trialDuration * 30)) >= 0
+                           && savedSettings.indexOf("panelkey=") < 0, "duration=" + cfgDuration);
+                        durationItem.set(originalDuration); registeredPage.onPageClose();
+                     }
+                     catch (menuError:*) { testAssert("settings-menu-flow", false, String(menuError)); }
+                  }                  try { world.pip.onoff(-1); } catch (e11:*) { }
                   testSub = 4; testTicks = 0;
                }
                else if (testSub == 4 && ++testTicks > 45)
@@ -1225,26 +1233,18 @@ package
             }
             else if (testStage == 9)
             {
-               // F9 面板渲染断言（含 v1.136 敌桑默认"关"）
-               if (testSub == 0)
-               {
-                  togglePanel(true);
-                  testSub = 1; testTicks = 0;
-               }
-               else if (testSub == 1 && ++testTicks > 15)
-               {
-                  var ptxt9:String = panelTf != null ? panelTf.text : "";
-                  var pnorm9:String = ptxt9.split(String.fromCharCode(13)).join(String.fromCharCode(10));
-                  testAssert("panel-open", panelOpen && pnorm9.length > 0, "");
-                  testAssert("panel-esandy-default-off", pnorm9.indexOf("敌人斯安维斯坦 关") >= 0,
-                             "esen=" + cfgESEnabled);
-                  togglePanel(false);
-                  testSub = 0;
-                  testStage = 11;
-                  testTicks = 0;
-               }
-            }
-            else if (testStage == 11)
+               // Removed standalone shortcut must not create a display or consume input.
+               var childrenBefore:int = world.main.numChildren;
+               var f9Reached:Boolean = false;
+               var f9Observer:Function = function(event:KeyboardEvent):void { f9Reached = true; };
+               world.main.stage.addEventListener(KeyboardEvent.KEY_DOWN, f9Observer, false, -1000);
+               world.main.stage.dispatchEvent(new KeyboardEvent(KeyboardEvent.KEY_DOWN, true, false, 0, Keyboard.F9));
+               world.main.stage.removeEventListener(KeyboardEvent.KEY_DOWN, f9Observer);
+               world.main.stage.dispatchEvent(new KeyboardEvent(KeyboardEvent.KEY_UP, true, false, 0, Keyboard.F9));
+               testAssert("standalone-f9-removed", world.main.numChildren == childrenBefore && f9Reached,
+                          "children=" + childrenBefore + "->" + world.main.numChildren + " forwarded=" + f9Reached);
+               testSub = 0; testStage = 11; testTicks = 0;
+            }            else if (testStage == 11)
             {
                // v1.139：第二周目——第二次 startSandy 应从断点续播主题曲
                testPipGuard();
@@ -1552,193 +1552,6 @@ package
       }
 
       // ==================== 选项页模组设置 ====================
-      private function checkOptPanel():void
-      {
-         var on:Boolean = false;
-         try
-         {
-            if (world != null && world.pip != null && world.pip.active && world.pip.currentPage != null)
-            {
-               var qn:String = flash.utils.getQualifiedClassName(world.pip.currentPage);
-               if (qn == "fe.inter::PipPageOpt")
-               {
-                  on = true;
-               }
-            }
-         }
-         catch (e:*) { }
-         // The independent panel owns this space while open; F9 stays available.
-         if (on && hubRegistered)
-         {
-            try
-            {
-               var settingsCarrier:* = world.main.getChildByName("ModSettingsCarrier");
-               if (settingsCarrier != null && settingsCarrier.modAPI.isOpen()) on = false;
-            }
-            catch (settingsError:*) { }
-         }
-         if (on != optPanelOn)
-         {
-            optPanelOn = on;
-            if (on)
-            {
-               showOptPanel();
-            }
-            else
-            {
-               hideOptPanel();
-            }
-         }
-         if (on)
-         {
-            renderOptPanel();
-         }
-      }
-
-      private function showOptPanel():void
-      {
-         try
-         {
-            if (world == null || world.main == null) return;
-            if (optTf == null)
-            {
-               optTf = new TextField();
-               var tf:TextFormat = new TextFormat();
-               tf.font = "Consolas";
-               tf.size = 15;
-               tf.color = 0x00FF99;
-               tf.letterSpacing = 1;
-               optTf.defaultTextFormat = tf;
-               optTf.selectable = false;
-               optTf.mouseEnabled = false;
-               optBg = new Sprite();
-               world.main.addChild(optBg);
-               world.main.addChild(optTf);
-            }
-            optTf.visible = true;
-            optBg.visible = true;
-            optSel = 0;
-         }
-         catch (e:*) { }
-      }
-
-      private function hideOptPanel():void
-      {
-         try
-         {
-            if (optTf != null) optTf.visible = false;
-            if (optBg != null) optBg.visible = false;
-         }
-         catch (e:*) { }
-      }
-
-      private function optAdj(dir:int):void
-      {
-         if (optSel == 0)
-         {
-            cfgDuration = Math.max(30, Math.min(3600, cfgDuration + dir * 30));
-         }
-         else if (optSel == 1)
-         {
-            cfgCooldown = Math.max(0, Math.min(3600, cfgCooldown + dir * 30));
-         }
-         else if (optSel == 2)
-         {
-            // 残影不透明度（5-100%，步进 5%）
-            cfgGhostAlpha = Math.max(5, Math.min(100, cfgGhostAlpha + dir * 5));
-         }
-         else if (optSel == 3)
-         {
-            // 残影生成频率（帧间隔，1-30）
-            cfgGhostEvery = Math.max(1, Math.min(30, cfgGhostEvery + dir));
-         }
-         else if (optSel == 4)
-         {
-            // 渐变门槛（速度阈值，1-30，步进 1——允许奇数）
-            cfgEdgeThresh = Math.max(1, Math.min(30, cfgEdgeThresh + dir));
-         }
-         else if (optSel == 5)
-         {
-            // 回放残影生成间隔（显示帧，1-30）
-            cfgReplayGhost = Math.max(1, Math.min(30, cfgReplayGhost + dir));
-         }
-         else if (optSel == 6)
-         {
-            // 回放残影寿命（显示帧，1-60）
-            cfgReplayGhostLife = Math.max(1, Math.min(60, cfgReplayGhostLife + dir));
-         }
-         else if (optSel == 7)
-         {
-            // v1.131：敌人斯安维斯坦总开关
-            cfgESEnabled = !cfgESEnabled;
-         }
-         else if (optSel == 8)
-         {
-            // v1.131：房间出现斯安维斯坦敌人概率（0-100%，步进 10%）
-            cfgESRoomProb = Math.max(0, Math.min(100, cfgESRoomProb + dir * 10));
-         }
-         else if (optSel == 9)
-         {
-            // v1.131：有斯安维斯坦敌人的房间内装备占比（0-100%，步进 5%）
-            cfgESPer = Math.max(0, Math.min(100, cfgESPer + dir * 5));
-         }
-         else if (optSel == 10)
-         {
-            // v1.139：主题曲开关
-            cfgMusicOn = !cfgMusicOn;
-            if (!cfgMusicOn) { musHardStop(); }
-         }
-         else if (optSel == 11)
-         {
-            // v1.139：主题曲音量（0-100%，步进 5%）
-            cfgMusicVol = Math.max(0, Math.min(100, cfgMusicVol + dir * 5));
-            applyMusVol(musFadeLeft > 0 ? musFadeLeft / Math.max(1, cfgMusicFade) : 1);
-         }
-         else if (optSel == 12)
-         {
-            // v1.139：主题曲淡出时长（30-600 帧，步进 15 帧 = 0.5 秒）
-            cfgMusicFade = Math.max(30, Math.min(600, cfgMusicFade + dir * 15));
-         }
-      }
-
-      private function renderOptPanel():void
-      {
-         try
-         {
-            if (optTf == null) return;
-            var lines:Array = [];
-            lines.push("-- SandevistanMod --");
-            lines.push((optSel == 0 ? "> " : "  ") + "生效时间   " + (cfgDuration / 30).toFixed(1) + "s");
-            lines.push((optSel == 1 ? "> " : "  ") + "冷却       " + (cfgCooldown / 30).toFixed(1) + "s");
-            lines.push((optSel == 2 ? "> " : "  ") + "残影不透明度 " + cfgGhostAlpha + "%");
-            lines.push((optSel == 3 ? "> " : "  ") + "残影频率    " + cfgGhostEvery + "帧");
-            lines.push((optSel == 4 ? "> " : "  ") + "渐变门槛    " + cfgEdgeThresh);
-            lines.push((optSel == 5 ? "> " : "  ") + "回放残影间隔 " + cfgReplayGhost + "帧");
-            lines.push((optSel == 6 ? "> " : "  ") + "回放残影寿命 " + cfgReplayGhostLife + "帧");
-            lines.push((optSel == 7 ? "> " : "  ") + "敌人斯安维斯坦 " + (cfgESEnabled ? "开" : "关"));
-            lines.push((optSel == 8 ? "> " : "  ") + "敌人房间概率 " + cfgESRoomProb + "%");
-            lines.push((optSel == 9 ? "> " : "  ") + "房内装备占比 " + cfgESPer + "%");
-            lines.push((optSel == 10 ? "> " : "  ") + "时停主题曲 " + (cfgMusicOn ? "开" : "关"));
-            lines.push((optSel == 11 ? "> " : "  ") + "主题曲音量 " + cfgMusicVol + "%");
-            lines.push((optSel == 12 ? "> " : "  ") + "主题曲淡出 " + (cfgMusicFade / 30).toFixed(1) + "s");
-            lines.push("");
-            lines.push("上下选择 左右调值 Enter保存");
-            optTf.text = lines.join(String.fromCharCode(10));
-            var sw:Number = 1280;
-            try { sw = world.swfStage.stageWidth; } catch (e:*) { }
-            optTf.x = sw - 300;
-            optTf.y = 120;
-            optTf.width = 260;
-            optTf.height = 330;
-            optBg.graphics.clear();
-            optBg.graphics.lineStyle(1, 0x00FF99, 0.8);
-            optBg.graphics.beginFill(0x002211, 0.75);
-            optBg.graphics.drawRect(optTf.x - 10, optTf.y - 10, optTf.width + 20, optTf.height + 20);
-            optBg.graphics.endFill();
-         }
-         catch (e:*) { }
-      }
-
       // ===== 清除时停期间玩家发射的冻结子弹（回放重演避免双倍火力）=====
       private function clearFrozenBullets():void
       {
@@ -3705,105 +3518,11 @@ package
          catch (e:*) { }
       }
 
-      // ==================== 参数面板 ====================
-      private function togglePanel(open:Boolean):void
-      {
-         panelOpen = open;
-         if (open)
-         {
-            if (sandyActive) endSandy();
-            if (panelTf == null)
-            {
-               panelTf = new TextField();
-               var tf:TextFormat = new TextFormat();
-               tf.font = "Consolas";
-               tf.size = 14;
-               tf.color = 0x00FF99;
-               tf.letterSpacing = 1;
-               panelTf.defaultTextFormat = tf;
-               panelTf.selectable = false;
-               panelTf.mouseEnabled = false;
-            }
-            if (world != null && world.main != null && panelTf.parent == null)
-            {
-               world.main.addChild(panelTf);
-            }
-            panelSel = 0;
-         }
-         else
-         {
-            if (panelTf != null && panelTf.parent != null) panelTf.parent.removeChild(panelTf);
-            saveConfigFile();
-         }
-      }
-
-      private function panelKey(kc:int):void
-      {
-         if (kc == Keyboard.ESCAPE || kc == cfgPanelKey) { togglePanel(false); return; }
-         if (kc == Keyboard.UP) { panelSel = (panelSel + 13 - 1) % 13; return; }
-         if (kc == Keyboard.DOWN) { panelSel = (panelSel + 1) % 13; return; }
-         if (kc == Keyboard.LEFT) { panelAdj(-1); return; }
-         if (kc == Keyboard.RIGHT) { panelAdj(1); return; }
-         if (kc == Keyboard.ENTER) { togglePanel(false); return; }
-      }
-
-      private function panelAdj(dir:int):void
-      {
-         switch (panelSel)
-         {
-            case 0: cfgDuration = Math.max(30, Math.min(3600, cfgDuration + dir * 30)); break;
-            case 1: cfgCooldown = Math.max(0, Math.min(3600, cfgCooldown + dir * 30)); break;
-            case 2: cfgReplaySpeed = Math.max(1, Math.min(20, cfgReplaySpeed + dir)); break;
-            case 3: cfgGhostEvery = Math.max(1, Math.min(30, cfgGhostEvery + dir)); break;
-            case 4: cfgFxRun = !cfgFxRun; break;
-            case 5: cfgHotkey = Math.max(1, Math.min(255, cfgHotkey + dir)); break;
-            case 6: cfgHud = !cfgHud; break;   // v1.125：顶部状态 UI 开关
-            case 7: cfgESEnabled = !cfgESEnabled; break;                 // v1.131：敌人斯安维斯坦总开关
-            case 8: cfgESRoomProb = Math.max(0, Math.min(100, cfgESRoomProb + dir * 10)); break;  // 房间出现概率
-            case 9: cfgESPer = Math.max(0, Math.min(100, cfgESPer + dir * 5)); break;            // 房内装备占比
-            // v1.139：主题曲
-            case 10: cfgMusicOn = !cfgMusicOn; if (!cfgMusicOn) { musHardStop(); } break;
-            case 11:
-               cfgMusicVol = Math.max(0, Math.min(100, cfgMusicVol + dir * 5));
-               applyMusVol(musFadeLeft > 0 ? musFadeLeft / Math.max(1, cfgMusicFade) : 1);
-               break;
-            case 12: cfgMusicFade = Math.max(30, Math.min(600, cfgMusicFade + dir * 15)); break;
-         }
-      }
-
-      private function renderPanel():void
-      {
-         if (panelTf == null) return;
-         var lines:Array = [];
-         lines.push("== SandevistanMod v1.142 参数 ==");
-         lines.push((panelSel == 0 ? "> " : "  ") + "生效时长   " + (cfgDuration / 30).toFixed(1) + "s");
-         lines.push((panelSel == 1 ? "> " : "  ") + "冷却       " + (cfgCooldown / 30).toFixed(1) + "s");
-         lines.push((panelSel == 2 ? "> " : "  ") + "回放速度   x" + cfgReplaySpeed);
-         lines.push((panelSel == 3 ? "> " : "  ") + "残影间隔   " + cfgGhostEvery + "帧");
-         lines.push((panelSel == 4 ? "> " : "  ") + "特效继续   " + (cfgFxRun ? "开" : "关"));
-         lines.push((panelSel == 5 ? "> " : "  ") + "热键码     " + cfgHotkey);
-         lines.push((panelSel == 6 ? "> " : "  ") + "顶部状态UI " + (cfgHud ? "开" : "关"));
-         lines.push((panelSel == 7 ? "> " : "  ") + "敌人斯安维斯坦 " + (cfgESEnabled ? "开" : "关"));
-         lines.push((panelSel == 8 ? "> " : "  ") + "敌人房间概率 " + cfgESRoomProb + "%");
-         lines.push((panelSel == 9 ? "> " : "  ") + "房内装备占比 " + cfgESPer + "%");
-         lines.push((panelSel == 10 ? "> " : "  ") + "时停主题曲 " + (cfgMusicOn ? "开" : "关"));
-         lines.push((panelSel == 11 ? "> " : "  ") + "主题曲音量 " + cfgMusicVol + "%");
-         lines.push((panelSel == 12 ? "> " : "  ") + "主题曲淡出 " + (cfgMusicFade / 30).toFixed(1) + "s");
-         lines.push("");
-         lines.push("上下选择 左右调节 Enter保存 Esc关闭");
-         panelTf.text = lines.join(String.fromCharCode(10));
-         panelTf.x = 30;
-         panelTf.y = 30;
-         panelTf.width = 440;
-         panelTf.height = 260;
-         panelTf.visible = true;
-      }
-
       private function saveConfigFile():void
       {
          var NL:String = String.fromCharCode(13, 10);
          var sb:Array = [];
-         sb.push("# SandevistanMod config (saved by panel)");
+         sb.push("# SandevistanMod config (saved by menu settings)");
          sb.push("# hotkey: 220=\  33=PageUp 34=PageDown 36=Home  F1-F12=112-123");
          sb.push("hotkey=" + cfgHotkey);
          sb.push("duration=" + cfgDuration);
@@ -3836,7 +3555,6 @@ package
          sb.push("fxrun=" + (cfgFxRun ? 1 : 0));
          sb.push("showmark=" + (cfgShowMark ? 1 : 0));
          sb.push("showhud=" + (cfgHud ? 1 : 0));
-         sb.push("panelkey=" + cfgPanelKey);
          sb.push("diaglog=" + (cfgDiagLog ? 1 : 0));
          sb.push("debugtest=0");
          var out:String = sb.join(NL) + NL;
@@ -3869,7 +3587,7 @@ package
       }
 
       // ==================== v1.137：MSW 设置中枢接入 ====================
-      // Independent ModSettings registry; values, F9 and config persistence stay here.
+      // Independent ModSettings registry; values and config persistence stay here.
       private function stepHubRegister():void
       {
          try
@@ -3885,8 +3603,8 @@ package
          catch(e:*) { if(hubRegTries >= 36000) log("[SandyMod] hub register gave up: " + e); }
       }
 
-      // 设置项构建：范围与步进照抄 F9 面板(panelAdj)/设置页(optAdj)既有口径。
-      // 一期契约仅 check/slider——热键码需按键捕获，留 F9 面板不进中枢。
+      // 菜单设置项：保留既有范围、步进与保存契约。
+      // 一期契约仅 check/slider——热键码需按键捕获；沿用 config 的 hotkey 字段。
       private function hubBuildItems():Array
       {
          var m:SandevistanMod = this;
@@ -6688,7 +6406,7 @@ package
                var c:Object = world.ctr;
                log("[DIAG] endReplay: keyLeft=" + c.keyLeft + " keyRight=" + c.keyRight + " keyJump=" + c.keyJump
                    + " keyAttack=" + c.keyAttack + " keyTele=" + c.keyTele + " ggControl=" + world.gg.ggControl
-                   + " onPause=" + world.onPause + " allStat=" + world.allStat + " panelOpen=" + panelOpen
+                   + " onPause=" + world.onPause + " allStat=" + world.allStat
                    + " focus=" + world.swfStage.focus);
             }
             catch (e:*) { log("[DIAG] endReplay state err: " + e); }
@@ -6991,7 +6709,7 @@ package
          // 本拦截不再触发，代码保留作备份（完整源码见 state/migration-backup-v1.126/）。
          try
          {
-            if (cfgSwapRun && !replaying && !panelOpen && world != null && world.ctr != null
+            if (cfgSwapRun && !replaying && world != null && world.ctr != null
                 && world.ctr.keyRun && e.keyCode > 0 && e.keyCode < 256)
             {
                var kbS:* = keyMap[e.keyCode];
@@ -7058,30 +6776,6 @@ package
          if (keyPressTime[e.keyCode] == null)
          {
             keyPressTime[e.keyCode] = getTimer();
-         }
-         if (panelOpen)
-         {
-            panelKey(e.keyCode);
-            e.stopPropagation();
-            return;
-         }
-         // ===== 选项页模组设置面板（主菜单/游戏内 Options 页）=====
-         if (optPanelOn)
-         {
-            if (e.keyCode == Keyboard.UP) { optSel = (optSel + 13 - 1) % 13; return; }
-            if (e.keyCode == Keyboard.DOWN) { optSel = (optSel + 1) % 13; return; }
-            if (e.keyCode == Keyboard.LEFT) { optAdj(-1); return; }
-            if (e.keyCode == Keyboard.RIGHT) { optAdj(1); return; }
-            if (e.keyCode == Keyboard.ENTER) { saveConfigFile(); return; }
-            // 其它键放行（PipBuck 正常处理，如 TAB 关闭）
-         }
-         if (e.keyCode == cfgPanelKey)
-         {
-            if (!sandyActive && !replaying && inGameplay())
-            {
-               togglePanel(true);
-            }
-            return;
          }
          if (e.keyCode == cfgHotkey)
          {

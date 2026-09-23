@@ -1,5 +1,11 @@
 # Sandevistan —— 开发日志
 
+## 2026-09-23 v1.143 统一设置入口
+- 用户要求只保留菜单设置。本轮移除F9独立弹窗、旧Options绿色浮层、相关状态和输入处理；16项中枢菜单设置及配置保存保留。
+- 正式候选与真实ModSettings副本隔离验证21 PASS/0 FAIL/0 SKIP，含打开、存储保存重读、F9事件放行。首次测试因重读debugtest=0停止，修正仅测试分支后通过。
+- 候选49,994字节，SHA256 B8805DBACC9A1313FD96BB68889911195AC6EAFCBB526E50C313B86AD1E9C748；已备份v1.142，待提交后部署复验。记录见knowledge/experiments/menu-settings-only-2026-09-23.md。
+
+
 ## 2026-09-23 v1.142 发布复验完成
 - 实现提交 e821a76 后定向同步13个文件（不复制build工具链），游戏与源仓release均为51,623字节，SHA256 28449B2646223A8EEE20EB4BB361DDA2D5DC0572C6AAA9CD5FCB5D072A374C44。
 - 实际部署文件的同字节隔离重启确认v1.142加载，全流程20 PASS/0 FAIL/1 SKIP；证据death-prediction-20260923/deployed-smoke.txt。未安装ModSettings的注册项跳过，死亡攻击snapSize=0仍不计为实质覆盖。

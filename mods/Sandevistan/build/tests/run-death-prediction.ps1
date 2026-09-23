@@ -1,4 +1,4 @@
-param([string]$GameRoot='D:\Program Files\Steam\steamapps\common\Remains', [string]$Source='', [switch]$ExpectFailure, [switch]$Smoke, [string]$Artifact='')
+param([string]$GameRoot='D:\Program Files\Steam\steamapps\common\Remains', [string]$Source='', [switch]$ExpectFailure, [switch]$Smoke, [string]$Artifact='', [switch]$WithSettings)
 $ErrorActionPreference='Stop'
 if($Artifact -and !$Smoke){throw 'Artifact mode requires -Smoke'}
 $modRoot=Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
@@ -20,6 +20,12 @@ Copy-Item -LiteralPath (Join-Path $GameRoot 'Rooms') -Destination (Join-Path $ap
 $rel=Join-Path $appRoot 'mods\Sandevistan\release'
 New-Item -ItemType Directory -Path $rel -Force | Out-Null
 'Sandevistan|SandevistanMod|1|1|1' | Set-Content -LiteralPath (Join-Path $appRoot 'mods\loader-manifest.txt')
+if($WithSettings){
+ $settingsRel=Join-Path $appRoot 'mods\ModSettings\release'
+ New-Item -ItemType Directory -Path $settingsRel -Force | Out-Null
+ Copy-Item -LiteralPath (Join-Path $GameRoot 'mods\ModSettings\release\ModSettingsMod.swf') -Destination (Join-Path $settingsRel 'ModSettingsMod.swf')
+ "ModSettings|ModSettingsMod|1|0|0`nSandevistan|SandevistanMod|1|1|1" | Set-Content -LiteralPath (Join-Path $appRoot 'mods\loader-manifest.txt')
+}
 "debugtest=$([int][bool]$Smoke)`ndiaglog=1`nmusicon=$([int][bool]$Smoke)`nesandyenabled=0" | Set-Content -LiteralPath (Join-Path $rel 'config.txt')
 if($Smoke){Copy-Item -LiteralPath (Join-Path $modRoot 'release\sandy_theme.mp3') -Destination (Join-Path $rel 'sandy_theme.mp3')}
 $srcText=[IO.File]::ReadAllText($Source)
@@ -68,6 +74,7 @@ try {
   $results
   if($Smoke){
    if(!($results -match '\[TEST\] SUMMARY pass=\d+ fail=0 ') -or ($results -match '\[ERRDIALOG\]')){throw 'Smoke assertions did not pass'}
+   if($WithSettings -and (!($results -match 'settings-menu-opens=PASS') -or !($results -match 'menu-settings-save-reload=PASS') -or !($results -match 'hub-registered=PASS'))){throw 'Required menu integration checks missing'}
   }
   if(!$Smoke){
    if($results -match '\[DEATH-TEST\] ERROR' -or !($results -match '\[DEATH-TEST\] SUMMARY')){throw 'Probe did not complete'}
