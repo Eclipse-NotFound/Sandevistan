@@ -1,6 +1,6 @@
 # Sandevistan —— 开发记忆入口
 
-> 更新：2026-09-23，v1.143 统一设置入口候选已通过验证，待提交后部署复验。权限见 AGENT_SCOPE.md 与工作区 GOVERNANCE.md。
+> 更新：2026-09-23，v1.143 统一设置入口已部署，发布字节隔离重启21项通过。权限见 AGENT_SCOPE.md 与工作区 GOVERNANCE.md。
 
 ## 1. 这个模组是什么
 
@@ -12,25 +12,25 @@
 
 - 唯一源码仓 D:\RemainsMod（master），项目 mods\Sandevistan；游戏同名目录是镜像。先源仓提交再定向同步，避免全量脚本覆盖公共资料。
 - design/user-preferences.md：时停正常攻速，保留真实弹药消耗；回放加速攻击、无换弹中断、不二次扣库存。
-- 本轮用户明确“打出足够致死的攻击，敌人仍不出现预判死亡”，要求详细研究并优化；不是玩家死亡问题。上一轮马形敌人动画修复已完成。
+- v1.142用户明确“打出足够致死的攻击，敌人仍不出现预判死亡”，要求详细研究并优化；不是玩家死亡问题。上一轮马形敌人动画修复已完成。
 - 正式 release/config.txt 保留玩家配置。游戏原始 SWF/其他模组只读；不杀用户实例、不写真实 pfe 存档。重启游戏才加载新版。
 - 接手前未跟踪的源仓 AGENTS.md 保留，未暂存；代码发布同步 MEMORY、journal、changelog、说明。
 
 ## 3. 当前状态
 
-- 源仓 release 候选 **v1.143**，49,994 字节，SHA256 `B8805DBACC9A1313FD96BB68889911195AC6EAFCBB526E50C313B86AD1E9C748`；待提交和同步。删除F9独立弹窗及旧Options绿色浮层，只保留ModSettings统一菜单设置；16项、保存和hotkey配置保留，panelkey停止读写。
-- 新增 SandyDamagePredictor：按真实命中短路、物理/能量甲、先破甲后减伤、护盾、暴击/偷袭/分解及全局易伤顺序估计。9 点积分处理随机伤害，独立累计预计耐久，不改真实实体状态；取消二次武器耐久惩罚及固定0.9折扣。
+- 源仓与游戏 release **v1.143**，49,994 字节，SHA256 `B8805DBACC9A1313FD96BB68889911195AC6EAFCBB526E50C313B86AD1E9C748`；两侧哈希一致，实现提交c05a2d4，发布复验通过。删除F9独立弹窗及旧Options绿色浮层，只保留ModSettings统一菜单设置；16项、保存和hotkey配置保留，panelkey停止读写。
+- v1.142新增 SandyDamagePredictor：按真实命中短路、物理/能量甲、先破甲后减伤、护盾、暴击/偷袭/分解及全局易伤顺序估计。9 点积分处理随机伤害，独立累计预计耐久，不改真实实体状态；取消二次武器耐久惩罚及固定0.9折扣。
 - slowStepWorld 保存步前攻击体引用，步后仍读取已离场子弹碰撞；近战缓存原伤害，以 parr 引用区分挥击且持续读取晚接触；去掉位置盒猜测。WKick 内联扣血不再补记延后伤害。
 - v1.141 SandyBlitReplay 记录真实精灵图帧坐标，回放后恢复，保持尸体保护。v1.140 独立 ModSettingsCarrier 16 项（v1.143起无F9弹窗）；敌人斯安维斯坦默认关。v1.139 主题曲默认音量70、90帧淡出、断点续播。
 - 当前宿主已是通用 mods/loader-manifest.txt 七模组清单；不沿用旧六 loader 矩阵或旧安装器。主题曲 release/sandy_theme.mp3 被 gitignore，分发需另带。
 
 ## 4. 证据与当前停点
 
-- 有效旧版基线52项中47项失败；新版53/53通过，原生 damage/udarBullet 对照、真实近战延迟接触和 WKick 防双记。出链测试必须断言 in_chain=false 和实际目标一致。
-- 动画回归12组574/574帧逐像素相同，12项尸体保护通过；最后的 WKick 防双记调整不涉及动画路径。
-- 正式构建与实际部署字节各自 -Smoke -Artifact 完整流程20 PASS/0 FAIL/1 SKIP；跳过未安装 ModSettings 的注册。死亡攻击检查 snapSize=0，不能视作实质覆盖。
+- v1.142验证：有效旧版基线52项中47项失败；新版53/53通过，原生 damage/udarBullet 对照、真实近战延迟接触和 WKick 防双记。出链测试必须断言 in_chain=false 和实际目标一致。
+- v1.142验证：动画回归12组574/574帧逐像素相同，12项尸体保护通过；最后的 WKick 防双记调整不涉及动画路径。
+- v1.142验证：正式构建与实际部署字节各自 -Smoke -Artifact 完整流程20 PASS/0 FAIL/1 SKIP；跳过未安装 ModSettings 的注册。死亡攻击检查 snapSize=0，不能视作实质覆盖。
 - 详细研究、失败夹具纠正、源码顺序与日志：knowledge/experiments/death-prediction-2026-09-23.md、death-prediction-20260923/。上一轮动画证据保留 replay-animation-freeze-2026-09-23.md。
-- 当前停点：v1.143候选正式构建与ModSettings副本隔离验收21/0/0通过，待提交后部署和发布复验；菜单打开、保存重读、F9放行均已通过。详见knowledge/experiments/menu-settings-only-2026-09-23.md。上述53项和574帧属于上一版验证，本轮未改其代码。
+- 当前停点：v1.143已部署；正式构建及实际部署字节与ModSettings副本分别隔离验收21/0/0通过；菜单打开、保存重读、F9放行均已通过。详见knowledge/experiments/menu-settings-only-2026-09-23.md。上述53项和574帧属于上一版验证，本轮未改其代码。
 
 ## 5. 已知问题与边界
 
