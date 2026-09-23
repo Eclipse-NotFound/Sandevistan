@@ -1,0 +1,5 @@
+[SandyMod] v1.140 loaded esmark=1 esghost=1 esper=50 esen=0 esprob=100
+[ANIM-TEST] boot ready
+[ANIM-TEST] fe.unit.UnitRaider sourceFrames=17 replayFrames=1 moving=29 exact=0/30 FAIL
+[ANIM-TEST] fe.unit.UnitZombie sourceFrames=24 replayFrames=1 moving=29 exact=0/30 FAIL
+[ANIM-TEST] SUMMARY FAIL

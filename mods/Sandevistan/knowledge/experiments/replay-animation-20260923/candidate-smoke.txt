@@ -1,0 +1,23 @@
+[SandyMod] v1.141 loaded esmark=1 esghost=1 esper=50 esen=0 esprob=100
+[TEST-ASSERT] esandy-default-off=PASS (cfgESEnabled=false)
+[TEST-ASSERT] migrated-keys-off=PASS (projhits=false swaprun=false)
+[TEST-ASSERT] inGameplay-before-sandy=PASS
+[TEST-ASSERT] replay-player-anim-driven=PASS (frames=[71,1,1,23,10,1,4,5,])
+[TEST-ASSERT] dead-enemy-atk-frozen=PASS (new/moved=0 snapSize=0)
+[TEST-ASSERT] no-invisibility-residue=PASS (alive=2 dead=0 )
+[TEST-ASSERT] no-telegrab-residue=PASS (alive=2 dead=0 )
+[TEST-ASSERT] pip-open=PASS
+[TEST-ASSERT] pip-pauses-gameplay=PASS (pip=true inGameplay=false allStat=2)
+[TEST-ASSERT] opt-page-detected=PASS
+[TEST-ASSERT] opt-page-13-items=PASS (nonEmptyLines=15)
+[TEST-ASSERT] opt-esandy-default-off=PASS (esen=false raw=[-- SandevistanMod --|> 生效时间   7.0s|  冷却       0.0s|  残影不透明度 70%|  残影频率    5帧|  渐变门槛    15|  回放残影间隔 1帧|  回放残影寿命 4帧|  敌人斯安维斯坦 关|  敌人房间概率 100%|  房内装备占比 50%|  时停主题曲 开|  主题曲音量 70%|  主题曲淡出 3.0s||上下选择 左右调值 Enter保存])
+[TEST-ASSERT] pip-resume=PASS (pip=false inGameplay=true)
+[TEST-ASSERT] panel-open=PASS
+[TEST-ASSERT] panel-esandy-default-off=PASS (esen=false)
+[TEST-ASSERT] hub-registered=SKIP (cross-domain blocked; retry standing, tries=887)
+[TEST-ASSERT] hub-items-16=PASS (n=16)
+[TEST-ASSERT] music-start=PASS
+[TEST-ASSERT] music-resume-breakpoint=PASS (lastPos=11865)
+[TEST-ASSERT] music-fade=PASS
+[TEST-ASSERT] music-stop=PASS
+[TEST] SUMMARY pass=20 fail=0 skip=1

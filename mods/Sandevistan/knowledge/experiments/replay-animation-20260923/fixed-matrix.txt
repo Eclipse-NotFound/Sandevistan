@@ -1,0 +1,39 @@
+[SandyMod] v1.141 loaded esmark=1 esghost=1 esper=50 esen=0 esprob=100
+[ANIM-TEST] boot ready
+[ANIM-COST] fe.unit.UnitRaider warmCapture300Ms=64
+[ANIM-TEST] fe.unit.UnitRaider speed=1 transitions=true activeAI=false recordMs=521 sourceFrames=16 replayFrames=16 moving=29 exact=150/150 PASS
+[ANIM-TEST] corpse-guard fe.unit.UnitRaider PASS
+[ANIM-COST] fe.unit.UnitRaider warmCapture300Ms=54
+[ANIM-TEST] fe.unit.UnitRaider speed=3 transitions=true activeAI=false recordMs=371 sourceFrames=16 replayFrames=16 moving=29 exact=50/50 PASS
+[ANIM-TEST] corpse-guard fe.unit.UnitRaider PASS
+[ANIM-COST] fe.unit.UnitRaider warmCapture300Ms=50
+[ANIM-TEST] fe.unit.UnitRaider speed=5 transitions=true activeAI=false recordMs=420 sourceFrames=16 replayFrames=16 moving=29 exact=30/30 PASS
+[ANIM-TEST] corpse-guard fe.unit.UnitRaider PASS
+[ANIM-COST] fe.unit.UnitRaider warmCapture300Ms=48
+[ANIM-TEST] fe.unit.UnitRaider speed=8 transitions=true activeAI=false recordMs=448 sourceFrames=16 replayFrames=14 moving=18 exact=19/19 PASS
+[ANIM-TEST] corpse-guard fe.unit.UnitRaider PASS
+[ANIM-COST] fe.unit.UnitRaider warmCapture300Ms=50
+[ANIM-TEST] fe.unit.UnitRaider speed=20 transitions=true activeAI=false recordMs=458 sourceFrames=16 replayFrames=5 moving=7 exact=8/8 PASS
+[ANIM-TEST] corpse-guard fe.unit.UnitRaider PASS
+[ANIM-COST] fe.unit.UnitRaider warmCapture300Ms=53
+[ANIM-TEST] fe.unit.UnitRaider speed=5 transitions=true activeAI=true recordMs=547 sourceFrames=16 replayFrames=16 moving=29 exact=30/30 PASS
+[ANIM-TEST] corpse-guard fe.unit.UnitRaider PASS
+[ANIM-COST] fe.unit.UnitZombie warmCapture300Ms=48
+[ANIM-TEST] fe.unit.UnitZombie speed=1 transitions=true activeAI=false recordMs=564 sourceFrames=26 replayFrames=26 moving=29 exact=150/150 PASS
+[ANIM-TEST] corpse-guard fe.unit.UnitZombie PASS
+[ANIM-COST] fe.unit.UnitZombie warmCapture300Ms=49
+[ANIM-TEST] fe.unit.UnitZombie speed=3 transitions=true activeAI=false recordMs=533 sourceFrames=26 replayFrames=26 moving=29 exact=50/50 PASS
+[ANIM-TEST] corpse-guard fe.unit.UnitZombie PASS
+[ANIM-COST] fe.unit.UnitZombie warmCapture300Ms=59
+[ANIM-TEST] fe.unit.UnitZombie speed=5 transitions=true activeAI=false recordMs=610 sourceFrames=26 replayFrames=26 moving=29 exact=30/30 PASS
+[ANIM-TEST] corpse-guard fe.unit.UnitZombie PASS
+[ANIM-COST] fe.unit.UnitZombie warmCapture300Ms=50
+[ANIM-TEST] fe.unit.UnitZombie speed=8 transitions=true activeAI=false recordMs=680 sourceFrames=26 replayFrames=17 moving=18 exact=19/19 PASS
+[ANIM-TEST] corpse-guard fe.unit.UnitZombie PASS
+[ANIM-COST] fe.unit.UnitZombie warmCapture300Ms=48
+[ANIM-TEST] fe.unit.UnitZombie speed=20 transitions=true activeAI=false recordMs=665 sourceFrames=26 replayFrames=8 moving=7 exact=8/8 PASS
+[ANIM-TEST] corpse-guard fe.unit.UnitZombie PASS
+[ANIM-COST] fe.unit.UnitZombie warmCapture300Ms=48
+[ANIM-TEST] fe.unit.UnitZombie speed=5 transitions=true activeAI=true recordMs=706 sourceFrames=26 replayFrames=26 moving=29 exact=30/30 PASS
+[ANIM-TEST] corpse-guard fe.unit.UnitZombie PASS
+[ANIM-TEST] SUMMARY PASS

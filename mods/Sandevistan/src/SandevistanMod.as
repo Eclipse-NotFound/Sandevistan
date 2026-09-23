@@ -94,6 +94,7 @@ package
       private var origDam:Dictionary = new Dictionary();   // 攻击体 → 原始伤害（清零前捕获）
       private var hitCred:Dictionary = new Dictionary();   // 攻击体 → 已记入的敌人（去重）
       private var predDead:Dictionary = new Dictionary();  // 敌人 → true（时停中放死亡动画）
+      private var replayBlit:SandyBlitReplay = new SandyBlitReplay();
       private var replayAnimCat:Dictionary = new Dictionary();  // 回放动画档位迟滞（防 walk/run 抖动）
       private var endSnapWpnHp:Number = -1;  // 时停结束时武器耐久（回放结束恢复——防双倍损耗）
       private var endSnapMana:Number = -1;   // 时停结束时魔法值（回放结束恢复——防双倍消耗）
@@ -417,7 +418,7 @@ package
          // v1.101：版本标记——日志确认实际加载运行的构建版本与关键开关
          // v1.121：追加 esmark/esper/espd——排查"徽标不可见"类问题的第一手数据
          // v1.127：swaprun/projhits 已迁移 mods/MoreSkills&Weapons（此处不再输出）
-         inst.log("[SandyMod] v1.140 loaded"
+         inst.log("[SandyMod] v1.141 loaded"
              + " esmark=" + (inst.cfgESMark ? 1 : 0) + " esghost=" + (inst.cfgESGhost ? 1 : 0) + " esper=" + inst.cfgESPer
              + " esen=" + (inst.cfgESEnabled ? 1 : 0) + " esprob=" + inst.cfgESRoomProb);
          if (main != null && main.stage != null)
@@ -451,7 +452,7 @@ package
             tf.bold = true;
             tf.color = 0x00FF88;
             t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.140 已加载 (按 \ 触发斯安维斯坦)";
+            t.text = "SandevistanMod v1.141 已加载 (按 \ 触发斯安维斯坦)";
             t.autoSize = "left";   // v1.110：版本号此前显示不全（TextField 默认宽度截断）
             t.x = 10;
             t.y = 10;
@@ -1862,6 +1863,7 @@ package
                      var anR:String = "";
                      try { anR = oR.animState != null ? String(oR.animState) : ""; } catch (e:*) { }
                      var blR:String = osnLabelOf(oR);
+                     var bpR:Object = isUnit ? replayBlit.capture(oR) : null;
                      // 朝向与武器转动（v1.79：回放中 AI 因位置重钉不转向、
                      // 瞄准目标失真——按记录恢复 storona 与武器 rot）
                      var stoR:Number = 1;
@@ -1921,8 +1923,8 @@ package
                               }
                               catch (e:*) { }
                            }
-                           for (var f0:int = 0; f0 < frameN; f0++) { arrR.push({ x: oR.X, y: oR.Y, f: -1, s: "", wx: wxR, wy: wyR, twx: txR, twy: tyR, vv: vvR, sto: stoR, wrot: wrotR, iv: ivR, lv: lvR, an: anR, bl: blR }); }
-                           arrR.push({ x: oR.X, y: oR.Y, f: animFrameOf(oR), s: sndR, wx: wxR, wy: wyR, twx: txR, twy: tyR, vv: vvR, sto: stoR, wrot: wrotR, iv: ivR, lv: lvR, an: anR, bl: blR });
+                           for (var f0:int = 0; f0 < frameN; f0++) { arrR.push({ x: oR.X, y: oR.Y, f: -1, s: "", wx: wxR, wy: wyR, twx: txR, twy: tyR, vv: vvR, sto: stoR, wrot: wrotR, iv: ivR, lv: lvR, an: anR, bl: blR, bp: bpR }); }
+                           arrR.push({ x: oR.X, y: oR.Y, f: animFrameOf(oR), s: sndR, wx: wxR, wy: wyR, twx: txR, twy: tyR, vv: vvR, sto: stoR, wrot: wrotR, iv: ivR, lv: lvR, an: anR, bl: blR, bp: bpR });
                         }
                         else
                         {
@@ -1943,7 +1945,7 @@ package
                      }
                      else
                      {
-                        arrR.push({ x: oR.X, y: oR.Y, f: animFrameOf(oR), s: "", wx: wxR, wy: wyR, twx: txR, twy: tyR, vv: vvR, sto: stoR, wrot: wrotR, vf: vfR2, iv: ivR, lv: lvR, an: anR, bl: blR });
+                        arrR.push({ x: oR.X, y: oR.Y, f: animFrameOf(oR), s: "", wx: wxR, wy: wyR, twx: txR, twy: tyR, vv: vvR, sto: stoR, wrot: wrotR, vf: vfR2, iv: ivR, lv: lvR, an: anR, bl: blR, bp: bpR });
                      }
                   }
                }
@@ -2506,6 +2508,18 @@ package
                      }
                   }
                   catch (e:*) { }
+                  // v1.141: Blit enemies (including raiders and ghouls) have no osn.body.
+                  // Reapply the recorded body after all AI/animate calls; position plateaus
+                  // and new AI decisions must not replace the recorded pose with "stay".
+                  // Preserve the existing real-death rule: never paint a living pose over a corpse.
+                  if (hasSP && stR.bp != null)
+                  {
+                     try
+                     {
+                        if (int(oR.sost) < 3 || Boolean(oR.postDie)) replayBlit.apply(oR, stR.bp);
+                     }
+                     catch (e:*) { }
+                  }
                   // 生成音效（精确帧：攻击体生成事件在对应历史帧重播）
                   if (idxR < arrR.length)
                   {
@@ -3903,7 +3917,7 @@ package
       {
          if (panelTf == null) return;
          var lines:Array = [];
-         lines.push("== SandevistanMod v1.140 参数 ==");
+         lines.push("== SandevistanMod v1.141 参数 ==");
          lines.push((panelSel == 0 ? "> " : "  ") + "生效时长   " + (cfgDuration / 30).toFixed(1) + "s");
          lines.push((panelSel == 1 ? "> " : "  ") + "冷却       " + (cfgCooldown / 30).toFixed(1) + "s");
          lines.push((panelSel == 2 ? "> " : "  ") + "回放速度   x" + cfgReplaySpeed);
@@ -4324,6 +4338,7 @@ package
             // 清空上一轮重演记录（场景级录像：敌人/物品/攻击体每帧状态）
             replayObjs = new Dictionary();
             replayAnimCat = new Dictionary();
+            replayBlit.reset();
             replayObjArr = [];
             seenPos = new Dictionary();
             thrownImpacts = new Dictionary();   // 投掷撞击记录重置
@@ -6690,6 +6705,7 @@ package
          // 清空场景重演记录
          replayObjs = new Dictionary();
          replayAnimCat = new Dictionary();
+         replayBlit.reset();
          replayObjArr = [];
          seenPos = new Dictionary();
          // 回放结束：切回时停结束时手上的武器，恢复弹夹/背包（弹夹剩余=时停结束时）

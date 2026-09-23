@@ -16,8 +16,18 @@ evidence:
   - kind: runtime-experiment
     summary: "Sandevistan v1.71-1.132 敌人回放实测：贴图怪在回放中偶发僵死；按位移喂 dx+补 animate() 后恢复"
 
-date-updated: 2026-08-18
+date-updated: 2026-09-23
 ---
+
+## 2026-09-23 限定与补充（1.02）
+
+下文关于 internal 计数不可访问仍成立；“唯一公开驱动入口是 animate”“无法逐帧录像”不再成立。`Unit.blitData` 是公开原始精灵图，`Unit.initBlit` 把实际身体 Bitmap 放入 `vis` 的子容器；`Unit.blit(row, frame)` 也是 public。因此可以把当前身体像素与原图分块精确匹配，只记录行/列，再通过 blit 重绘，完全不读 internal 的 anims/visData/visBmp。
+
+UnitRaider 和 UnitZombie 都是这个结构；马形不代表 `osn.body` 的 MovieClip 动画。按位移猜动作还有采样陷阱：世界每 5 帧才走一步而录像每帧记录时，idx 与 idx+1 经常同位置，推导 dx=0 会把移动体画成 stay。扩大取样间隔只能恢复动作变化，无法保证录像姿态/相位一致。
+
+本机 1.02/AIR 实证：两个真实类、生产记录/回放路径，原实现均 30 个回放采样仅有 1 种身体画面；记录真实精灵图坐标后，在 1/3/5/8/20 倍、走停腾空与转向、正常 AI 步进合计 12 组中 574/574 采样帧逐像素一致。尸体不覆盖生前姿态的 12 项保护通过。条件只覆盖这些单位与用例，未验证全部动画素材/所有怪物；未知或非原图的视觉应保持原处理。匹配须校验完整像素，稀疏采样只能筛选候选；不要每个历史帧保存一份 BitmapData，更不可 dispose 游戏共享图。
+
+源码证据：`fe.unit::Unit.initBlit/blit`、`UnitRaider.animate`、`UnitZombie.animate`。以下旧实验记录保留，作为当时驱动方案的适用条件而非排他的实现上限。
 
 ## 怪物贴图动画架构（Blit 动画）
 

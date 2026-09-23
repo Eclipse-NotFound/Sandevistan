@@ -1,61 +1,55 @@
 # Sandevistan —— 开发记忆入口
 
-> 2026-09-23 接手核验。权限见 AGENT_SCOPE.md 与游戏工作区 GOVERNANCE.md；历史过程见 journal.md。
+> 更新：2026-09-23，v1.141 回放敌人身体动画修复。权限见 AGENT_SCOPE.md 与工作区 GOVERNANCE.md。
 
 ## 1. 这个模组是什么
 
-为《FOE: REMAINS》加入斯安维斯坦：玩家全速、世界默认 1/5 速，记录动作与场景状态，结束后默认 5 倍速重演，配合彩色残影和断点续播主题曲。入口为 SandevistanMod.init(main)。v1.127 起疾跑切枪、投射物击落迁出到 MoreSkills&Weapons，本侧停用；备份在 state/migration-backup-v1.126/。
+斯安维斯坦让玩家全速、世界默认 1/5 速，结束后默认 5 倍速重演录像，配合彩色残影及断点续播音乐。入口 SandevistanMod.init(main)。疾跑切枪/投射物击落已在 v1.127 迁出至 MoreSkills&Weapons，本侧停用。
 
 ## 2. 用户偏好与协作约定
 
-- 先读 design/user-preferences.md。时停中正常攻速、冻结玩家子弹；回放加速攻击、不被换弹打断；保留时停真实弹药消耗，回放不应二次扣库存。
-- 唯一源码仓 D:\RemainsMod，分支 master；本项目在 mods\Sandevistan。游戏目录同名项目是镜像，源码与记忆先改源仓、提交后定向同步。
-- 2026-09-23 接手只获授权接手开发，没有新功能、故障单或部署要求。既有体验待验项不是用户新增承诺。
-- 不改其他模组或游戏 SWF；后续明确涉及部署时走构建、发布门禁、补丁技能。当前全量 sync-to-game.bat 会同步公共资料，不为少量修改直接运行。
-- 游戏侧 release/config.txt 是运行时配置，不随源模板覆盖。发布代码时更新 MEMORY、changelog、说明；本次只有记忆更新，不升版本。
+- 唯一源码仓 D:\RemainsMod（master），项目 mods\Sandevistan；游戏同名目录是镜像。先源仓提交再定向同步；避免全量脚本覆盖公共资料。
+- 先读 design/user-preferences.md。时停正常攻速，保留真实弹药消耗；回放加速攻击、无换弹中断、不二次扣库存。
+- 本轮用户明确要求修复掠夺者、尸鬼等马形生物回放动画僵死，已完成实现和隔离验证，准备同步发布。
+- 正式 release/config.txt 保留玩家配置。游戏原始 SWF 和其他模组保持只读；不杀用户实例、不写真实 pfe 存档。用户需正常重启加载新版。
+- 接手前未跟踪的源仓 AGENTS.md 保留，未暂存。代码发布同步更新 MEMORY、journal、changelog、说明。
 
 ## 3. 当前状态
 
-- 当前发布 **v1.140**（2026-09-20）。接手前源仓 HEAD 5838e10；源码迁移提交 3727c65。
-- 2026-09-23 实查：源仓与游戏镜像的源码、发布 SWF、主题曲及接手前两份状态文件逐一 SHA256 相同。
-- release/SandevistanMod.swf：49,928 字节；SHA256 `0506615963176D937C596F43B8FF6D865B3BAC5D2DECE8490A47629D65A9A0BA`。
-- src/SandevistanMod.as：374,743 字节；SHA256 `CD0BE363002DDB616FAAE43B9A11BC4497E7EF082411FC4E1914DF69D99DAD5A`。
-- v1.140 通过独立 ModSettingsCarrier 注册 16 项；不再依赖旧 MSW 类名备用通道。独立设置面板打开时旧选项浮层让位，F9 仍可用。v1.138 的 MSW 宿主描述只属历史。
-- v1.136 敌人斯安维斯坦默认关；v1.137 配置增加 applicationStorageDirectory 覆盖/保存兜底；v1.139 主题曲默认音量 70、淡出 90 游戏帧，记录实际停止播放位置，会话内续播。
-- 主题曲 release/sandy_theme.mp3 两侧均存在（10,212,353 字节），受 gitignore 排除，打包需显式包含。
-- 9 月 20 日记录根 pfe 已有独立设置的第七个 loader；本次未解析或改动宿主 SWF，不能从旧六模组矩阵推断现状。
+- 源仓正式 release **v1.141**，50,878 字节，SHA256 `F556C0728DA406A4A6A05399DF93E9A0349C4225107547F1E12FE88A2AEE3E48`。当前处于提交后定向同步前。
+- 新增 src/SandyBlitReplay.as，通过公开的精灵图和实际身体 Bitmap 精确匹配帧坐标。recordReplayObjects 保存 bp，回放在原 AI/动画处理完成后重绘该帧；不改战斗、弹药和玩家 MovieClip 路径。
+- v1.140 独立 ModSettingsCarrier 注册 16 项，旧 MSW 宿主依赖已移除；F9 继续工作。敌人斯安维斯坦默认关。
+- v1.137 配置有 applicationStorageDirectory 覆盖兜底；v1.139 主题曲默认音量 70、90 帧淡出、实际停止位置续播。release/sandy_theme.mp3 被 gitignore，打包须另带。
+- 2026-09-23 当前宿主已使用 mods/loader-manifest.txt 的通用加载清单，实查列出七模组；此次修复不改宿主/清单。不要沿用旧的六 loader 矩阵或旧安装器。
 
-## 4. 已核对的机制与验证证据
+## 4. 修复证据与验证边界
 
-- 当前源码入口：init → onFrameInner → startSandy / stepSandy → endSandy → stepReplay → endReplay；设置注册 stepHubRegister，音乐状态沿在 onFrameInner。
-- startSandy 保存暂停/无敌状态、暂停世界正常步进，由模组驱动玩家与节流世界；时停不额外开启无敌，回放才开启，结束恢复原值。
-- endSandy 清理本次冻结子弹以免双重火力，保存时停结束时弹药/耐久/魔法等快照，再从起点重演。endReplay 恢复快照、武器攻速与控制，并在后续 120 帧钳制异常弹药返还。
-- 回放包含场景对象快照与攻击重演，不等于撤销整张地图；门/地形破坏过程仍不完整。
-- 历史实机证据（本次没有重跑）：9 月 20 日完整组合 27 项+重启 4 项、无 MSW 组合 20 项+重启 4 项通过；正式七模组同字节隔离副本启动至 900 帧、入口响应通过。未写真实 pfe 存档。
-- 9 月 7 日音乐 round 12：22 通过/0 失败/0 跳过，start@0 → stop@26493 → resume@26493；此前玩家动画、敌人可见性基线、暂停输入门控、迁移停用断言已有覆盖，详见 journal。
-- 本次验证边界：静态阅读、文件哈希、工具存在性；未启动游戏、未重新编译，未验证玩家当前运行实例是否已重启加载 v1.140。
+- 旧版已复现：原录像掠夺者 17 种/尸鬼 24 种身体画面，回放均只有 1 种，移动 29 次。只改 idx+1→idx+5 可恢复动作变化，仍 0/30 与录像相符；所以不能仅靠位移重算动画。
+- 新版像素回归：两类敌人 × 五档速度（1/3/5/8/20）以及正常 AI 模式，共 12 组 **574/574 帧**逐像素相同，12 项尸体姿态保护通过。
+- 候选与最终 SWF 各跑一次完整隔离流程：均 **20 PASS / 0 FAIL / 1 SKIP**。覆盖时停/回放、玩家动画、可见/可抓状态、TAB 暂停、F9、主题曲两轮；跳过的是测试实例未安装 ModSettings 的注册。
+- 死亡攻击检查本轮 snapSize=0，不据此宣称新增了死亡攻击覆盖；专用夹具验证的是尸体不被活体录像覆盖。所有怪物/联机/七模组战斗组合未在本轮全面验证。
+- 测试脚本 build/tests/run-replay-animation.ps1；测试代码只注入 build/out 副本，未进入正式 SWF。每次用独立 app id，结束清理自身进程与描述符。
+- 详细证据、失败实验、粗测边界：knowledge/experiments/replay-animation-freeze-2026-09-23.md 与同级 replay-animation-20260923/。
 
-## 5. 已知问题与风险
+## 5. 已知问题
 
-- 待体验确认：音乐音量/淡出、回放动画与残影、TAB 暂停、当前设置入口与重启保持。敌人斯安维斯坦开启后的行为仍需专测；不自行改变默认关闭决定。
-- 历史低优先：有攻击动画无伤害的残余报告（需复现后用 rFire 诊断）；预判死亡偏松（历史余量 0.9）；场景破坏只能保留结果。
-- RealisticVision 满装甲条是旧跨模组调查记录，本次未复核，不应当成现存已确认故障，更不越权修改。
-- Shift/中文输入法吞键是已知环境问题，Ctrl+Space 切回英文；提示 UI 已移除，诊断保留。
-- 源码注释、architecture/lessons/build 文档含旧机器路径和过时机制解释。尤其 Part.setNull→Location.remObj 的视觉清理、setLight 与 drawAllObjs 的关系、isExpl 对后续 explRun 的边界，以游戏工作区 2026-09-09 源码审计为准，勿仅靠旧注释修改行为。
-- 旧 dist 安装器未随独立 ModSettings 迁移更新，不直接运行。旧回退目录清理/重打包只是历史候选，未在本次执行。
-- 接手前源仓只有未跟踪 AGENTS.md；这是既有文件，本次不暂存、不删除。
+- 用户仍可反馈回放观感/音乐听感、TAB 暂停体验；敌人斯安维斯坦启用后的行为另需专测。此次已覆盖具体马形敌人僵死故障，不宣称所有动画问题消失。
+- 历史低优先：有攻击动画无伤害的残余报告需复现采 rFire；预判死亡偏松；门/地形破坏过程不能完全重演，结果保留。
+- Shift/中文输入法吞键：Ctrl+Space 切回英文；提示 UI 已移除，诊断保留。
+- architecture/lessons/build 含旧路径和过时说明。Part.setNull 清理/setLight/drawAllObjs/isExpl 的限定见 9 月 9 日源码审计；Blit“无法记录帧”已在 shared-knowledge/entities/facts/monster-blit-animation.md 追加本次更正。
+- 旧 dist 安装器未随独立设置和通用 loader 更新，不直接运行；旧回退副本删除只是历史候选，未执行。
 
-## 6. 下一步与恢复
+## 6. 发布与恢复
 
-- 接手完成后等待用户指定功能或可复现问题，再选择相应代码分支调查；不把历史待验项自动扩成新需求。
-- 修改时优先保持弹药只扣一次、玩家与世界步进次数、回放后状态恢复三个约束；密封类动态访问可能抛 #1069，内部成员不可直接访问。
-- 自动测试使用独立 app id（非 pfe）和 debugtest=1；真实 pfe 有门控。测试前读 remains-auto-testing，其他模组驱动可能干扰暂停/设置页，不能以启动无异常替代行为断言。
-- v1.140 发布前回滚文件：build/out/SandevistanMod.before-v1.140-20260920.swf（继承记录，本次未验此备份）。整套设置迁移回滚须配套宿主与客户端；详细记录在游戏 mods/ModSettings/knowledge/experiments/2026-09-20-migration.md，按必要范围访问。
+- 发布门禁：已正式构建、更新版本、完成核心/流程断言。源 release 有回滚备份，提交后仅同步本次文件，再核对游戏副本哈希与隔离启动。
+- 回滚备份：D:\RemainsMod\mods\Sandevistan\build\out\SandevistanMod.before-v1.141-20260923.swf（v1.140，49,928 字节，SHA256 `0506615963176D937C596F43B8FF6D865B3BAC5D2DECE8490A47629D65A9A0BA`）。恢复模组 release 后重启即可；此次没有宿主补丁要回滚。
+- 游戏 pfe.swf 本轮基线 SHA256 `252E7B34FC8BF0DD8CF566F45876597FE999562BE0F2E6AB596215D1A514C6DB`。
+- 当前停点：源仓准备提交；同步及发布启动结果在本节更新。
 
-## 7. 深入了解与工具入口
+## 7. 深入了解
 
-- 偏好 design/user-preferences.md；架构 design/architecture.md；教训 decisions/lessons.md；逐版历史 decisions/changelog.md；会话历史 state/journal.md。
-- 构建入口 build/build.bat 与 build/sandy-config.xml。2026-09-23 确认 Animate 2024 的 Java、源仓 build/tools/flexsdk/bin/mxmlc.bat、AIR SDK 的 playerglobal.swc 和 airglobal.swc 均存在；未声称本次编译通过。
-- 用户日志：%APPDATA%\pfe\Local Store\sandy_modlog.txt；测试日志随独立 app id 分离。按关键词抽取，避免整读大日志。
-- 游戏工作区机制总图：shared-knowledge/knowledge-validation/discoveries/game-mechanism-atlas-2026-09-09.md；旧结论限定：shared-knowledge/knowledge-validation/conflicts/source-audit-qualifications-2026-09-09.md。这些为静态证据，不能代替运行验证。
-- 技能：remains-mod-memory；按实际任务再加载 remains-mod-build / remains-runtime-debug / remains-auto-testing / remains-release-gate / remains-swf-patching。
+- design/user-preferences.md / architecture.md；decisions/lessons.md / changelog.md；state/journal.md。
+- 构建：build/build.bat → build/out/SandevistanMod.swf；Java 来自 Animate 2024，Flex/AIR SDK 在 build/tools。新 helper 是强引用类，随主 SWF 编译，无新增 loader。
+- 测试：run-replay-animation.ps1 默认专用回归；-Source 旧源码 -ExpectFailure 检查旧版；-Smoke 完整回归；-Smoke -Artifact 指定 SWF 核验发布字节。
+- 日志：%APPDATA%\pfe\Local Store\sandy_modlog.txt，按关键词抽取。隔离实例日志随独立 app id 分离。
+- 工作区技能：remains-mod-memory、runtime-debug、mod-build、auto-testing、release-gate、swf-patching、knowledge-contribution；公共机制总图见 game-mechanism-atlas-2026-09-09.md。
