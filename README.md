@@ -1,5 +1,7 @@
 # Sandevistan
 
+[English](README.md) · [简体中文](README.zh-CN.md)
+
 Bullet-time / time-stop combat for **Fallout Equestria: REMAINS**: press one key, the world freezes while you line up the perfect move — then watch it replayed with ghost trails. Enemies can carry their own Sandevistan too.
 
 ## Features (v1.144)
