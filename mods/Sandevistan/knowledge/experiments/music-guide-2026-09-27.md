@@ -21,4 +21,11 @@
 - 菜单观察器最初在跨阶段复用for-each变量时空引用，正文渲染/截图已成功但悬停未测完。改为显式数组索引遍历后完整通过；没有把该失败当成正式界面故障，也未改变正式模组以迁就测试。
 - 经验检索返回partial，某条无关写作原件不可读；本轮依据当前ModLoader接口与源码、Sandevistan既有记忆核实，不以无命中推断没有经验。
 
-实际部署复验将在完成后追加；所有自动化使用独立app id，不改真实存档或用户实例。
+所有自动化使用独立app id，不改真实存档或用户实例。
+## 发布完成
+
+实现与正式产物提交f491b17后定向同步。实际安装文件的90帧隔离复验20260927211237841：21 PASS / 0 FAIL / 0 SKIP，当前真实清单仅加载ModLoaderMod和SandevistanMod。部署SWF与候选及测试副本的字节一致。
+
+宿主完整性：5039个标签数量/顺序保持，只变更一个DoABC块；非MainFE的高帧机制源码回读相同。普通pfe.swf、两份启动描述符、pfe60.cfg（90帧）、清单、ModLoader正式包、玩家config.txt和本地sandy_theme.mp3的部署前后哈希全部一致。
+
+回滚v1.144：游戏release/SandevistanMod.before-v1.145-20260927.swf（SHA256 2C26EADCFE760EC3BD998DDBEDF0FAD333151E203B0688AF268BDF0612BA0263）；源build/out另留同名备份。高帧宿主备份为游戏根pfe60_before_sandevistan_v1145_20260927.swf（SHA256 D88D19A11B7100491A8EDD6153499AB92D59545C1576693368762C9C0AB7E97B）。两项恢复后重启。未修改或恢复旧ModSettings启用项。
