@@ -1,0 +1,547 @@
+[SandyMod] app id=pfe-sandy-fps-20260927210413176
+[SandyMod] v1.145 loaded esmark=1 esghost=1 esper=50 esen=0 esprob=100
+[SandyMod] hooks registered
+[MUSIC] theme preload: loading
+[SandyMod] World found
+[FPS] host clock connected; simulation=host logic
+[SandyMod] keyMap built: keyLeft/keyRight/keyJump/undefined
+[TEST] boot ready, driver starting
+[TEST-ASSERT] esandy-default-off=PASS (cfgESEnabled=false)
+[TEST-ASSERT] migrated-keys-off=PASS (projhits=false swaprun=false)
+[TEST] in game: land=rbl ggX=840 ggY=799
+[DIAG] esandy: roomChange id=room_0_0 allow=0 prob=100 en=0
+[SandyMod] settings hub registered via ModSettingsCarrier (tries=11)
+[DIAG] ggControl changed to false hp=100 sost=1 X=842.8 Y=800 sandy=false replay=false
+[TEST] gotoLand random_mane (from rbl)
+[STATE] L=false R=false U=false D=false J=false A=false ggX=846 ggY=800 focus=[object Stage]
+[STATE] L=false R=false U=false D=false J=false A=false ggX=846 ggY=800 focus=[object Stage]
+[DIAG] ggControl changed to true hp=100 sost=1 X=241 Y=640 sandy=false replay=false
+[DIAG] esandy: roomChange id=ко.тех2 allow=0 prob=100 en=0
+[TEST] arrived random_mane, scanning enemies
+[TEST] enemies=3: UnitMerc(hp=331.2) UnitMerc(hp=254) UnitTurret(hp=156.4)
+[TEST] gg moved near enemy, combat warmup
+[TEST] combat warmup
+[STATE] L=false R=true U=false D=false J=false A=true ggX=1121.8500000000015 ggY=960 focus=[object Stage]
+[TEST] warmup done, waiting recovery+enemies
+[TEST] startSandy inGameplay=true hp=100 sost=1 enemies=3 baseFlags=3
+[TEST-ASSERT] inGameplay-before-sandy=PASS
+[SandyMod] 斯安维斯坦 ON
+[DIAG] recObj: cls=fe.loc::Box X=1140 Y=320 arr=0 frameN=0
+[DIAG] recObj: cls=fe.loc::Box X=440 Y=960 arr=0 frameN=0
+[DIAG] recObj: cls=fe.loc::Box X=540 Y=320 arr=0 frameN=0
+[DIAG] recObj: cls=fe.loc::Box X=1680 Y=320 arr=0 frameN=0
+[DIAG] recObj: cls=fe.loc::Box X=240 Y=320 arr=0 frameN=0
+[DIAG] recObj: cls=fe.loc::Box X=1320 Y=320 arr=0 frameN=0
+[MUSIC] start @0
+[DIAG] recAtk: cls=fe.weapon::Bullet X=1168.2 Y=886.35 frameN=1
+[DIAG] recAtk: cls=fe.weapon::Bullet X=423.22411315603887 Y=646.0453760308447 frameN=4
+[DIAG] mirror: cxA=173.98951048951048 mid=180 storona=1 visScaleX=1
+[DIAG] spawnGhost: gg.X=1252.3500000000015 gg.Y=960 vis.x=1252.35 vis.y=960 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=1 vis.scaleX=1 spr.x=1075.3 spr.y=744.05 ghostParent=true
+[DIAG] mirror: cxA=173.75598143078204 mid=180 storona=1 visScaleX=1
+[DIAG] spawnGhost: gg.X=1294.3500000000015 gg.Y=960 vis.x=1294.35 vis.y=960 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=1 vis.scaleX=1 spr.x=1117.3 spr.y=744.05 ghostParent=true
+[DIAG] recAtk: cls=fe.weapon::Bullet X=383.37810111778464 Y=597.7550936777836 frameN=14
+[DIAG] mirror: cxA=176.29746762919675 mid=180 storona=1 visScaleX=1
+[DIAG] spawnGhost: gg.X=1336.3500000000015 gg.Y=960 vis.x=1336.35 vis.y=960 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=1 vis.scaleX=1 spr.x=1159.3 spr.y=744.05 ghostParent=true
+[STATE] L=false R=true U=true D=false J=true A=false ggX=1343.3500000000015 ggY=960 focus=[object Stage]
+[DIAG] jump pressed, Y=948 dy=-12 stay=false
+[DIAG] mirror: cxA=170.84061869535978 mid=180 storona=1 visScaleX=1
+[DIAG] spawnGhost: gg.X=1378.3500000000015 gg.Y=900 vis.x=1378.35 vis.y=900 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=1 vis.scaleX=1 spr.x=1201.3 spr.y=684.05 ghostParent=true
+[DIAG] recAtk: cls=fe.weapon::Bullet X=316.44858964451737 Y=621.6712697682339 frameN=24
+[DIAG] mirror: cxA=171.86902582875737 mid=180 storona=1 visScaleX=1
+[DIAG] spawnGhost: gg.X=1420.3500000000015 gg.Y=834 vis.x=1420.35 vis.y=834 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=1 vis.scaleX=1 spr.x=1243.3 spr.y=618.05 ghostParent=true
+[DIAG] sAtk: wantA=false wantP=false A=false mouse=false pulse=false tA=0 cw=fe.weapon::Weapon nPb=1
+[DIAG] mirror: cxA=173.86555323590815 mid=180 storona=1 visScaleX=1
+[DIAG] spawnGhost: gg.X=1462.3500000000015 gg.Y=801 vis.x=1462.35 vis.y=801 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=1 vis.scaleX=1 spr.x=1285.3 spr.y=585.05 ghostParent=true
+[TEST] sandy t=30 left=179 hp=100 sost=1
+[DIAG] recAtk: cls=fe.weapon::Bullet X=356.5816604054701 Y=517.4620242346791 frameN=34
+[DIAG] mirror: cxA=173.11243072050672 mid=180 storona=1 visScaleX=1
+[DIAG] spawnGhost: gg.X=1502.3500000000015 gg.Y=804 vis.x=1502.35 vis.y=804 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=1 vis.scaleX=1 spr.x=1325.3 spr.y=588.05 ghostParent=true
+[STATE] L=false R=false U=false D=false J=true A=false ggX=1508.3500000000015 ggY=808 focus=[object Stage]
+[DIAG] jump pressed, Y=813 dy=5 stay=false
+[DIAG] mirror: cxA=176.95151686986108 mid=180 storona=1 visScaleX=1
+[DIAG] spawnGhost: gg.X=1535.3500000000015 gg.Y=843 vis.x=1535.35 vis.y=843 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=1 vis.scaleX=1 spr.x=1358.3 spr.y=627.05 ghostParent=true
+[DIAG] recAtk: cls=fe.weapon::Bullet X=1491.65 Y=753.6 frameN=41
+[DIAG] recAtk: cls=fe.weapon::Bullet X=368.15287699046536 Y=645.4446529446851 frameN=44
+[DIAG] mirror: cxA=176.37205040091638 mid=180 storona=1 visScaleX=1
+[DIAG] spawnGhost: gg.X=1566.1000000000015 gg.Y=833.8999999999984 vis.x=1566.1 vis.y=833.85 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=1 vis.scaleX=1 spr.x=1389.05 spr.y=617.9 ghostParent=true
+[DIAG] mirror: cxA=175.84335115086725 mid=180 storona=1 visScaleX=1
+[DIAG] spawnGhost: gg.X=1597.6000000000015 gg.Y=802.3999999999984 vis.x=1597.6 vis.y=802.35 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=1 vis.scaleX=1 spr.x=1420.55 spr.y=586.4 ghostParent=true
+[DIAG] recAtk: cls=fe.weapon::Bullet X=414.25308535120723 Y=588.6587787497508 frameN=54
+[DIAG] mirror: cxA=176.2815416712419 mid=180 storona=1 visScaleX=1
+[DIAG] spawnGhost: gg.X=1637.8500000000015 gg.Y=800 vis.x=1637.85 vis.y=800 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=1 vis.scaleX=1 spr.x=1460.8 spr.y=584.05 ghostParent=true
+[STATE] L=false R=true U=true D=false J=true A=false ggX=1644.8500000000015 ggY=800 focus=[object Stage]
+[DIAG] jump pressed, Y=800 dy=0 stay=true
+[DIAG] sAtk: wantA=false wantP=false A=false mouse=false pulse=false tA=0 cw=fe.weapon::Weapon nPb=0
+[DIAG] sEnemy: X=611.5499999999997 Y=306.2000000000003 cls=fe.unit::UnitMerc
+[DIAG] mirror: cxA=176.09308692676248 mid=180 storona=1 visScaleX=1
+[DIAG] spawnGhost: gg.X=1679.8500000000015 gg.Y=800 vis.x=1679.85 vis.y=800 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=1 vis.scaleX=1 spr.x=1502.8 spr.y=584.05 ghostParent=true
+[DIAG] recAtk: cls=fe.weapon::Bullet X=462.4545797790786 Y=618.3383377091482 frameN=64
+[DIAG] mirror: cxA=178.85613181466329 mid=180 storona=1 visScaleX=1
+[DIAG] spawnGhost: gg.X=1721.8500000000015 gg.Y=800 vis.x=1721.85 vis.y=800 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=1 vis.scaleX=1 spr.x=1544.8 spr.y=584.05 ghostParent=true
+[DIAG] mirror: cxA=178.93978869627654 mid=180 storona=1 visScaleX=1
+[DIAG] spawnGhost: gg.X=1763.8500000000015 gg.Y=800 vis.x=1763.85 vis.y=800 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=1 vis.scaleX=1 spr.x=1586.8 spr.y=584.05 ghostParent=true
+[DIAG] recAtk: cls=fe.weapon::Bullet X=533.9716261325997 Y=637.506826074026 frameN=74
+[DIAG] mirror: cxA=178.12999896662188 mid=180 storona=1 visScaleX=1
+[DIAG] spawnGhost: gg.X=1786.8500000000015 gg.Y=800 vis.x=1786.85 vis.y=800 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=1 vis.scaleX=1 spr.x=1609.8 spr.y=584.05 ghostParent=true
+[STATE] L=false R=false U=false D=false J=true A=false ggX=1786.8500000000015 ggY=800 focus=[object Stage]
+[DIAG] jump pressed, Y=800 dy=0 stay=true
+[DIAG] recAtk: cls=fe.weapon::Bullet X=1760.4 Y=731.95 frameN=81
+[DIAG] recAtk: cls=fe.weapon::Bullet X=565.8310182417604 Y=611.3585362958246 frameN=84
+[DIAG] mirror: cxA=178.6429268292683 mid=180 storona=-1 visScaleX=-1
+[DIAG] spawnGhost: gg.X=1755.3500000000015 gg.Y=800 vis.x=1755.35 vis.y=800 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=-1 vis.scaleX=-1 spr.x=1578.3 spr.y=584.05 ghostParent=true
+[DIAG] sAtk: wantA=true wantP=false A=true mouse=false pulse=false tA=5 cw=fe.weapon::Weapon nPb=1
+[DIAG] mirror: cxA=179.89869213203238 mid=180 storona=-1 visScaleX=-1
+[DIAG] spawnGhost: gg.X=1713.3500000000015 gg.Y=800 vis.x=1713.35 vis.y=800 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=-1 vis.scaleX=-1 spr.x=1536.3 spr.y=584.05 ghostParent=true
+[TEST] sandy t=90 left=119 hp=100 sost=1
+[DIAG] recAtk: cls=fe.weapon::Bullet X=608.4188649814466 Y=557.7232307455052 frameN=94
+[DIAG] mirror: cxA=180.8248612652608 mid=180 storona=-1 visScaleX=-1
+[DIAG] spawnGhost: gg.X=1671.3500000000015 gg.Y=800 vis.x=1671.35 vis.y=800 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=-1 vis.scaleX=-1 spr.x=1494.3 spr.y=584.05 ghostParent=true
+[STATE] L=true R=false U=true D=false J=true A=false ggX=1664.3500000000015 ggY=800 focus=[object Stage]
+[DIAG] jump pressed, Y=800 dy=0 stay=true
+[DIAG] mirror: cxA=179.62271147161067 mid=180 storona=-1 visScaleX=-1
+[DIAG] spawnGhost: gg.X=1629.3500000000015 gg.Y=800 vis.x=1629.35 vis.y=800 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=-1 vis.scaleX=-1 spr.x=1452.3 spr.y=584.05 ghostParent=true
+[DIAG] recAtk: cls=fe.weapon::Bullet X=635.1152356882669 Y=507.8380133689168 frameN=104
+[DIAG] mirror: cxA=179.76046389035318 mid=180 storona=-1 visScaleX=-1
+[DIAG] spawnGhost: gg.X=1587.3500000000015 gg.Y=800 vis.x=1587.35 vis.y=800 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=-1 vis.scaleX=-1 spr.x=1410.3 spr.y=584.05 ghostParent=true
+[DIAG] mirror: cxA=179.7807146353402 mid=180 storona=-1 visScaleX=-1
+[DIAG] spawnGhost: gg.X=1545.3500000000015 gg.Y=815 vis.x=1545.35 vis.y=815 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=-1 vis.scaleX=-1 spr.x=1368.3 spr.y=599.05 ghostParent=true
+[DIAG] recAtk: cls=fe.weapon::Bullet X=634.3364463988471 Y=457.90393672100475 frameN=114
+[DIAG] mirror: cxA=178.0894361633182 mid=180 storona=-1 visScaleX=-1
+[DIAG] spawnGhost: gg.X=1505.3500000000017 gg.Y=866 vis.x=1505.35 vis.y=866 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=-1 vis.scaleX=-1 spr.x=1328.3 spr.y=650.05 ghostParent=true
+[STATE] L=false R=false U=false D=false J=true A=false ggX=1499.3500000000017 ggY=878 focus=[object Stage]
+[DIAG] jump pressed, Y=891 dy=13 stay=false
+[DIAG] sAtk: wantA=false wantP=false A=false mouse=false pulse=false tA=0 cw=fe.weapon::Weapon nPb=0
+[DIAG] sEnemy: X=578.2629852223417 Y=320 cls=fe.unit::UnitMerc
+[DIAG] mirror: cxA=179.16094331816302 mid=180 storona=-1 visScaleX=-1
+[DIAG] spawnGhost: gg.X=1474.1500000000017 gg.Y=925.8499999999984 vis.x=1474.15 vis.y=925.8 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=-1 vis.scaleX=-1 spr.x=1297.1 spr.y=709.8 ghostParent=true
+[DIAG] recAtk: cls=fe.weapon::Bullet X=1425.95 Y=822.25 frameN=121
+[DIAG] recAtk: cls=fe.weapon::Bullet X=624.1507244868168 Y=458.73197335756913 frameN=124
+[DIAG] mirror: cxA=178.46555605583072 mid=180 storona=-1 visScaleX=-1
+[DIAG] spawnGhost: gg.X=1448.4500000000016 gg.Y=951.5499999999985 vis.x=1448.45 vis.y=951.5 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=-1 vis.scaleX=-1 spr.x=1271.4 spr.y=735.55 ghostParent=true
+[DIAG] mirror: cxA=182.19274193548387 mid=180 storona=-1 visScaleX=-1
+[DIAG] spawnGhost: gg.X=1415.2000000000016 gg.Y=960 vis.x=1415.2 vis.y=960 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=-1 vis.scaleX=-1 spr.x=1238.15 spr.y=744.05 ghostParent=true
+[DIAG] recAtk: cls=fe.weapon::Bullet X=614.5886212574767 Y=474.3818694864749 frameN=134
+[DIAG] mirror: cxA=181.05196717862404 mid=180 storona=-1 visScaleX=-1
+[DIAG] spawnGhost: gg.X=1373.2000000000016 gg.Y=960 vis.x=1373.2 vis.y=960 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=-1 vis.scaleX=-1 spr.x=1196.15 spr.y=744.05 ghostParent=true
+[STATE] L=true R=false U=true D=false J=true A=false ggX=1366.2000000000016 ggY=960 focus=[object Stage]
+[DIAG] jump pressed, Y=960 dy=0 stay=true
+[DIAG] mirror: cxA=179.62736273627362 mid=180 storona=-1 visScaleX=-1
+[DIAG] spawnGhost: gg.X=1331.2000000000016 gg.Y=960 vis.x=1331.2 vis.y=960 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=-1 vis.scaleX=-1 spr.x=1154.15 spr.y=744.05 ghostParent=true
+[DIAG] recAtk: cls=fe.weapon::Bullet X=639.9099258197878 Y=514.2703759349471 frameN=144
+[DIAG] mirror: cxA=181.67158347172023 mid=180 storona=-1 visScaleX=-1
+[DIAG] spawnGhost: gg.X=1289.2000000000016 gg.Y=960 vis.x=1289.2 vis.y=960 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=-1 vis.scaleX=-1 spr.x=1112.15 spr.y=744.05 ghostParent=true
+[DIAG] sAtk: wantA=false wantP=false A=false mouse=false pulse=false tA=0 cw=fe.weapon::Weapon nPb=1
+[DIAG] mirror: cxA=179.17820417682603 mid=180 storona=-1 visScaleX=-1
+[DIAG] spawnGhost: gg.X=1247.2000000000016 gg.Y=960 vis.x=1247.2 vis.y=960 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=-1 vis.scaleX=-1 spr.x=1070.15 spr.y=744.05 ghostParent=true
+[TEST] sandy t=150 left=59 hp=100 sost=1
+[DIAG] recAtk: cls=fe.weapon::Bullet X=617.4657639328605 Y=492.97272562537916 frameN=154
+[DIAG] mirror: cxA=181.96140035906643 mid=180 storona=-1 visScaleX=-1
+[DIAG] spawnGhost: gg.X=1224.2000000000016 gg.Y=960 vis.x=1224.2 vis.y=960 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=-1 vis.scaleX=-1 spr.x=1047.15 spr.y=744.05 ghostParent=true
+[STATE] L=false R=false U=false D=false J=true A=false ggX=1224.2000000000016 ggY=960 focus=[object Stage]
+[DIAG] jump pressed, Y=960 dy=0 stay=true
+[DIAG] recAtk: cls=fe.weapon::Bullet X=612.2914306672177 Y=497.2924012408441 frameN=164
+[DIAG] mirror: cxA=177.50069220119983 mid=180 storona=1 visScaleX=1
+[DIAG] spawnGhost: gg.X=1255.7000000000016 gg.Y=960 vis.x=1255.7 vis.y=960 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=1 vis.scaleX=1 spr.x=1078.65 spr.y=744.05 ghostParent=true
+[DIAG] mirror: cxA=175.0501946322475 mid=180 storona=1 visScaleX=1
+[DIAG] spawnGhost: gg.X=1297.7000000000016 gg.Y=960 vis.x=1297.7 vis.y=960 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=1 vis.scaleX=1 spr.x=1120.65 spr.y=744.05 ghostParent=true
+[DIAG] recAtk: cls=fe.weapon::Bullet X=611.7157901324829 Y=487.87138084844975 frameN=174
+[DIAG] mirror: cxA=175.4420823395209 mid=180 storona=1 visScaleX=1
+[DIAG] spawnGhost: gg.X=1339.7000000000016 gg.Y=960 vis.x=1339.7 vis.y=960 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=1 vis.scaleX=1 spr.x=1162.65 spr.y=744.05 ghostParent=true
+[STATE] L=false R=true U=true D=false J=true A=false ggX=1346.7000000000016 ggY=960 focus=[object Stage]
+[DIAG] jump pressed, Y=960 dy=0 stay=true
+[DIAG] sAtk: wantA=false wantP=false A=false mouse=false pulse=false tA=0 cw=fe.weapon::Weapon nPb=0
+[DIAG] sEnemy: X=594.2445077632289 Y=320 cls=fe.unit::UnitMerc
+[DIAG] mirror: cxA=176.17495854063017 mid=180 storona=1 visScaleX=1
+[DIAG] spawnGhost: gg.X=1381.7000000000016 gg.Y=960 vis.x=1381.7 vis.y=960 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=1 vis.scaleX=1 spr.x=1204.65 spr.y=744.05 ghostParent=true
+[DIAG] recAtk: cls=fe.weapon::Bullet X=641.0462093960401 Y=512.4080389001111 frameN=184
+[DIAG] mirror: cxA=175.37520007532248 mid=180 storona=1 visScaleX=1
+[DIAG] spawnGhost: gg.X=1423.7000000000016 gg.Y=960 vis.x=1423.7 vis.y=960 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=1 vis.scaleX=1 spr.x=1246.65 spr.y=744.05 ghostParent=true
+[DIAG] mirror: cxA=176.71641224992888 mid=180 storona=1 visScaleX=1
+[DIAG] spawnGhost: gg.X=1465.7000000000016 gg.Y=960 vis.x=1465.7 vis.y=960 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=1 vis.scaleX=1 spr.x=1288.65 spr.y=744.05 ghostParent=true
+[DIAG] recAtk: cls=fe.weapon::Bullet X=653.7541090463983 Y=507.04421315720106 frameN=194
+[DIAG] mirror: cxA=175.995079086116 mid=180 storona=1 visScaleX=1
+[DIAG] spawnGhost: gg.X=1488.7000000000016 gg.Y=960 vis.x=1488.7 vis.y=960 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=1 vis.scaleX=1 spr.x=1311.65 spr.y=744.05 ghostParent=true
+[STATE] L=false R=false U=false D=false J=true A=false ggX=1488.7000000000016 ggY=960 focus=[object Stage]
+[DIAG] jump pressed, Y=960 dy=0 stay=true
+[DIAG] recAtk: cls=fe.weapon::Bullet X=1465.3 Y=888.8 frameN=201
+[DIAG] recAtk: cls=fe.weapon::Bullet X=659.2967276323118 Y=504.7913516221792 frameN=204
+[DIAG] mirror: cxA=178.45465253239104 mid=180 storona=1 visScaleX=1
+[DIAG] spawnGhost: gg.X=1520.2000000000016 gg.Y=960 vis.x=1520.2 vis.y=960 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=1 vis.scaleX=1 spr.x=1343.15 spr.y=744.05 ghostParent=true
+[DIAG] sAtk: wantA=true wantP=false A=true mouse=false pulse=false tA=5 cw=fe.weapon::Weapon nPb=1
+[DIAG] mirror: cxA=177.22696726642098 mid=180 storona=1 visScaleX=1
+[DIAG] spawnGhost: gg.X=1565.5406088899815 gg.Y=960 vis.x=1565.5 vis.y=960 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=1 vis.scaleX=1 spr.x=1388.45 spr.y=744.05 ghostParent=true
+[DIAG] rollRec: tot=210 sit=0 roll=0
+[DIAG] clearFrozenBullets: feWeapon=5 removed=1 skip=4
+[DIAG] partsKillDeepS: killed=67 vis=0
+[DIAG] recEnd: cls=fe.weapon::Bullet len=211 inChain=true
+[DIAG] recEnd: cls=fe.weapon::Bullet len=211 inChain=false
+[DIAG] recEnd: cls=fe.weapon::Bullet len=211 inChain=true
+[DIAG] recEnd: cls=fe.weapon::Bullet len=211 inChain=true
+[DIAG] recEnd: cls=fe.weapon::Bullet len=211 inChain=true
+[SandyMod] 斯安维斯坦 OFF, replay 210 frames
+[TEST] sandy ended naturally at t=210, waiting replay
+[DIAG] rStart: recObjs=52 atk=26 unit=3 scene=23 other=0
+[DIAG] rStart: enemyAtk cls=fe.weapon::Bullet X=1497.359068646277 Y=945.7679411176205 rec=1
+[DIAG] rStart: enemyAtk cls=fe.weapon::Bullet X=1431.982705912783 Y=960.6131542910481 rec=1
+[DIAG] rStart: enemyAtk cls=fe.weapon::Bullet X=1256.3164361855943 Y=814.9768526288043 rec=1
+[DIAG] rStart: enemyAtk cls=fe.weapon::Bullet X=865.6934552646233 Y=605.1827032443597 rec=1
+[DIAG] replay: locWeapons=4 hold=5 holder=5 t_atk=5
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=178.88729836555925 mid=180
+[DIAG] spawnGhostAt: x=1252.3500000000015 y=960 b.left=-177.05 b.top=-215.95 spr.x=1075.3 spr.y=744.05 vis.w=360 vis.h=360 gg.vis.x=1252.35 gg.vis.y=960 gg.X=1252.3500000000015 gg.Y=960
+[DIAG] rFix: cls=fe.loc::Box stX=1140 stY=320 X=1140 Y=320 visX=1140 visPar=1
+[DIAG] rFix: cls=fe.loc::Box stX=440 stY=960 X=440 Y=960 visX=440 visPar=1
+[DIAG] reatt: cls=fe.weapon::Bullet X=423.22411315603887 Y=646.0453760308447 sloy=2
+[DIAG] reatt: cls=fe.weapon::Bullet X=383.37810111778464 Y=597.7550936777836 sloy=2
+[DIAG] reatt: cls=fe.weapon::Bullet X=316.44858964451737 Y=621.6712697682339 sloy=2
+[DIAG] reatt: cls=fe.weapon::Bullet X=356.5816604054701 Y=517.4620242346791 sloy=2
+[DIAG] reatt: cls=fe.weapon::Bullet X=368.15287699046536 Y=645.4446529446851 sloy=2
+[DIAG] reatt: cls=fe.weapon::Bullet X=414.25308535120723 Y=588.6587787497508 sloy=2
+[DIAG] reatt: cls=fe.weapon::Bullet X=462.4545797790786 Y=618.3383377091482 sloy=2
+[DIAG] reatt: cls=fe.loc::Bonus X=1740 Y=740 sloy=3
+[DIAG] reatt: cls=fe.weapon::Bullet X=533.9716261325997 Y=637.506826074026 sloy=2
+[DIAG] reatt: cls=fe.weapon::Bullet X=565.8310182417604 Y=611.3585362958246 sloy=2
+[TEST] replay started, sampling
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=178.42611609555723 mid=180
+[DIAG] spawnGhostAt: x=1294.3500000000015 y=960 b.left=-177.05 b.top=-215.95 spr.x=1117.3 spr.y=744.05 vis.w=360 vis.h=360 gg.vis.x=1294.35 gg.vis.y=960 gg.X=1294.3500000000015 gg.Y=960
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=178.02619712261114 mid=180
+[DIAG] spawnGhostAt: x=1336.3500000000015 y=960 b.left=-177.05 b.top=-215.95 spr.x=1159.3 spr.y=744.05 vis.w=360 vis.h=360 gg.vis.x=1336.35 gg.vis.y=960 gg.X=1336.3500000000015 gg.Y=960
+[DIAG] rBody: bX=1193.0492310825746 bY=608.6976479979512 dmg=14 off=false liv=97 vel=150.35204512998462 ggX=1339.3500000000015 ggY=960 cwX=1299.3500000000015 cwY=911 tA=13
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=179.82980533985747 mid=180
+[DIAG] spawnGhostAt: x=1378.3500000000015 y=900 b.left=-177.05 b.top=-215.95 spr.x=1201.3 spr.y=684.05 vis.w=360 vis.h=360 gg.vis.x=1378.35 gg.vis.y=900 gg.X=1378.3500000000015 gg.Y=900
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=174.6969936708861 mid=180
+[DIAG] spawnGhostAt: x=1420.3500000000015 y=834 b.left=-177.05 b.top=-215.95 spr.x=1243.3 spr.y=618.05 vis.w=360 vis.h=360 gg.vis.x=1420.35 gg.vis.y=834 gg.X=1420.3500000000015 gg.Y=834
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=175.35888238625637 mid=180
+[DIAG] spawnGhostAt: x=1462.3500000000015 y=801 b.left=-177.05 b.top=-215.95 spr.x=1285.3 spr.y=585.05 vis.w=360 vis.h=360 gg.vis.x=1462.35 gg.vis.y=801 gg.X=1462.3500000000015 gg.Y=801
+[DIAG] rBody: bX=1159.4539197571055 bY=581.9259954263275 dmg=14 off=false liv=1 vel=150.35204512998462 ggX=1462.9500000000014 ggY=804 cwX=1421.1500000000015 cwY=787 tA=10
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=176.4952380952381 mid=180
+[DIAG] spawnGhostAt: x=1502.3500000000015 y=804 b.left=-177.05 b.top=-215.95 spr.x=1325.3 spr.y=588.05 vis.w=360 vis.h=360 gg.vis.x=1502.35 gg.vis.y=804 gg.X=1502.3500000000015 gg.Y=804
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=176.81744068883393 mid=180
+[DIAG] spawnGhostAt: x=1535.3500000000015 y=843 b.left=-177.05 b.top=-215.95 spr.x=1358.3 spr.y=627.05 vis.w=360 vis.h=360 gg.vis.x=1535.35 gg.vis.y=843 gg.X=1535.3500000000015 gg.Y=843
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=179.43301288607077 mid=180
+[DIAG] spawnGhostAt: x=1566.1000000000015 y=833.8999999999984 b.left=-177.05 b.top=-215.95 spr.x=1389.05 spr.y=617.9 vis.w=360 vis.h=360 gg.vis.x=1566.1 gg.vis.y=833.85 gg.X=1566.1000000000015 gg.Y=833.8999999999984
+[DIAG] rBody: bX=1403.137952522119 bY=713.1126715239442 dmg=14 off=false liv=99 vel=131.34480304084718 ggX=1566.1000000000015 ggY=833.8999999999985 cwX=1527.6399407906988 cwY=780.838000992894 tA=15
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=179.9564521293628 mid=180
+[DIAG] spawnGhostAt: x=1597.6000000000015 y=802.3999999999984 b.left=-177.05 b.top=-215.95 spr.x=1420.55 spr.y=586.4 vis.w=360 vis.h=360 gg.vis.x=1597.6 gg.vis.y=802.35 gg.X=1597.6000000000015 gg.Y=802.3999999999984
+[DIAG] partsAlive: n=8 maxliv=18 idx=50
+[DIAG] rAtk: atkOn=true kA=false tA=14 atkPos=false cw=fe.weapon::Weapon
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=176.6699934092835 mid=180
+[DIAG] spawnGhostAt: x=1637.8500000000015 y=800 b.left=-177.05 b.top=-215.95 spr.x=1460.8 spr.y=584.05 vis.w=360 vis.h=360 gg.vis.x=1637.85 gg.vis.y=800 gg.X=1637.8500000000015 gg.Y=800
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=179.65007673755755 mid=180
+[DIAG] spawnGhostAt: x=1679.8500000000015 y=800 b.left=-177.05 b.top=-215.95 spr.x=1502.8 spr.y=584.05 vis.w=360 vis.h=360 gg.vis.x=1679.85 gg.vis.y=800 gg.X=1679.8500000000015 gg.Y=800
+[DIAG] rBody: bX=1341.8006961878752 bY=677.9041100368372 dmg=14 off=false liv=1 vel=131.34480304084718 ggX=1679.8500000000015 ggY=800 cwX=1637.8500000000015 cwY=751 tA=12
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=177.50952879581152 mid=180
+[DIAG] spawnGhostAt: x=1721.8500000000015 y=800 b.left=-177.05 b.top=-215.95 spr.x=1544.8 spr.y=584.05 vis.w=360 vis.h=360 gg.vis.x=1721.85 gg.vis.y=800 gg.X=1721.8500000000015 gg.Y=800
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=178.03041403041402 mid=180
+[DIAG] spawnGhostAt: x=1763.8500000000015 y=800 b.left=-177.05 b.top=-215.95 spr.x=1586.8 spr.y=584.05 vis.w=360 vis.h=360 gg.vis.x=1763.85 gg.vis.y=800 gg.X=1763.8500000000015 gg.Y=800
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=179.40212606034575 mid=180
+[DIAG] spawnGhostAt: x=1786.8500000000015 y=800 b.left=-177.05 b.top=-215.95 spr.x=1609.8 spr.y=584.05 vis.w=360 vis.h=360 gg.vis.x=1786.85 gg.vis.y=800 gg.X=1786.8500000000015 gg.Y=800
+[DIAG] rFire: cnt=0 exec=0 pStay=true pJump=false cw=fe.weapon::Weapon tA=9
+[DIAG] rBody: bX=1341.8006961878752 bY=677.9041100368372 dmg=14 off=false liv=0 vel=131.34480304084718 ggX=1786.8500000000015 ggY=800 cwX=1763.8500000000015 cwY=751 tA=9
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=175.52471252773856 mid=180
+[DIAG] spawnGhostAt: x=1786.8500000000015 y=800 b.left=-177.05 b.top=-215.95 spr.x=1609.8 spr.y=584.05 vis.w=360 vis.h=360 gg.vis.x=1786.85 gg.vis.y=800 gg.X=1786.8500000000015 gg.Y=800
+[DIAG] ghostAt-f: s=-1 storona=-1 visScaleX=-1 cxA=181.89734667246628 mid=180
+[DIAG] spawnGhostAt: x=1755.3500000000015 y=800 b.left=-177.05 b.top=-215.95 spr.x=1578.3 spr.y=584.05 vis.w=360 vis.h=360 gg.vis.x=1755.35 gg.vis.y=800 gg.X=1755.3500000000015 gg.Y=800
+[DIAG] ghostAt-f: s=-1 storona=-1 visScaleX=-1 cxA=179.86183222484445 mid=180
+[DIAG] spawnGhostAt: x=1713.3500000000015 y=800 b.left=-177.05 b.top=-215.95 spr.x=1536.3 spr.y=584.05 vis.w=360 vis.h=360 gg.vis.x=1713.35 gg.vis.y=800 gg.X=1713.3500000000015 gg.Y=800
+[DIAG] rBody: bX=1655.7174489442311 bY=679.0462424386512 dmg=14 off=false liv=2 vel=132.66827266663313 ggX=1713.3500000000015 ggY=800 cwX=1705.3500000000015 cwY=751 tA=14
+[STATE] L=false R=false U=false D=false J=false A=false ggX=1713.3500000000015 ggY=800 focus=[object Stage]
+[DIAG] ghostAt-f: s=-1 storona=-1 visScaleX=-1 cxA=180.29690892174094 mid=180
+[DIAG] spawnGhostAt: x=1671.3500000000015 y=800 b.left=-177.05 b.top=-215.95 spr.x=1494.3 spr.y=584.05 vis.w=360 vis.h=360 gg.vis.x=1671.35 gg.vis.y=800 gg.X=1671.3500000000015 gg.Y=800
+[DIAG] ghostAt-f: s=-1 storona=-1 visScaleX=-1 cxA=180.740625 mid=180
+[DIAG] spawnGhostAt: x=1629.3500000000015 y=800 b.left=-177.05 b.top=-215.95 spr.x=1452.3 spr.y=584.05 vis.w=360 vis.h=360 gg.vis.x=1629.35 gg.vis.y=800 gg.X=1629.3500000000015 gg.Y=800
+[DIAG] partsAlive: n=9 maxliv=49 idx=100
+[DIAG] rAtk: atkOn=false kA=false tA=12 atkPos=false cw=fe.weapon::Weapon
+[DIAG] ghostAt-f: s=-1 storona=-1 visScaleX=-1 cxA=180.11206225680934 mid=180
+[DIAG] spawnGhostAt: x=1587.3500000000015 y=800 b.left=-177.05 b.top=-215.95 spr.x=1410.3 spr.y=584.05 vis.w=360 vis.h=360 gg.vis.x=1587.35 gg.vis.y=800 gg.X=1587.3500000000015 gg.Y=800
+[DIAG] rBody: bX=1655.7174489442311 bY=679.0462424386512 dmg=14 off=false liv=0 vel=132.66827266663313 ggX=1587.3500000000015 ggY=800 cwX=1579.3500000000015 cwY=751 tA=11
+[DIAG] ghostAt-f: s=-1 storona=-1 visScaleX=-1 cxA=180.83603318846306 mid=180
+[DIAG] spawnGhostAt: x=1545.3500000000015 y=815 b.left=-177.05 b.top=-215.95 spr.x=1368.3 spr.y=599.05 vis.w=360 vis.h=360 gg.vis.x=1545.35 gg.vis.y=815 gg.X=1545.3500000000015 gg.Y=815
+[DIAG] ghostAt-f: s=-1 storona=-1 visScaleX=-1 cxA=180.07522295463357 mid=180
+[DIAG] spawnGhostAt: x=1505.3500000000017 y=866 b.left=-177.05 b.top=-215.95 spr.x=1328.3 spr.y=650.05 vis.w=360 vis.h=360 gg.vis.x=1505.35 gg.vis.y=866 gg.X=1505.3500000000017 gg.Y=866
+[DIAG] ghostAt-f: s=-1 storona=-1 visScaleX=-1 cxA=177.7061514997458 mid=180
+[DIAG] spawnGhostAt: x=1474.1500000000017 y=925.8499999999984 b.left=-177.05 b.top=-215.95 spr.x=1297.1 spr.y=709.85 vis.w=360 vis.h=360 gg.vis.x=1474.15 gg.vis.y=925.8 gg.X=1474.1500000000017 gg.Y=925.8499999999984
+[DIAG] rBody: bX=1655.7174489442311 bY=679.0462424386512 dmg=14 off=false liv=0 vel=132.66827266663313 ggX=1474.1500000000017 ggY=925.8499999999983 cwX=1455.3500000000017 cwY=819 tA=8
+[DIAG] ghostAt-f: s=-1 storona=-1 visScaleX=-1 cxA=178.47963040739185 mid=180
+[DIAG] spawnGhostAt: x=1448.4500000000016 y=951.5499999999985 b.left=-177.05 b.top=-215.95 spr.x=1271.4 spr.y=735.55 vis.w=360 vis.h=360 gg.vis.x=1448.45 gg.vis.y=951.5 gg.X=1448.4500000000016 gg.Y=951.5499999999985
+[DIAG] ghostAt-f: s=-1 storona=-1 visScaleX=-1 cxA=177.9256698357822 mid=180
+[DIAG] spawnGhostAt: x=1415.2000000000016 y=960 b.left=-177.05 b.top=-215.95 spr.x=1238.15 spr.y=744.05 vis.w=360 vis.h=360 gg.vis.x=1415.2 gg.vis.y=960 gg.X=1415.2000000000016 gg.Y=960
+[DIAG] ghostAt-f: s=-1 storona=-1 visScaleX=-1 cxA=180.04130506426452 mid=180
+[DIAG] spawnGhostAt: x=1373.2000000000016 y=960 b.left=-177.05 b.top=-215.95 spr.x=1196.15 spr.y=744.05 vis.w=360 vis.h=360 gg.vis.x=1373.2 gg.vis.y=960 gg.X=1373.2000000000016 gg.Y=960
+[DIAG] rBody: bX=956.7146519915175 bY=562.9433877808996 dmg=14 off=false liv=97 vel=178.96958445198834 ggX=1373.2000000000016 ggY=960 cwX=1365.2000000000016 cwY=911 tA=13
+[DIAG] ghostAt-f: s=-1 storona=-1 visScaleX=-1 cxA=180.47395886626418 mid=180
+[DIAG] spawnGhostAt: x=1331.2000000000016 y=960 b.left=-177.05 b.top=-215.95 spr.x=1154.15 spr.y=744.05 vis.w=360 vis.h=360 gg.vis.x=1331.2 gg.vis.y=960 gg.X=1331.2000000000016 gg.Y=960
+[DIAG] ghostAt-f: s=-1 storona=-1 visScaleX=-1 cxA=179.56449605972625 mid=180
+[DIAG] spawnGhostAt: x=1289.2000000000016 y=960 b.left=-177.05 b.top=-215.95 spr.x=1112.15 spr.y=744.05 vis.w=360 vis.h=360 gg.vis.x=1289.2 gg.vis.y=960 gg.X=1289.2000000000016 gg.Y=960
+[DIAG] ghostAt-f: s=-1 storona=-1 visScaleX=-1 cxA=180.04130506426452 mid=180
+[DIAG] spawnGhostAt: x=1247.2000000000016 y=960 b.left=-177.05 b.top=-215.95 spr.x=1070.15 spr.y=744.05 vis.w=360 vis.h=360 gg.vis.x=1247.2 gg.vis.y=960 gg.X=1247.2000000000016 gg.Y=960
+[DIAG] rFire: cnt=0 exec=0 pStay=true pJump=false cw=fe.weapon::Weapon tA=10
+[DIAG] partsAlive: n=6 maxliv=39 idx=150
+[DIAG] rAnim: cls=fe.unit::UnitMerc sost=1 stay=false dx=0 hp=117.36000000000001 hash=f0
+[DIAG] rAnim: cls=fe.unit::UnitMerc sost=1 stay=true dx=0 hp=84.70000000000002 hash=f0
+[DIAG] rBody: bX=638.5132298678793 bY=357.06813209682707 dmg=14 off=false liv=3 vel=178.96958445198834 ggX=1247.2000000000016 ggY=960 cwX=1239.2000000000016 cwY=911 tA=10
+[DIAG] rAtk: atkOn=false kA=false tA=10 atkPos=false cw=fe.weapon::Weapon
+[DIAG] ghostAt-f: s=-1 storona=-1 visScaleX=-1 cxA=180.24820616472965 mid=180
+[DIAG] spawnGhostAt: x=1224.2000000000016 y=960 b.left=-177.05 b.top=-215.95 spr.x=1047.15 spr.y=744.05 vis.w=360 vis.h=360 gg.vis.x=1224.2 gg.vis.y=960 gg.X=1224.2000000000016 gg.Y=960
+[DIAG] ghostAt-f: s=-1 storona=-1 visScaleX=-1 cxA=180.89109124205538 mid=180
+[DIAG] spawnGhostAt: x=1224.2000000000016 y=960 b.left=-177.05 b.top=-215.95 spr.x=1047.15 spr.y=744.05 vis.w=360 vis.h=360 gg.vis.x=1224.2 gg.vis.y=960 gg.X=1224.2000000000016 gg.Y=960
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=175.64772844872192 mid=180
+[DIAG] spawnGhostAt: x=1255.7000000000016 y=960 b.left=-177.05 b.top=-215.95 spr.x=1078.65 spr.y=744.05 vis.w=360 vis.h=360 gg.vis.x=1255.7 gg.vis.y=960 gg.X=1255.7000000000016 gg.Y=960
+[DIAG] rBody: bX=638.5132298678793 bY=357.06813209682707 dmg=14 off=false liv=0 vel=178.96958445198834 ggX=1255.7000000000016 ggY=960 cwX=1174.2000000000016 cwY=911 tA=7
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=179.82980533985747 mid=180
+[DIAG] spawnGhostAt: x=1297.7000000000016 y=960 b.left=-177.05 b.top=-215.95 spr.x=1120.65 spr.y=744.05 vis.w=360 vis.h=360 gg.vis.x=1297.7 gg.vis.y=960 gg.X=1297.7000000000016 gg.Y=960
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=177.06339285714284 mid=180
+[DIAG] spawnGhostAt: x=1339.7000000000016 y=960 b.left=-177.05 b.top=-215.95 spr.x=1162.65 spr.y=744.05 vis.w=360 vis.h=360 gg.vis.x=1339.7 gg.vis.y=960 gg.X=1339.7000000000016 gg.Y=960
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=177.20623916811093 mid=180
+[DIAG] spawnGhostAt: x=1381.7000000000016 y=960 b.left=-177.05 b.top=-215.95 spr.x=1204.65 spr.y=744.05 vis.w=360 vis.h=360 gg.vis.x=1381.7 gg.vis.y=960 gg.X=1381.7000000000016 gg.Y=960
+[DIAG] rBody: bX=638.5132298678793 bY=357.06813209682707 dmg=14 off=false liv=0 vel=178.96958445198834 ggX=1381.7000000000016 ggY=960 cwX=1339.7000000000016 cwY=911 tA=4
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=178.5504123144585 mid=180
+[DIAG] spawnGhostAt: x=1423.7000000000016 y=960 b.left=-177.05 b.top=-215.95 spr.x=1246.65 spr.y=744.05 vis.w=360 vis.h=360 gg.vis.x=1423.7 gg.vis.y=960 gg.X=1423.7000000000016 gg.Y=960
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=177.42672317644434 mid=180
+[DIAG] spawnGhostAt: x=1465.7000000000016 y=960 b.left=-177.05 b.top=-215.95 spr.x=1288.65 spr.y=744.05 vis.w=360 vis.h=360 gg.vis.x=1465.7 gg.vis.y=960 gg.X=1465.7000000000016 gg.Y=960
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=176.85929155313352 mid=180
+[DIAG] spawnGhostAt: x=1488.7000000000016 y=960 b.left=-177.05 b.top=-215.95 spr.x=1311.65 spr.y=744.05 vis.w=360 vis.h=360 gg.vis.x=1488.7 gg.vis.y=960 gg.X=1488.7000000000016 gg.Y=960
+[DIAG] rBody: bX=638.5132298678793 bY=357.06813209682707 dmg=14 off=false liv=0 vel=178.96958445198834 ggX=1488.7000000000016 ggY=960 cwX=1465.7000000000016 cwY=911 tA=1
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=177.2596105337504 mid=180
+[DIAG] spawnGhostAt: x=1488.7000000000016 y=960 b.left=-177.05 b.top=-215.95 spr.x=1311.65 spr.y=744.05 vis.w=360 vis.h=360 gg.vis.x=1488.7 gg.vis.y=960 gg.X=1488.7000000000016 gg.Y=960
+[DIAG] partsAlive: n=6 maxliv=29 idx=200
+[DIAG] rAtk: atkOn=false kA=false tA=0 atkPos=true cw=fe.weapon::Weapon
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=175.59171842650105 mid=180
+[DIAG] spawnGhostAt: x=1520.2000000000016 y=960 b.left=-177.05 b.top=-215.95 spr.x=1343.15 spr.y=744.05 vis.w=360 vis.h=360 gg.vis.x=1520.2 gg.vis.y=960 gg.X=1520.2000000000016 gg.Y=960
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=179.82980533985747 mid=180
+[DIAG] spawnGhostAt: x=1565.5406088899815 y=960 b.left=-177.05 b.top=-215.95 spr.x=1388.45 spr.y=744.05 vis.w=360 vis.h=360 gg.vis.x=1565.5 gg.vis.y=960 gg.X=1565.5406088899815 gg.Y=960
+[DIAG] rBody: bX=1240.4625023321705 bY=735.6525553392596 dmg=14 off=false liv=98 vel=137.90006579831243 ggX=1565.5406088899815 ggY=960 cwX=1520.2000000000016 cwY=911 tA=14
+[DIAG] partsResumeE: resumed=0 vis=0
+[DIAG] endReplay: keyLeft=false keyRight=false keyJump=false keyAttack=false keyTele=false ggControl=true onPause=false allStat=1 focus=[object Stage]
+[MUSIC] fade @9334 over 90f
+[TEST-ASSERT] replay-player-anim-driven=PASS (frames=[14,4,1,9,3,1,5,5,])
+[TEST-ASSERT] dead-enemy-no-new-attacks=PASS (new=0 deadOwners=1)
+[TEST-ASSERT] no-invisibility-residue=PASS (alive=3 dead=0 )
+[TEST-ASSERT] no-telegrab-residue=PASS (alive=3 dead=0 )
+[TEST] replay checks done: animSamples=14,4,1,9,3,1,5,5,
+[DIAG] ggControl changed to false hp=-1.597561958294353 sost=2 X=1569.4600206540738 Y=960 sandy=false replay=false
+[TEST] pip test pre: inGameplay=true allStat=1
+[STATE] L=false R=false U=false D=false J=false A=false ggX=1569.4600206540738 ggY=960 focus=[object Stage]
+[TEST-ASSERT] pip-open=PASS
+[TEST-ASSERT] pip-pauses-gameplay=PASS (pip=true inGameplay=false allStat=2)
+[MUSIC] stopped, breakpoint @12515
+[STATE] L=false R=false U=false D=false J=false A=false ggX=1569.4600206540738 ggY=960 focus=[object Stage]
+[TEST-ASSERT] legacy-settings-overlay-removed=PASS
+[TEST-ASSERT] settings-menu-opens=PASS
+[SandyMod] config saved appDir=0 storage=1
+[TEST-ASSERT] menu-settings-save-reload=PASS (duration=270)
+[SandyMod] config saved appDir=0 storage=1
+[STATE] L=false R=false U=false D=false J=false A=false ggX=1569.4600206540738 ggY=960 focus=[object Stage]
+[TEST-ASSERT] pip-resume=PASS (pip=false inGameplay=true)
+[KEY] D 120->undefined pip=false stand=false consol=false setkey=false guiPause=false ctrActive=false focus=[object Stage]
+[KEY] U 120
+[TEST-ASSERT] standalone-f9-removed=PASS (children=14->14 forwarded=true)
+[DIAG] recAtk: cls=fe.weapon::Bullet X=1571.296376434121 Y=960.3910733841765 frameN=0
+[DIAG] recAtk: cls=fe.weapon::Bullet X=1522.913260876388 Y=961.4189244661115 frameN=0
+[DIAG] recAtk: cls=fe.weapon::Bullet X=1294.6442595233257 Y=786.1770793452986 frameN=0
+[DIAG] recAtk: cls=fe.weapon::Bullet X=981.7797003436599 Y=665.191655610673 frameN=0
+[DIAG] recAtk: cls=fe.weapon::Bullet X=633.8544707628433 Y=482.19314155656224 frameN=0
+[SandyMod] 斯安维斯坦 ON
+[TEST] second sandy cycle (music resume check)
+[DIAG] ggControl changed to true hp=-1.597561958294353 sost=2 X=1569.4600206540738 Y=960 sandy=true replay=false
+[DIAG] recObj: cls=fe.loc::Box X=1140 Y=320 arr=0 frameN=0
+[DIAG] recObj: cls=fe.loc::Box X=440 Y=960 arr=0 frameN=0
+[DIAG] recObj: cls=fe.loc::Box X=540 Y=320 arr=0 frameN=0
+[DIAG] recObj: cls=fe.loc::Box X=1680 Y=320 arr=0 frameN=0
+[DIAG] recObj: cls=fe.loc::Box X=240 Y=320 arr=0 frameN=0
+[DIAG] recObj: cls=fe.loc::Box X=1320 Y=320 arr=0 frameN=0
+[MUSIC] start @12515 (resume)
+[DIAG] recAtk: cls=fe.weapon::Bullet X=599.6794861793943 Y=471.598234494108 frameN=9
+[DIAG] after jump 7f: Y=924 dy=-12 stay=false jumpp=6 maxjumpp=8 dash_t=0 dash_maxt=30 isJump=true isLaz=0 jumpNumb=1
+[DIAG] recAtk: cls=fe.weapon::Bullet X=628.8798489143614 Y=485.9059297283526 frameN=19
+[DIAG] mirror: cxA=194.8881110985661 mid=180 storona=1 visScaleX=1
+[DIAG] spawnGhost: gg.X=1572.630836184235 gg.Y=888 vis.x=1572.6 vis.y=888 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=1 vis.scaleX=1 spr.x=1395.55 spr.y=672.05 ghostParent=true
+[DIAG] mirror: cxA=194.9984670413899 mid=180 storona=1 visScaleX=1
+[DIAG] spawnGhost: gg.X=1572.630836184235 gg.Y=826 vis.x=1572.6 vis.y=826 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=1 vis.scaleX=1 spr.x=1395.55 spr.y=610.05 ghostParent=true
+[DIAG] recAtk: cls=fe.weapon::Bullet X=641.702463949325 Y=483.10773093819313 frameN=29
+[DIAG] sAtk: wantA=false wantP=false A=false mouse=false pulse=false tA=0 cw=fe.weapon::Weapon nPb=0
+[DIAG] sEnemy: X=485.0367802550695 Y=308 cls=fe.unit::UnitMerc
+[DIAG] mirror: cxA=195.0646263556678 mid=180 storona=1 visScaleX=1
+[DIAG] spawnGhost: gg.X=1572.630836184235 gg.Y=799 vis.x=1572.6 vis.y=799 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=1 vis.scaleX=1 spr.x=1395.55 spr.y=583.05 ghostParent=true
+[DIAG] mirror: cxA=195.19744771357674 mid=180 storona=1 visScaleX=1
+[DIAG] spawnGhost: gg.X=1572.630836184235 gg.Y=808 vis.x=1572.6 vis.y=808 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=1 vis.scaleX=1 spr.x=1395.55 spr.y=592.05 ghostParent=true
+[DIAG] after jump 7f: Y=826 dy=7 stay=false jumpp=-18 maxjumpp=8 dash_t=0 dash_maxt=30 isJump=true isLaz=0 jumpNumb=1
+[DIAG] recAtk: cls=fe.weapon::Bullet X=636.8652032768473 Y=466.4082634526584 frameN=39
+[DIAG] mirror: cxA=195.14235807860263 mid=180 storona=1 visScaleX=1
+[DIAG] spawnGhost: gg.X=1572.630836184235 gg.Y=827.369163815765 vis.x=1572.6 vis.y=827.35 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=1 vis.scaleX=1 spr.x=1395.55 spr.y=611.4 ghostParent=true
+[DIAG] recAtk: cls=fe.weapon::Bullet X=617.888119638139 Y=460.66947020404314 frameN=49
+[DIAG] after jump 7f: Y=827.369163815765 dy=0 stay=true jumpp=-19 maxjumpp=8 dash_t=0 dash_maxt=30 isJump=true isLaz=0 jumpNumb=1
+[DIAG] recAtk: cls=fe.weapon::Bullet X=666.5541504892266 Y=465.8212867491601 frameN=59
+[DIAG] sAtk: wantA=false wantP=false A=false mouse=false pulse=false tA=0 cw=fe.weapon::Weapon nPb=0
+[DIAG] recAtk: cls=fe.weapon::Bullet X=652.780737025849 Y=475.9080167687656 frameN=69
+[DIAG] after jump 7f: Y=827.369163815765 dy=0 stay=true jumpp=-19 maxjumpp=8 dash_t=0 dash_maxt=30 isJump=true isLaz=0 jumpNumb=1
+[DIAG] recAtk: cls=fe.weapon::Bullet X=627.185035327256 Y=458.24435854060687 frameN=79
+[DIAG] recAtk: cls=fe.weapon::Bullet X=678.5429384070535 Y=470.867275437102 frameN=89
+[DIAG] sAtk: wantA=false wantP=false A=false mouse=false pulse=false tA=0 cw=fe.weapon::Weapon nPb=0
+[DIAG] sEnemy: X=501.7105156464125 Y=262.7057786167148 cls=fe.unit::UnitMerc
+[DIAG] after jump 7f: Y=824.7823754110352 dy=0 stay=true jumpp=-19 maxjumpp=8 dash_t=0 dash_maxt=30 isJump=true isLaz=0 jumpNumb=1
+[DIAG] recAtk: cls=fe.weapon::Bullet X=610.9439607996464 Y=456.31964160235896 frameN=99
+[DIAG] recAtk: cls=fe.weapon::Bullet X=647.0591406051334 Y=467.1970378028311 frameN=109
+[DIAG] after jump 7f: Y=824.7823754110352 dy=0 stay=true jumpp=-19 maxjumpp=8 dash_t=0 dash_maxt=30 isJump=true isLaz=0 jumpNumb=1
+[DIAG] recAtk: cls=fe.weapon::Bullet X=679.0710900838429 Y=476.03163701632644 frameN=119
+[DIAG] sAtk: wantA=false wantP=false A=false mouse=false pulse=false tA=0 cw=fe.weapon::Weapon nPb=0
+[DIAG] recAtk: cls=fe.weapon::Bullet X=609.6955914523538 Y=459.4761373533273 frameN=129
+[DIAG] after jump 7f: Y=823.9555652673344 dy=4.397559500730682 stay=false jumpp=-2 maxjumpp=8 dash_t=0 dash_maxt=30 isJump=true isLaz=0 jumpNumb=1
+[DIAG] recAtk: cls=fe.weapon::Bullet X=650.1291191521807 Y=466.2021691597512 frameN=139
+[DIAG] mirror: cxA=176.16806722689077 mid=180 storona=1 visScaleX=1
+[DIAG] spawnGhost: gg.X=1583.866363877828 gg.Y=823.5311956229027 vis.x=1583.85 vis.y=823.5 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=1 vis.scaleX=1 spr.x=1406.8 spr.y=607.55 ghostParent=true
+[DIAG] mirror: cxA=175.04424778761063 mid=180 storona=1 visScaleX=1
+[DIAG] spawnGhost: gg.X=1585.4907335222595 gg.Y=814.5092664777405 vis.x=1585.45 vis.y=814.5 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=1 vis.scaleX=1 spr.x=1408.4 spr.y=598.55 ghostParent=true
+[DIAG] sAtk: wantA=false wantP=false A=false mouse=false pulse=false tA=0 cw=fe.weapon::Weapon nPb=0
+[DIAG] sEnemy: X=613.6957830317178 Y=269.8745766095342 cls=fe.unit::UnitMerc
+[DIAG] after jump 7f: Y=814.5092664777405 dy=0 stay=true jumpp=-8 maxjumpp=8 dash_t=0 dash_maxt=30 isJump=true isLaz=0 jumpNumb=1
+[DIAG] mirror: cxA=177 mid=180 storona=1 visScaleX=1
+[DIAG] spawnGhost: gg.X=1596.5957133485956 gg.Y=810.900511418821 vis.x=1596.55 vis.y=810.9 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=1 vis.scaleX=1 spr.x=1419.5 spr.y=594.95 ghostParent=true
+[DIAG] mirror: cxA=180.41379310344828 mid=180 storona=1 visScaleX=1
+[DIAG] spawnGhost: gg.X=1600.5006931749317 gg.Y=831.7415286857217 vis.x=1600.5 vis.y=831.7 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=1 vis.scaleX=1 spr.x=1423.45 spr.y=615.75 ghostParent=true
+[DIAG] after jump 7f: Y=878.2302029879716 dy=16.4962247674166 stay=false jumpp=-14 maxjumpp=8 dash_t=0 dash_maxt=30 isJump=true isLaz=0 jumpNumb=1
+[DIAG] sAtk: wantA=false wantP=false A=false mouse=false pulse=false tA=0 cw=fe.weapon::Weapon nPb=0
+[DIAG] mirror: cxA=180.95726495726495 mid=180 storona=1 visScaleX=1
+[DIAG] spawnGhost: gg.X=1600.5006931749317 gg.Y=933.7188772902214 vis.x=1600.5 vis.y=933.7 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=1 vis.scaleX=1 spr.x=1423.45 spr.y=717.75 ghostParent=true
+[DIAG] mirror: cxA=177.13333333333333 mid=180 storona=1 visScaleX=1
+[DIAG] spawnGhost: gg.X=1600.5006931749317 gg.Y=960 vis.x=1600.5 vis.y=960 b.left=-177.05 b.top=-215.95 b.w=360 b.h=360 storona=1 vis.scaleX=1 spr.x=1423.45 spr.y=744.05 ghostParent=true
+[DIAG] recAtk: cls=fe.weapon::Bullet X=617.3907789870631 Y=466.65769938468264 frameN=194
+[DIAG] after jump 7f: Y=960 dy=0 stay=true jumpp=-19 maxjumpp=8 dash_t=0 dash_maxt=30 isJump=true isLaz=0 jumpNumb=1
+[DIAG] recAtk: cls=fe.weapon::Bullet X=657.3992106432507 Y=483.9283179216231 frameN=204
+[DIAG] sAtk: wantA=false wantP=false A=false mouse=false pulse=false tA=0 cw=fe.weapon::Weapon nPb=0
+[DIAG] sEnemy: X=660.209405824763 Y=267.072494115417 cls=fe.unit::UnitMerc
+[DIAG] rollRec: tot=210 sit=0 roll=0
+[DIAG] clearFrozenBullets: feWeapon=2 removed=0 skip=2
+[DIAG] partsKillDeepS: killed=55 vis=0
+[DIAG] recEnd: cls=fe.weapon::Bullet len=211 inChain=true
+[DIAG] recEnd: cls=fe.weapon::Bullet len=211 inChain=true
+[SandyMod] 斯安维斯坦 OFF, replay 210 frames
+[DIAG] rStart: recObjs=46 atk=21 unit=3 scene=22 other=0
+[DIAG] rStart: enemyAtk cls=fe.weapon::Bullet X=1103.8131159482532 Y=670.080797538728 rec=1
+[DIAG] rStart: enemyAtk cls=fe.weapon::Bullet X=860.8984212865018 Y=565.6066358432453 rec=1
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=176.36974789915968 mid=180
+[DIAG] spawnGhostAt: x=1569.4600206540738 y=960 b.left=-177.05 b.top=-215.95 spr.x=1392.4 spr.y=744.05 vis.w=360 vis.h=360 gg.vis.x=1569.45 gg.vis.y=960 gg.X=1569.4600206540738 gg.Y=960
+[DIAG] rFix: cls=fe.weapon::Bullet stX=1571.296376434121 stY=960.3910733841765 X=1571.296376434121 Y=960.3910733841765 visX=1571.25 visPar=0
+[DIAG] rFix: cls=fe.weapon::Bullet stX=1522.913260876388 stY=961.4189244661115 X=1522.913260876388 Y=961.4189244661115 visX=1522.9 visPar=0
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=195.11111111111111 mid=180
+[DIAG] spawnGhostAt: x=1569.4600206540738 y=960 b.left=-177.05 b.top=-215.95 spr.x=1392.4 spr.y=744.05 vis.w=360 vis.h=360 gg.vis.x=1569.45 gg.vis.y=960 gg.X=1569.4600206540738 gg.Y=960
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=195.3469387755102 mid=180
+[DIAG] spawnGhostAt: x=1572.630836184235 y=960 b.left=-177.05 b.top=-215.95 spr.x=1395.55 spr.y=744.05 vis.w=360 vis.h=360 gg.vis.x=1572.6 gg.vis.y=960 gg.X=1572.630836184235 gg.Y=960
+[DIAG] rFire: cnt=0 exec=0 pStay=true pJump=false cw=fe.weapon::Weapon tA=0
+[DIAG] rBody: bX=676.6778926882826 bY=357.44346078974644 dmg=14 off=false liv=0 vel=137.90006579831243 ggX=1572.630836184235 ggY=960 cwX=1569.4600206540738 cwY=911 tA=0
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=195.3469387755102 mid=180
+[DIAG] spawnGhostAt: x=1572.630836184235 y=888 b.left=-177.05 b.top=-215.95 spr.x=1395.55 spr.y=672.05 vis.w=360 vis.h=360 gg.vis.x=1572.6 gg.vis.y=888 gg.X=1572.630836184235 gg.Y=888
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=195.3469387755102 mid=180
+[DIAG] spawnGhostAt: x=1572.630836184235 y=826 b.left=-177.05 b.top=-215.95 spr.x=1395.55 spr.y=610.05 vis.w=360 vis.h=360 gg.vis.x=1572.6 gg.vis.y=826 gg.X=1572.630836184235 gg.Y=826
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=195.11111111111111 mid=180
+[DIAG] spawnGhostAt: x=1572.630836184235 y=799 b.left=-177.05 b.top=-215.95 spr.x=1395.55 spr.y=583.05 vis.w=360 vis.h=360 gg.vis.x=1572.6 gg.vis.y=799 gg.X=1572.630836184235 gg.Y=799
+[DIAG] rBody: bX=676.6778926882826 bY=357.44346078974644 dmg=14 off=false liv=0 vel=137.90006579831243 ggX=1572.630836184235 ggY=799 cwX=1572.630836184235 cwY=778.369163815765 tA=0
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=195.11111111111111 mid=180
+[DIAG] spawnGhostAt: x=1572.630836184235 y=808 b.left=-177.05 b.top=-215.95 spr.x=1395.55 spr.y=592.05 vis.w=360 vis.h=360 gg.vis.x=1572.6 gg.vis.y=808 gg.X=1572.630836184235 gg.Y=808
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=195.11111111111111 mid=180
+[DIAG] spawnGhostAt: x=1572.630836184235 y=827.369163815765 b.left=-177.05 b.top=-215.95 spr.x=1395.55 spr.y=611.4 vis.w=360 vis.h=360 gg.vis.x=1572.6 gg.vis.y=827.35 gg.X=1572.630836184235 gg.Y=827.369163815765
+[DIAG] rAtk: atkOn=false kA=false tA=0 atkPos=true cw=fe.weapon::Weapon
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=195.11111111111111 mid=180
+[DIAG] spawnGhostAt: x=1572.630836184235 y=827.369163815765 b.left=-177.05 b.top=-215.95 spr.x=1395.55 spr.y=611.4 vis.w=360 vis.h=360 gg.vis.x=1572.6 gg.vis.y=827.35 gg.X=1572.630836184235 gg.Y=827.369163815765
+[DIAG] rBody: bX=676.6778926882826 bY=357.44346078974644 dmg=14 off=false liv=0 vel=137.90006579831243 ggX=1572.630836184235 ggY=827.369163815765 cwX=1572.630836184235 cwY=778.369163815765 tA=0
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=195.11111111111111 mid=180
+[DIAG] spawnGhostAt: x=1572.630836184235 y=827.369163815765 b.left=-177.05 b.top=-215.95 spr.x=1395.55 spr.y=611.4 vis.w=360 vis.h=360 gg.vis.x=1572.6 gg.vis.y=827.35 gg.X=1572.630836184235 gg.Y=827.369163815765
+[DIAG] partsAlive: n=0 maxliv=0 idx=50
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=195.11111111111111 mid=180
+[DIAG] spawnGhostAt: x=1572.630836184235 y=827.369163815765 b.left=-177.05 b.top=-215.95 spr.x=1395.55 spr.y=611.4 vis.w=360 vis.h=360 gg.vis.x=1572.6 gg.vis.y=827.35 gg.X=1572.630836184235 gg.Y=827.369163815765
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=195.11111111111111 mid=180
+[DIAG] spawnGhostAt: x=1572.630836184235 y=827.369163815765 b.left=-177.05 b.top=-215.95 spr.x=1395.55 spr.y=611.4 vis.w=360 vis.h=360 gg.vis.x=1572.6 gg.vis.y=827.35 gg.X=1572.630836184235 gg.Y=827.369163815765
+[DIAG] rBody: bX=676.6778926882826 bY=357.44346078974644 dmg=14 off=false liv=0 vel=137.90006579831243 ggX=1572.630836184235 ggY=827.369163815765 cwX=1572.630836184235 cwY=778.369163815765 tA=0
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=195.11111111111111 mid=180
+[DIAG] spawnGhostAt: x=1572.630836184235 y=827.369163815765 b.left=-177.05 b.top=-215.95 spr.x=1395.55 spr.y=611.4 vis.w=360 vis.h=360 gg.vis.x=1572.6 gg.vis.y=827.35 gg.X=1572.630836184235 gg.Y=827.369163815765
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=195.11111111111111 mid=180
+[DIAG] spawnGhostAt: x=1572.630836184235 y=827.369163815765 b.left=-177.05 b.top=-215.95 spr.x=1395.55 spr.y=611.4 vis.w=360 vis.h=360 gg.vis.x=1572.6 gg.vis.y=827.35 gg.X=1572.630836184235 gg.Y=827.369163815765
+[STATE] L=false R=false U=false D=false J=false A=false ggX=1572.630836184235 ggY=827.369163815765 focus=[object Stage]
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=195.11111111111111 mid=180
+[DIAG] spawnGhostAt: x=1572.630836184235 y=827.369163815765 b.left=-177.05 b.top=-215.95 spr.x=1395.55 spr.y=611.4 vis.w=360 vis.h=360 gg.vis.x=1572.6 gg.vis.y=827.35 gg.X=1572.630836184235 gg.Y=827.369163815765
+[DIAG] rBody: bX=676.6778926882826 bY=357.44346078974644 dmg=14 off=false liv=0 vel=137.90006579831243 ggX=1572.630836184235 ggY=827.369163815765 cwX=1572.630836184235 cwY=778.369163815765 tA=0
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=195.11111111111111 mid=180
+[DIAG] spawnGhostAt: x=1572.630836184235 y=827.369163815765 b.left=-177.05 b.top=-215.95 spr.x=1395.55 spr.y=611.4 vis.w=360 vis.h=360 gg.vis.x=1572.6 gg.vis.y=827.35 gg.X=1572.630836184235 gg.Y=827.369163815765
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=195.11111111111111 mid=180
+[DIAG] spawnGhostAt: x=1572.630836184235 y=827.369163815765 b.left=-177.05 b.top=-215.95 spr.x=1395.55 spr.y=611.4 vis.w=360 vis.h=360 gg.vis.x=1572.6 gg.vis.y=827.35 gg.X=1572.630836184235 gg.Y=827.369163815765
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=195.11111111111111 mid=180
+[DIAG] spawnGhostAt: x=1572.630836184235 y=827.369163815765 b.left=-177.05 b.top=-215.95 spr.x=1395.55 spr.y=611.4 vis.w=360 vis.h=360 gg.vis.x=1572.6 gg.vis.y=827.35 gg.X=1572.630836184235 gg.Y=827.369163815765
+[DIAG] rFire: cnt=0 exec=0 pStay=true pJump=false cw=fe.weapon::Weapon tA=0
+[DIAG] rAnim: cls=fe.unit::UnitMerc sost=1 stay=false dx=0 hp=117.36000000000001 hash=f0
+[DIAG] rAnim: cls=fe.unit::UnitMerc sost=1 stay=true dx=0 hp=84.70000000000002 hash=f0
+[DIAG] rBody: bX=676.6778926882826 bY=357.44346078974644 dmg=14 off=false liv=0 vel=137.90006579831243 ggX=1572.630836184235 ggY=827.369163815765 cwX=1572.630836184235 cwY=778.369163815765 tA=0
+[DIAG] rAtk: atkOn=false kA=false tA=0 atkPos=true cw=fe.weapon::Weapon
+[DIAG] replay: locWeapons=2 hold=5 holder=5 t_atk=0
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=195.11111111111111 mid=180
+[DIAG] spawnGhostAt: x=1572.630836184235 y=827.369163815765 b.left=-177.05 b.top=-215.95 spr.x=1395.55 spr.y=611.4 vis.w=360 vis.h=360 gg.vis.x=1572.6 gg.vis.y=827.35 gg.X=1572.630836184235 gg.Y=827.369163815765
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=195.11111111111111 mid=180
+[DIAG] spawnGhostAt: x=1575.2176245889648 y=824.7823754110352 b.left=-177.05 b.top=-215.95 spr.x=1398.15 spr.y=608.8 vis.w=360 vis.h=360 gg.vis.x=1575.2 gg.vis.y=824.75 gg.X=1575.2176245889648 gg.Y=824.7823754110352
+[DIAG] partsAlive: n=0 maxliv=0 idx=100
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=195.11111111111111 mid=180
+[DIAG] spawnGhostAt: x=1575.2176245889648 y=824.7823754110352 b.left=-177.05 b.top=-215.95 spr.x=1398.15 spr.y=608.8 vis.w=360 vis.h=360 gg.vis.x=1575.2 gg.vis.y=824.75 gg.X=1575.2176245889648 gg.Y=824.7823754110352
+[DIAG] rBody: bX=676.6778926882826 bY=357.44346078974644 dmg=14 off=false liv=0 vel=137.90006579831243 ggX=1575.2176245889648 ggY=824.7823754110352 cwX=1575.2176245889648 cwY=775.7823754110352 tA=0
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=195.11111111111111 mid=180
+[DIAG] spawnGhostAt: x=1575.2176245889648 y=824.7823754110352 b.left=-177.05 b.top=-215.95 spr.x=1398.15 spr.y=608.8 vis.w=360 vis.h=360 gg.vis.x=1575.2 gg.vis.y=824.75 gg.X=1575.2176245889648 gg.Y=824.7823754110352
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=195.11111111111111 mid=180
+[DIAG] spawnGhostAt: x=1575.2176245889648 y=824.7823754110352 b.left=-177.05 b.top=-215.95 spr.x=1398.15 spr.y=608.8 vis.w=360 vis.h=360 gg.vis.x=1575.2 gg.vis.y=824.75 gg.X=1575.2176245889648 gg.Y=824.7823754110352
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=195.11111111111111 mid=180
+[DIAG] spawnGhostAt: x=1575.2176245889648 y=824.7823754110352 b.left=-177.05 b.top=-215.95 spr.x=1398.15 spr.y=608.8 vis.w=360 vis.h=360 gg.vis.x=1575.2 gg.vis.y=824.75 gg.X=1575.2176245889648 gg.Y=824.7823754110352
+[DIAG] rBody: bX=676.6778926882826 bY=357.44346078974644 dmg=14 off=false liv=0 vel=137.90006579831243 ggX=1575.2176245889648 ggY=824.7823754110352 cwX=1575.2176245889648 cwY=775.7823754110352 tA=0
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=174.29565217391306 mid=180
+[DIAG] spawnGhostAt: x=1575.2176245889648 y=824.7823754110352 b.left=-177.05 b.top=-215.95 spr.x=1398.15 spr.y=608.8 vis.w=360 vis.h=360 gg.vis.x=1575.2 gg.vis.y=824.75 gg.X=1575.2176245889648 gg.Y=824.7823754110352
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=174.59649122807016 mid=180
+[DIAG] spawnGhostAt: x=1575.2176245889648 y=824.7823754110352 b.left=-177.05 b.top=-215.95 spr.x=1398.15 spr.y=608.8 vis.w=360 vis.h=360 gg.vis.x=1575.2 gg.vis.y=824.75 gg.X=1575.2176245889648 gg.Y=824.7823754110352
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=174.52631578947367 mid=180
+[DIAG] spawnGhostAt: x=1575.2176245889648 y=824.7823754110352 b.left=-177.05 b.top=-215.95 spr.x=1398.15 spr.y=608.8 vis.w=360 vis.h=360 gg.vis.x=1575.2 gg.vis.y=824.75 gg.X=1575.2176245889648 gg.Y=824.7823754110352
+[DIAG] rBody: bX=676.6778926882826 bY=357.44346078974644 dmg=14 off=false liv=0 vel=137.90006579831243 ggX=1575.2176245889648 ggY=824.7823754110352 cwX=1575.2176245889648 cwY=775.7823754110352 tA=0
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=177.3968253968254 mid=180
+[DIAG] spawnGhostAt: x=1583.866363877828 y=823.5311956229027 b.left=-177.05 b.top=-215.95 spr.x=1406.8 spr.y=607.55 vis.w=360 vis.h=360 gg.vis.x=1583.85 gg.vis.y=823.5 gg.X=1583.866363877828 gg.Y=823.5311956229027
+[DIAG] rAtk: atkOn=false kA=false tA=0 atkPos=true cw=fe.weapon::Weapon
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=178.36363636363637 mid=180
+[DIAG] spawnGhostAt: x=1585.4907335222595 y=814.5092664777405 b.left=-177.05 b.top=-215.95 spr.x=1408.4 spr.y=598.55 vis.w=360 vis.h=360 gg.vis.x=1585.45 gg.vis.y=814.5 gg.X=1585.4907335222595 gg.Y=814.5092664777405
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=174.64347826086956 mid=180
+[DIAG] spawnGhostAt: x=1585.4907335222595 y=814.5092664777405 b.left=-177.05 b.top=-215.95 spr.x=1408.4 spr.y=598.55 vis.w=360 vis.h=360 gg.vis.x=1585.45 gg.vis.y=814.5 gg.X=1585.4907335222595 gg.Y=814.5092664777405
+[DIAG] partsAlive: n=0 maxliv=0 idx=150
+[DIAG] rBody: bX=676.6778926882826 bY=357.44346078974644 dmg=14 off=false liv=0 vel=137.90006579831243 ggX=1585.4907335222595 ggY=814.5092664777405 cwX=1585.4907335222595 cwY=765.5092664777405 tA=0
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=174.41379310344828 mid=180
+[DIAG] spawnGhostAt: x=1585.4907335222595 y=814.5092664777405 b.left=-177.05 b.top=-215.95 spr.x=1408.4 spr.y=598.55 vis.w=360 vis.h=360 gg.vis.x=1585.45 gg.vis.y=814.5 gg.X=1585.4907335222595 gg.Y=814.5092664777405
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=174.41379310344828 mid=180
+[DIAG] spawnGhostAt: x=1585.4907335222595 y=814.5092664777405 b.left=-177.05 b.top=-215.95 spr.x=1408.4 spr.y=598.55 vis.w=360 vis.h=360 gg.vis.x=1585.45 gg.vis.y=814.5 gg.X=1585.4907335222595 gg.Y=814.5092664777405
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=174.41379310344828 mid=180
+[DIAG] spawnGhostAt: x=1585.4907335222595 y=814.5092664777405 b.left=-177.05 b.top=-215.95 spr.x=1408.4 spr.y=598.55 vis.w=360 vis.h=360 gg.vis.x=1585.45 gg.vis.y=814.5 gg.X=1585.4907335222595 gg.Y=814.5092664777405
+[DIAG] rFire: cnt=0 exec=0 pStay=true pJump=false cw=fe.weapon::Weapon tA=0
+[DIAG] rBody: bX=676.6778926882826 bY=357.44346078974644 dmg=14 off=false liv=0 vel=137.90006579831243 ggX=1585.4907335222595 ggY=814.5092664777405 cwX=1585.4907335222595 cwY=765.5092664777405 tA=0
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=177.3968253968254 mid=180
+[DIAG] spawnGhostAt: x=1596.5957133485956 y=810.900511418821 b.left=-177.05 b.top=-215.95 spr.x=1419.5 spr.y=594.95 vis.w=360 vis.h=360 gg.vis.x=1596.55 gg.vis.y=810.9 gg.X=1596.5957133485956 gg.Y=810.900511418821
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=178.36363636363637 mid=180
+[DIAG] spawnGhostAt: x=1600.5006931749317 y=831.7415286857217 b.left=-177.05 b.top=-215.95 spr.x=1423.45 spr.y=615.75 vis.w=360 vis.h=360 gg.vis.x=1600.5 gg.vis.y=831.7 gg.X=1600.5006931749317 gg.Y=831.7415286857217
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=179.8709677419355 mid=180
+[DIAG] spawnGhostAt: x=1600.5006931749317 y=933.7188772902214 b.left=-177.05 b.top=-215.95 spr.x=1423.45 spr.y=717.75 vis.w=360 vis.h=360 gg.vis.x=1600.5 gg.vis.y=933.7 gg.X=1600.5006931749317 gg.Y=933.7188772902214
+[DIAG] rBody: bX=676.6778926882826 bY=357.44346078974644 dmg=14 off=false liv=0 vel=137.90006579831243 ggX=1600.5006931749317 ggY=934.7188772902214 cwX=1600.5006931749317 cwY=782.7415286857217 tA=0
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=181.088 mid=180
+[DIAG] spawnGhostAt: x=1600.5006931749317 y=960 b.left=-177.05 b.top=-215.95 spr.x=1423.45 spr.y=744.05 vis.w=360 vis.h=360 gg.vis.x=1600.5 gg.vis.y=960 gg.X=1600.5006931749317 gg.Y=960
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=175.3821138211382 mid=180
+[DIAG] spawnGhostAt: x=1600.5006931749317 y=960 b.left=-177.05 b.top=-215.95 spr.x=1423.45 spr.y=744.05 vis.w=360 vis.h=360 gg.vis.x=1600.5 gg.vis.y=960 gg.X=1600.5006931749317 gg.Y=960
+[DIAG] rAtk: atkOn=false kA=false tA=0 atkPos=true cw=fe.weapon::Weapon
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=175.11864406779662 mid=180
+[DIAG] spawnGhostAt: x=1600.5006931749317 y=960 b.left=-177.05 b.top=-215.95 spr.x=1423.45 spr.y=744.05 vis.w=360 vis.h=360 gg.vis.x=1600.5 gg.vis.y=960 gg.X=1600.5006931749317 gg.Y=960
+[DIAG] rBody: bX=676.6778926882826 bY=357.44346078974644 dmg=14 off=false liv=0 vel=137.90006579831243 ggX=1600.5006931749317 ggY=960 cwX=1600.5006931749317 cwY=911 tA=0
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=174.8034188034188 mid=180
+[DIAG] spawnGhostAt: x=1600.5006931749317 y=960 b.left=-177.05 b.top=-215.95 spr.x=1423.45 spr.y=744.05 vis.w=360 vis.h=360 gg.vis.x=1600.5 gg.vis.y=960 gg.X=1600.5006931749317 gg.Y=960
+[DIAG] partsAlive: n=0 maxliv=0 idx=200
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=175.10344827586206 mid=180
+[DIAG] spawnGhostAt: x=1600.5006931749317 y=960 b.left=-177.05 b.top=-215.95 spr.x=1423.45 spr.y=744.05 vis.w=360 vis.h=360 gg.vis.x=1600.5 gg.vis.y=960 gg.X=1600.5006931749317 gg.Y=960
+[DIAG] ghostAt-f: s=1 storona=1 visScaleX=1 cxA=176.6984126984127 mid=180
+[DIAG] spawnGhostAt: x=1600.5006931749317 y=960 b.left=-177.05 b.top=-215.95 spr.x=1423.45 spr.y=744.05 vis.w=360 vis.h=360 gg.vis.x=1600.5 gg.vis.y=960 gg.X=1600.5006931749317 gg.Y=960
+[DIAG] rBody: bX=676.6778926882826 bY=357.44346078974644 dmg=14 off=false liv=0 vel=137.90006579831243 ggX=1600.5006931749317 ggY=960 cwX=1600.5006931749317 cwY=911 tA=0
+[DIAG] partsResumeE: resumed=0 vis=0
+[DIAG] endReplay: keyLeft=false keyRight=false keyJump=false keyAttack=false keyTele=false ggControl=true onPause=false allStat=1 focus=[object Stage]
+[MUSIC] fade @21408 over 90f
+[TEST-ASSERT] hub-registered=PASS (via=carrier tries=11)
+[TEST-ASSERT] hub-page-listed=PASS (pages=1 foundIdx=0 items=16)
+[TEST-ASSERT] hub-items-16=PASS (n=16)
+[TEST-ASSERT] music-start=PASS
+[TEST-ASSERT] music-resume-breakpoint=PASS (lastPos=12515)
+[TEST-ASSERT] music-fade=PASS
+[TEST-ASSERT] music-stop=PASS
+[TEST] SUMMARY pass=21 fail=0 skip=0
+[TEST] done

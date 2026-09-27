@@ -157,7 +157,6 @@ package
       private var hud:TextField;                        // 顶部状态文字
       private var hudBg:Sprite;
       private var debugTest:Boolean = false;             // 自动测试模式（config debugtest=1）
-      private var cfgShowMark:Boolean = true;            // 启动时显示模组已加载标记
       private var cfgHud:Boolean = true;                 // v1.125：顶部状态 UI（启动中/回放中/充能中）显示开关
       private var cfgGhostBlend:int = 1;                  // 残影混合: 1=normal柔和 0=add发光
       private var cfgGhostAlpha:int = 70;                 // 残影不透明度（百分比，默认 70）
@@ -416,7 +415,7 @@ package
          // v1.101：版本标记——日志确认实际加载运行的构建版本与关键开关
          // v1.121：追加 esmark/esper/espd——排查"徽标不可见"类问题的第一手数据
          // v1.127：swaprun/projhits 已迁移 mods/MoreSkills&Weapons（此处不再输出）
-         inst.log("[SandyMod] v1.144 loaded"
+         inst.log("[SandyMod] v1.145 loaded"
              + " esmark=" + (inst.cfgESMark ? 1 : 0) + " esghost=" + (inst.cfgESGhost ? 1 : 0) + " esper=" + inst.cfgESPer
              + " esen=" + (inst.cfgESEnabled ? 1 : 0) + " esprob=" + inst.cfgESRoomProb);
          if (main != null && main.stage != null)
@@ -432,34 +431,6 @@ package
          }
          inst.log("[SandyMod] hooks registered");
          inst.loadThemeSound();
-         if (inst.cfgShowMark)
-         {
-            inst.showBootMark(main);
-         }
-      }
-
-      // 启动可见标记（验证模组已加载）
-      private function showBootMark(main:Object):void
-      {
-         try
-         {
-            var t:TextField = new TextField();
-            var tf:TextFormat = new TextFormat();
-            tf.font = "Microsoft YaHei";
-            tf.size = 14;
-            tf.bold = true;
-            tf.color = 0x00FF88;
-            t.defaultTextFormat = tf;
-            t.text = "SandevistanMod v1.143 已加载 (按 \ 触发斯安维斯坦)";
-            t.autoSize = "left";   // v1.110：版本号此前显示不全（TextField 默认宽度截断）
-            t.x = 10;
-            t.y = 10;
-            t.selectable = false;
-            t.mouseEnabled = false;
-            main.addChild(t);
-            trace("[SandyMod] boot mark added");
-         }
-         catch (e:*) { trace("[SandyMod] boot mark error: " + e); }
       }
 
       // ==================== 文件日志（模组内 trace 不输出，写文件） ====================
@@ -607,7 +578,6 @@ package
             else if (k == "ghostevery") cfgGhostEvery = parseInt(v);
             else if (k == "fxrun") cfgFxRun = v.toLowerCase() == "1" || v.toLowerCase() == "true";
             else if (k == "debugtest") debugTest = v.toLowerCase() == "1" || v.toLowerCase() == "true";
-            else if (k == "showmark") cfgShowMark = v.toLowerCase() == "1" || v.toLowerCase() == "true";
             else if (k == "showhud") cfgHud = v.toLowerCase() == "1" || v.toLowerCase() == "true";
             else if (k == "diaglog") cfgDiagLog = v.toLowerCase() == "1" || v.toLowerCase() == "true";
             else if (k == "ghostblend") cfgGhostBlend = parseInt(v);
@@ -3602,7 +3572,6 @@ package
             sb.push("musicvol=" + cfgMusicVol);
             sb.push("musicfade=" + cfgMusicFade);
          sb.push("fxrun=" + (cfgFxRun ? 1 : 0));
-         sb.push("showmark=" + (cfgShowMark ? 1 : 0));
          sb.push("showhud=" + (cfgHud ? 1 : 0));
          sb.push("diaglog=" + (cfgDiagLog ? 1 : 0));
          sb.push("debugtest=0");
@@ -3635,6 +3604,15 @@ package
          log("[SandyMod] config saved appDir=" + (okA ? 1 : 0) + " storage=" + (okS ? 1 : 0));
       }
 
+      private static const THEME_PATH:String = "mods/Sandevistan/release/sandy_theme.mp3";
+      private static const MUSIC_GUIDE:String =
+         "音乐文件配置\n模组不附带音乐，请自备 MP3。\n\n"
+         + "1. 将文件命名为：\nsandy_theme.mp3\n"
+         + "2. 放入游戏安装目录下：\nmods/Sandevistan/release/\n"
+         + "3. 完全退出并重启游戏。\n"
+         + "4. 开启“时停主题曲”，调高音量。\n\n"
+         + "未放音乐不影响时停使用。\n"
+         + "请勿重复添加 .mp3 后缀；\n其他格式需先转换为 MP3。";
       // ==================== v1.137：MSW 设置中枢接入 ====================
       // Independent ModSettings registry; values and config persistence stay here.
       private function stepHubRegister():void
@@ -3644,7 +3622,7 @@ package
             var c:* = world.main != null ? world.main.getChildByName("ModSettingsCarrier") : null;
             if(c == null || c["modAPI"] == null) return;
             c["modAPI"]["registerPage"]("sandevistan", "斯安维斯坦",
-               hubBuildItems(), hubOnPageClose, "时停/回放与残影特效");
+               hubBuildItems(), hubOnPageClose, MUSIC_GUIDE);
             hubRegistered = true;
             hubViaCarrier = true;
             log("[SandyMod] settings hub registered via ModSettingsCarrier (tries=" + hubRegTries + ")");
@@ -3712,7 +3690,7 @@ package
                       "set": function(v:*):void { m.cfgESPer = int(Math.max(0, Math.min(100, Number(v)))); } });
          // v1.139：主题曲
          items.push({ "key": "musicon", "label": "时停主题曲", "kind": "check",
-                      "hint": "时停+回放期间播放主题曲（sandy_theme.mp3），回放结束淡出",
+                      "hint": MUSIC_GUIDE,
                       "get": function():* { return m.cfgMusicOn; },
                       "set": function(v:*):void { m.cfgMusicOn = (v == true); if (!m.cfgMusicOn) { m.musHardStop(); } m.saveCfgQuiet(); } });
          items.push({ "key": "musicvol", "label": "主题曲音量%", "kind": "slider",
@@ -3764,7 +3742,7 @@ package
          var r:String = null;
          try
          {
-            var f:File = File.applicationDirectory.resolvePath("mods/Sandevistan/release/sandy_theme.mp3");
+            var f:File = File.applicationDirectory.resolvePath(THEME_PATH);
             if (!f.exists)
             {
                r = "absent";

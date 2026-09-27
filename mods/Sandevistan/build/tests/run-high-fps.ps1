@@ -1,7 +1,9 @@
-param([string]$GameRoot='D:\Program Files\Steam\steamapps\common\Remains', [string]$Source='', [switch]$ExpectFailure, [switch]$Smoke, [string]$Artifact='', [switch]$WithSettings, [string]$HostSwf="", [string]$Fps="60", [switch]$SwitchModes, [switch]$Combat, [switch]$InstalledManifest, [switch]$AttackObserver)
+param([string]$GameRoot='D:\Program Files\Steam\steamapps\common\Remains', [string]$Source='', [switch]$ExpectFailure, [switch]$Smoke, [string]$Artifact='', [switch]$WithSettings, [string]$HostSwf="", [string]$Fps="60", [switch]$SwitchModes, [switch]$Combat, [switch]$InstalledManifest, [switch]$AttackObserver, [switch]$CurrentSettings, [switch]$NoMusic, [switch]$MenuGuide)
 $ErrorActionPreference='Stop'
+if($MenuGuide -and ($Smoke -or $HostSwf -or !$Artifact -or $InstalledManifest)){throw 'MenuGuide requires a formal Artifact with the ordinary host and isolated manifest'}
+if($NoMusic -and $Smoke){throw 'NoMusic is for menu-only validation; full smoke requires the music fixture'}
 if($AttackObserver -and $Smoke){throw 'Attack observer requires probe mode'}
-if($Artifact -and !$Smoke){throw 'Artifact mode requires -Smoke'}
+if($Artifact -and !$Smoke -and !$MenuGuide){throw 'Artifact mode requires -Smoke'}
 $modRoot=Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 if(!$Source){$Source=Join-Path $modRoot 'src\SandevistanMod.as'}
 $runId=Get-Date -Format 'yyyyMMddHHmmssfff'
@@ -23,17 +25,19 @@ Copy-Item -LiteralPath (Join-Path $GameRoot 'Rooms') -Destination (Join-Path $ap
 $rel=Join-Path $appRoot 'mods\Sandevistan\release'
 New-Item -ItemType Directory -Path $rel -Force | Out-Null
 'Sandevistan|SandevistanMod|1|1|1' | Set-Content -LiteralPath (Join-Path $appRoot 'mods\loader-manifest.txt')
-if($WithSettings){
- $settingsRel=Join-Path $appRoot 'mods\ModSettings\release'
+if($WithSettings -or $CurrentSettings){
+ $settingsDir=if($CurrentSettings){'ModLoader'}else{'ModSettings'}
+ $settingsEntry=$settingsDir+'Mod'
+ $settingsRel=Join-Path $appRoot "mods\$settingsDir\release"
  New-Item -ItemType Directory -Path $settingsRel -Force | Out-Null
- Copy-Item -LiteralPath (Join-Path $GameRoot 'mods\ModSettings\release\ModSettingsMod.swf') -Destination (Join-Path $settingsRel 'ModSettingsMod.swf')
- "ModSettings|ModSettingsMod|1|0|0`nSandevistan|SandevistanMod|1|1|1" | Set-Content -LiteralPath (Join-Path $appRoot 'mods\loader-manifest.txt')
+ Copy-Item -LiteralPath (Join-Path $GameRoot "mods\$settingsDir\release\$settingsEntry.swf") -Destination (Join-Path $settingsRel "$settingsEntry.swf")
+ "$settingsDir|$settingsEntry|1|0|0`nSandevistan|SandevistanMod|1|1|1" | Set-Content -LiteralPath (Join-Path $appRoot 'mods\loader-manifest.txt')
 }
 if($InstalledManifest){Copy-Item -LiteralPath (Join-Path $GameRoot 'mods\loader-manifest.txt') -Destination (Join-Path $appRoot 'mods\loader-manifest.txt')}
 "debugtest=$([int][bool]$Smoke)`ndiaglog=1`nmusicon=$([int][bool]$Smoke)`nesandyenabled=0" | Set-Content -LiteralPath (Join-Path $rel 'config.txt')
-if($Smoke){Copy-Item -LiteralPath (Join-Path $modRoot 'release\sandy_theme.mp3') -Destination (Join-Path $rel 'sandy_theme.mp3')}
+if($Smoke -and !$NoMusic){Copy-Item -LiteralPath (Join-Path $modRoot 'release\sandy_theme.mp3') -Destination (Join-Path $rel 'sandy_theme.mp3')}
 $srcText=[IO.File]::ReadAllText($Source)
-if(!$Smoke){
+if(!$Smoke -and !$MenuGuide){
  $anchor='      private function stepDebugTest():void'
  if(!$srcText.Contains($anchor)){throw 'Probe anchor missing'}
  $srcText=$srcText.Replace($anchor,[IO.File]::ReadAllText((Join-Path $PSScriptRoot $(if($AttackObserver){'attack-observer-probe.inc'}else{'high-fps-probe.inc'})))+$anchor)
@@ -51,6 +55,13 @@ $env:PATH=$env:JAVA_HOME+'\bin;'+$env:PATH
 if($Artifact){Copy-Item -LiteralPath $Artifact -Destination (Join-Path $rel 'SandevistanMod.swf')}else{
 & (Join-Path $modRoot 'build\tools\flexsdk\bin\mxmlc.bat') "-load-config=$(Join-Path $modRoot 'build\sandy-config.xml')" "-source-path=$appRoot" "-source-path+=$modRoot\src" '-debug=false' "-output=$rel\SandevistanMod.swf" $generated
 if($LASTEXITCODE -ne 0){throw 'Probe compilation failed'}
+}
+if($MenuGuide){
+ $probeRel=Join-Path $appRoot 'mods\SandyMenuProbe\release'
+ New-Item -ItemType Directory -Path $probeRel -Force | Out-Null
+ & (Join-Path $modRoot 'build\tools\flexsdk\bin\mxmlc.bat') "-load-config=$(Join-Path $modRoot 'build\sandy-config.xml')" '-debug=false' "-output=$probeRel\SandyMenuProbe.swf" (Join-Path $PSScriptRoot 'SandyMenuProbe.as')
+ if($LASTEXITCODE -ne 0){throw 'Menu probe compilation failed'}
+ "`nSandyMenuProbe|SandyMenuProbe|1|0|0" | Add-Content -LiteralPath (Join-Path $appRoot 'mods\loader-manifest.txt')
 }
 $desc=Join-Path $appRoot 'app_sandy_test.xml'
 $xml=@"
@@ -70,25 +81,26 @@ try {
   $proc.Refresh()
   if(Test-Path -LiteralPath $log){
    $lines=Get-Content -LiteralPath $log -Tail 15
-   if(($Smoke -and ($lines -match '\[TEST\].*SUMMARY')) -or (!$Smoke -and ($lines -match '\[FPS-TEST\] SUMMARY|\[FPS-TEST\] ERROR'))){break}
+   if(($MenuGuide -and ($lines -match '\[MENU-TEST\] SUMMARY')) -or ($Smoke -and ($lines -match '\[TEST\].*SUMMARY')) -or (!$Smoke -and ($lines -match '\[FPS-TEST\] SUMMARY|\[FPS-TEST\] ERROR'))){break}
   }
  }
  if(Test-Path -LiteralPath $log){
   Copy-Item -LiteralPath $log -Destination (Join-Path $appRoot 'result.log')
-  $results=Get-Content -LiteralPath $log | Where-Object {$_ -match '\[FPS-TEST\]|\[FPS-COST\]|\[TEST-ASSERT\]|SUMMARY|v1\.\d+ loaded|\[ERRDIALOG\]'}
+  $results=Get-Content -LiteralPath $log | Where-Object {$_ -match '\[MENU-TEST\]|\[FPS-TEST\]|\[FPS-COST\]|\[TEST-ASSERT\]|SUMMARY|v1\.\d+ loaded|\[ERRDIALOG\]'}
   $results
   if($InstalledManifest){
    $statusPath=Join-Path (Split-Path $log -Parent) '#SharedObjects\ModLoader.sol'
    Copy-Item -LiteralPath $statusPath -Destination (Join-Path $appRoot 'ModLoader.sol')
    $loaderText=[Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($statusPath))
-   if($loaderText -match 'err_' -or $loaderText -notmatch 'ok_ModSettingsMod' -or $loaderText -notmatch 'ok_SandevistanMod' -or [regex]::Matches($loaderText,'requested_').Count -ne 2){throw 'High-FPS loader allowlist failed'}
-   Write-Output '[LOADER-TEST] installed-seven-entry-manifest loads-only-settings-and-sandy PASS'
+   if($loaderText -match 'err_' -or $loaderText -notmatch $(if($CurrentSettings){'ok_ModLoaderMod'}else{'ok_ModSettingsMod'}) -or $loaderText -notmatch 'ok_SandevistanMod' -or [regex]::Matches($loaderText,'requested_').Count -ne 2){throw 'High-FPS loader allowlist failed'}
+   Write-Output '[LOADER-TEST] installed-manifest loads-only-settings-and-sandy PASS'
   }
+  if($MenuGuide -and !($results -match '\[MENU-TEST\] SUMMARY PASS')){throw 'Menu guide validation failed'}
   if($Smoke){
    if(!($results -match '\[TEST\] SUMMARY pass=\d+ fail=0 ') -or ($results -match '\[ERRDIALOG\]')){throw 'Smoke assertions did not pass'}
-   if($WithSettings -and (!($results -match 'settings-menu-opens=PASS') -or !($results -match 'menu-settings-save-reload=PASS') -or !($results -match 'hub-registered=PASS'))){throw 'Required menu integration checks missing'}
+   if(($WithSettings -or $CurrentSettings) -and (!($results -match 'settings-menu-opens=PASS') -or !($results -match 'menu-settings-save-reload=PASS') -or !($results -match 'hub-registered=PASS'))){throw 'Required menu integration checks missing'}
   }
-  if(!$Smoke){
+  if(!$Smoke -and !$MenuGuide){
    if($results -match '\[FPS-TEST\] ERROR' -or !($results -match '\[FPS-TEST\] SUMMARY')){throw 'Probe did not complete'}
    $failed=[bool]($results -match '\[FPS-TEST\] SUMMARY FAIL')
    if($failed -ne [bool]$ExpectFailure){throw 'Unexpected probe verdict'}

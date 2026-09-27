@@ -1,0 +1,22 @@
+[SandyMod] app id=pfe-sandy-fps-20260927210657222
+[SandyMod] v1.145 loaded esmark=1 esghost=1 esper=50 esen=0 esprob=100
+[SandyMod] hooks registered
+[MUSIC] theme preload: absent
+[SandyMod] World found
+[SandyMod] keyMap built: keyLeft/keyRight/keyJump/undefined
+[STATE] L=false R=false U=false D=false J=false A=false ggX=-1 ggY=-1 focus=null
+[DIAG] esandy: roomChange id=room_0_0 allow=0 prob=100 en=0
+[SandyMod] settings hub registered via ModSettingsCarrier (tries=11)
+[MENU-TEST] boot-mark-removed PASS
+[MENU-TEST] missing-music-file PASS
+[STATE] L=false R=false U=false D=false J=false A=false ggX=846 ggY=800 focus=[object Stage]
+[MENU-TEST] select-sandevistan PASS
+[MENU-TEST] page-guide-visible PASS
+[MENU-TEST] page-guide-fits PASS
+[MENU-TEST] guide height=250.2/300 lines=14
+[MENU-TEST] music-toggle-present PASS
+[MENU-TEST] hover-guide-visible PASS
+[MENU-TEST] hover-guide-fits PASS
+[MENU-TEST] guide height=268.05/300 lines=15
+[MENU-TEST] no-error-dialog PASS
+[MENU-TEST] SUMMARY PASS checks=9 failures=0
