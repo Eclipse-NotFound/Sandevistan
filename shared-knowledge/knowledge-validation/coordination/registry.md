@@ -33,7 +33,7 @@
 | `tdfc.previous.log`、`tdfc-report-<时间>.txt` | TDFC 0.6：轮转日志与按需诊断 |
 | `RandomRooms_diag.log` | RandomRooms |
 | `ModSettings.log` | ModSettings（2026-09-20 v0.2.0 已安装） |
-| `LootEditor.log`、`LootEditor.receipt.json` | LootEditor 掉落工坊；2026-09-28 已安装，正式重启由用户延期；测试使用独立 AIR 应用存储 |
+| `LootEditor.log`、`LootEditor.receipt.json` | RModifier 掉落模块；2026-09-28 已迁移，正式重启由用户延期；测试使用独立 AIR 应用存储 |
 
 新模组约定：`<ModName>.log`，日志行带 `[ModName]` 前缀（衔接 grep -a 工作流）。
 
@@ -47,7 +47,7 @@
 | `ModSettingsLoader` | ModSettings 独立 loader | getLocal 名称，根路径 `/`；记录加载/初始化状态 |
 | `ModLoader` | 通用清单 loader（mods\ModLoader） | getLocal 名称，根路径 `/`；v2 每次启动清空旧状态，写 `session`、`boot_start`、`requested_<入口类>`、`ok_<入口类>`、`boot`、`err_manifest_<行索引>`／`err_loader`／`err_<入口类>`；值带本轮 run id（2026-09-23） |
 | `RealisticVision_config.txt` | RealisticVision | Local Store 用户配置；首次读取 release/config.txt 模板，后续优先持久层 |
-| `mods/LootEditor/config/active.json` | LootEditor | 方案由独立编辑器写入，读取模块仅在启动时读取；不占用 SharedObject 或全局热键 |
+| `mods/RModifier/config/active.json` | RModifier（原 LootEditor） | 方案由独立编辑器写入，读取模块仅在启动时读取；不占用 SharedObject 或全局热键 |
 
 ## UI 覆盖层 / 显示层级
 
@@ -79,3 +79,11 @@
 - 桥接字段：`fe.serv.LootGen.lootEditorBridge`、`lootEditorContext`；前者发布 select/emit/capture/death 回调，后者仅在普通奖励调用期间保存 Interact 上下文并在 finally 还原。
 - 生产读写位：`mods/LootEditor/config` 与 `profiles`；本次读取回执仍为应用 Local Store 下 `LootEditor.receipt.json`。测试入口 LootProbe 只存在于隔离副本，不能登记到正式清单。
 - 用户明确授权后已备份并更新根 pfe.swf、安装 `release/LootEditorMod.swf`，调用现有扫描器登记；原有清单全部保留。根备份 `pfe_before_LootEditor_2026-09-28T00-13-05-389Z-2a4d4198.swf`。用户保留当前游戏、稍后自行重启；正式读取回执待核验，目前没有应用自定义方案。
+
+## RModifier 目录迁移（2026-09-28，替代上方旧目录登记）
+
+- 用户授权总整合并将 `LootEditor` 改名为 `RModifier`；正式目录现为 `mods/RModifier`。清单唯一入口为 `RModifier|LootEditorMod|1|0|0`，入口类与 SWF 名保留 `LootEditorMod`，没有重复保留旧目录或建立目录链接。
+- 掉落模块 0.2.0 读取 `mods/RModifier/config/active.json`，回执带 `configRoot=mods/RModifier`。日志/回执名称、中立设置页 `loot-editor` 与掉落桥接字段不变，不新增游戏热键。
+- 单文件入口 `mods/RModifier/RModifier.exe`；同窗口掉落/台词/地图三个页面。台词草稿和恢复位于 `profiles/barks`、`config/barks`；地图工作副本和恢复位于 `profiles/maps`、`config/maps`。原生绘图使用独立应用 ID `remains.rmodifier.renderer.s<会话>` 与私有工作目录，不占用正式 `pfe` 存储。
+- 本次只迁移工程目录、配置记录、release 模块与现有 ModLoader 登记；根 `pfe.swf` 仍为 c631cbf3…6c64867，最初 b7824465…03305ac 备份保留。其他登记原样保留。撤回迁移记录位于 `mods/.rmodifier-migration/1790576794146-3f61d4d1-3cbd-4ab6-ad98-cc8a4d33f6a8/migration.json`。
+- 改名后模块在隔离游戏中128断言通过；正式用户游戏未重启，新版本正式读取仍待用户自行重启后核验。未应用自定义掉落方案，未替换正式台词或地图。
