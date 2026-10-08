@@ -1,51 +1,60 @@
-# Sandevistan
+# Sandevistan — bullet-time combat
 
-[English](README.md) · [简体中文](README.zh-CN.md)
+**English** · [简体中文](README.zh-CN.md)
 
-Bullet-time / time-stop combat for **Fallout Equestria: REMAINS**: press one key, the world freezes while you line up the perfect move — then watch it replayed with ghost trails. Enemies can carry their own Sandevistan too.
+Slow the world while you move and attack at normal speed, then watch your actions replay quickly with colorful afterimages. For players who enjoy planning a sequence of attacks and seeing it unfold.
 
-## Features (v1.144)
+**[Download v1.145 — Sandevistan_v1.145.zip](https://github.com/Eclipse-NotFound/Sandevistan/releases/download/v1.145/Sandevistan_v1.145.zip)** · [Release notes / other versions](https://github.com/Eclipse-NotFound/Sandevistan/releases)
 
-- **Time stop** on a configurable hotkey (default `\`, 7 s default duration, separate cooldown), with a fast **replay** of your inputs afterwards (speed, ghost density and trail life all configurable).
-- Ghost afterimages with adjustable blend mode, opacity and spawn interval; particle effects can keep animating or freeze during stop.
-- **Shootable projectiles**: thrown grenades, missiles and launched shells get HP/armor and can be shot down — with per-weapon overrides (`projhp_<weaponId>` / `projarmor_<weaponId>`) for grenade, the Wildfire nuke, grenade launcher and missile launcher.
-- **Enemy Sandevistan** (optional, off by default): equip lists of unit classes (raiders, merc griffons, alicorns, enclave, rangers, zebras) trigger their own time-stop on spotting you, with per-room quota, own duration/cooldown/speed settings and markers.
-- **High-FPS hosts** (v1.144): follows the host logic clock at 90/120 fps for smooth stop and interpolation (verified 60/90/120).
-- Rainbow or Edgerunner-style speed-mapped gradient colors, startup "mod loaded" marker, top status UI ("charging / active / replaying"), and an in-game **F9 parameter panel** for everything above.
-- Optional theme music during stop (a copyrighted track is deliberately **not** redistributed; without the file the game simply stays silent — no features are affected).
-- Sprint weapon swap (hold Shift + number keys) and aim-preserving quality-of-life tweaks.
+Use the download link above, or open the release page, expand **Assets**, and select that filename. **Source code** and the green **Code → Download ZIP** button are development files, not the installable package.
 
-## Requirements
+## What changes?
 
-- Fallout Equestria: REMAINS (1.02 recommended; the loader also supports 1.03/1.04).
-- The one-time **ModLoader** game patch — see
-  [ModLoader Releases](https://github.com/Eclipse-NotFound/ModLoader/releases) → `Remains-GamePatch`.
+- The default key is **backslash `\`**, with about 7 seconds of bullet time. The world runs at 1/5 speed by default, followed by a fast replay.
+- Adjust duration, cooldown, replay speed, and afterimage color and density.
+- Optional enemy time-stop abilities are off by default.
+- Add your own music if desired. No music is bundled, and the mod works without it.
 
 ## Install
 
-1. Download `Sandevistan_v1.144.zip` from [Releases](../../releases).
-2. Copy the zip's `mods` folder into your game root (next to `pfe.swf`).
-3. Restart the game; press `\` in game to trigger. A full Chinese manual (changelog since early versions) ships in the zip as `SANDY-MANUAL.txt`.
+For **Windows / Remains 1.02**.
 
-## Configuration
+1. Save and close the game. In your Steam Library, right-click Remains → **Manage → Browse local files**. The game folder contains `pfe.swf` and `application.xml`.
+2. If this is your first mod from this collection, complete the [ModLoader first-time setup](https://github.com/Eclipse-NotFound/ModLoader/blob/master/docs/INSTALL.md#first-install), including the game patch and scanner. Skip this if already installed.
+3. Extract the ZIP and **merge its `mods` folder into the game folder**. Avoid a nested `mods/mods` folder. On a first installation, copy `default-config/Sandevistan/config.txt` into `mods/Sandevistan/release/config.txt`. Keep your existing configuration when upgrading.
+4. Double-click **`mods/ModLoader/RemainsModScanner.exe`** inside the game folder. Wait for it to finish, close its message, then launch the game normally.
 
-Everything lives in `mods/Sandevistan/release/config.txt` (restart to apply) or the **F9** in-game panel: `hotkey`, `duration` (frames, 30 = 1 s), `cooldown`, `replayspeed`, `ghostevery`, `fxrun`, `ghostblend`, `ghostalpha`, `replayghost`, `replayghostlife`, `projhits`/`projhp`/`projarmor` (+ per-weapon variants), `showmark`, `showhud`, `panelkey`, `diaglog`, `slowfactor`, `colormode` (0 rainbow / 1 Edgerunner gradient), `edgethresh`, `swaprun`, and the `esandy*` family for enemy time-stop.
+Check that this file exists: `mods/Sandevistan/release/SandevistanMod.swf`. Press `\` during play to try bullet time; the old permanent “loaded” marker was removed.
 
-## Disable / uninstall
+[Folder diagram, updating and recovery](https://github.com/Eclipse-NotFound/ModLoader/blob/master/docs/INSTALL.md)
 
-Set the mod's switches to `0` in `mods/loader-manifest.txt`, or delete `mods/Sandevistan`.
+## Your first session
 
-## Repository
+1. Load a character and press **`\`** during normal play.
+2. Open **PipBuck → Settings → Mods (`模组`) → Sandevistan** to adjust the effect. The old standalone **F9** panel has been removed.
+3. For music, name your own MP3 `sandy_theme.mp3`, place it in `mods/Sandevistan/release/`, restart, and enable music in the mod settings.
 
-Sources under `mods/Sandevistan/` (this repository is the canonical source; the game-machine copy is a one-way mirror). Build tooling and distribution scripts are intentionally not committed. `dist/` release bundles are local artifacts.
+Saved in-game settings override the configuration template. Template comments about F9, the loaded marker, and moved features are historical. Sprint weapon swapping and projectile shoot-down now belong to [MoreSkillsAndWeapons](https://github.com/Eclipse-NotFound/MoreSkillsAndWeapons).
 
-## Related mods
+## Updates, removal and compatibility
 
-[ModLoader](https://github.com/Eclipse-NotFound/ModLoader) ·
-[MoreSkillsAndWeapons](https://github.com/Eclipse-NotFound/MoreSkillsAndWeapons) ·
-[TDFC](https://github.com/Eclipse-NotFound/TDFC) ·
-[RealisticVision](https://github.com/Eclipse-NotFound/RealisticVision) ·
-[RandomRooms](https://github.com/Eclipse-NotFound/RandomRooms) ·
-[RConnect](https://github.com/Eclipse-NotFound/RConnect)
+Before updating, save and close the game, back up `mods/Sandevistan`, merge the new files, run the scanner and restart. Preserve your configuration. To disable the mod temporarily, move its folder outside `mods` as a backup, scan again and restart.
 
-> Fan mod project; not affiliated with the game's authors.
+This guide covers the public v1.145 package. The mod supports tested high-FPS hosts but does not install a high-FPS game launcher. Other game versions, co-op, and every mod combination have not been fully verified.
+
+## Need help?
+
+Check the folder location, run the scanner, and fully restart the game. See the [installation troubleshooting guide](https://github.com/Eclipse-NotFound/ModLoader/blob/master/docs/INSTALL.md#troubleshooting) for common problems.
+
+If it still fails, [report an issue](https://github.com/Eclipse-NotFound/Sandevistan/issues) with your game version, mod version, other installed mods, steps to reproduce, and what you expected versus what happened. Include a screenshot or exact error if available; a personal save is not needed for an initial report.
+
+<details>
+<summary>Development resources (not needed to install)</summary>
+
+This page describes the downloadable release; repository source may be ahead. See [mods/Sandevistan](mods/Sandevistan/) for implementation, with design, validation and version records in the project tree.
+
+</details>
+
+[Browse the mod collection](https://github.com/Eclipse-NotFound/ModLoader#choose-mods) · [First-time installation guide](https://github.com/Eclipse-NotFound/ModLoader/blob/master/docs/INSTALL.md)
+
+An unofficial fan project. You need your own copy of the game.

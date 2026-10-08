@@ -1,51 +1,60 @@
-# Sandevistan
+# Sandevistan — 斯安维斯坦时停
 
-《Fallout Equestria: REMAINS》的时停战斗模组：按一个键，世界暂停，你从容走位——然后看着操作带着残影被快速回放。敌人也可以装备自己的斯安维斯坦。
+[English](README.md) · **简体中文**
 
-[English](README.md) · 简体中文
+按下一个键，让世界慢下来，自己照常移动和攻击；结束后快速重演刚才的动作，带出彩色残影。适合喜欢规划连招和电影感战斗的玩家。
 
-## 功能（v1.144）
+**[下载 v1.145 — Sandevistan_v1.145.zip](https://github.com/Eclipse-NotFound/Sandevistan/releases/download/v1.145/Sandevistan_v1.145.zip)** · [发布说明 / 其他版本](https://github.com/Eclipse-NotFound/Sandevistan/releases)
 
-- **时停**：热键可配置（默认 `\`，默认时长 7 秒，独立冷却），结束后快速**回放**你的操作（速度、残影密度与拖尾寿命均可调）。
-- 残影效果：混合模式、不透明度、生成间隔可调；时停期间粒子特效可继续或冻结。
-- **可击落投掷物**：手雷、导弹与发射的榴弹有血量/护甲，可被子弹击落——支持按武器单独覆盖（`projhp_<武器id>` / `projarmor_<武器id>`），覆盖手雷、野火核弹、榴弹发射器与导弹发射器。
-- **敌人斯安维斯坦**（可选，默认关）：装备名单内的兵种（掠夺者/狮鹫佣兵/天角兽/英克雷/铁骑卫/斑马）目击玩家后触发自己的时停，有每房名额、独立时长/冷却/速度与标记。
-- **高帧率宿主**（v1.144）：跟随宿主逻辑时钟，90/120 帧下时停与插值平滑（60/90/120 已验收）。
-- 彩虹循环或边缘行者式速度渐变配色、启动"模组已加载"标记、顶部状态 UI（"充能中/启动中/回放中"），以及游戏内 **F9 参数面板**。
-- 时停主题音乐为可选功能（该曲目有版权，**不**随包分发；文件缺失时自动无声，不影响任何功能）。
-- 疾跑切枪（Shift+数字键）与保持瞄准等体验优化。
+点击上方链接下载成品。也可以打开发布页，展开 **Assets（下载文件）**，选择同名文件；**Source code** 和绿色 **Code → Download ZIP** 是源码，不能直接安装。
 
-## 前置
+## 会带来什么变化
 
-- Fallout Equestria: REMAINS（推荐 1.02；加载器同时支持 1.03/1.04）。
-- 一次性 **ModLoader** 游戏补丁——见
-  [ModLoader Releases](https://github.com/Eclipse-NotFound/ModLoader/releases) → `Remains-GamePatch`。
+- 默认热键是 **反斜杠 `\`**，默认持续约 7 秒；世界默认降到 1/5 速度，之后加速回放。
+- 可以调整持续时间、冷却、回放速度、残影颜色和浓度。
+- 可选敌人时停，默认关闭；想增加挑战时再开。
+- 可自行添加时停音乐；下载包不附带音乐，没有音乐也能正常玩。
 
 ## 安装
 
-1. 从 [Releases](../../releases) 下载 `Sandevistan_v1.144.zip`。
-2. 把压缩包里的 `mods` 文件夹整个复制进游戏根目录（与 `pfe.swf` 同级）。
-3. 重启游戏，游戏内按 `\` 触发。完整中文手册（含历次更新说明）随压缩包附带（`SANDY-MANUAL.txt`）。
+适用于 **Windows / Remains 1.02**。
 
-## 配置
+1. 保存并退出游戏。Steam 库中右键 Remains → **管理 → 浏览本地文件**，打开含 `pfe.swf` 和 `application.xml` 的游戏文件夹。
+2. 第一次装本系列模组，先完成 [ModLoader 首次安装](https://github.com/Eclipse-NotFound/ModLoader/blob/master/docs/INSTALL.zh-CN.md#first-install)；它包含一次性游戏补丁和模组扫描器。已装好的玩家可跳过。
+3. 解压下载的 ZIP，把里面的 **`mods` 文件夹合并到游戏文件夹**，不要套成 `mods/mods`。 首次安装时，将包内 `default-config/Sandevistan/config.txt` 复制到 `mods/Sandevistan/release/config.txt`；升级时保留原配置。
+4. 双击游戏目录下的 **`mods/ModLoader/RemainsModScanner.exe`**，等待完成后关闭提示，再按平常方式启动游戏。
 
-全部参数在 `mods/Sandevistan/release/config.txt`（重启生效）或游戏内 **F9** 面板：`hotkey`、`duration`（帧，30 帧=1 秒）、`cooldown`、`replayspeed`、`ghostevery`、`fxrun`、`ghostblend`、`ghostalpha`、`replayghost`、`replayghostlife`、`projhits`/`projhp`/`projarmor`（含按武器变体）、`showmark`、`showhud`、`panelkey`、`diaglog`、`slowfactor`、`colormode`（0 彩虹 / 1 边缘行者渐变）、`edgethresh`、`swaprun`，以及敌人时停的 `esandy*` 系列。
+放对后应能找到：`mods/Sandevistan/release/SandevistanMod.swf`。进入游戏后按 `\` 体验慢动作；不要依靠旧版常驻“已加载”标识判断。
 
-## 禁用 / 卸载
+[图示文件结构、更新与恢复方法](https://github.com/Eclipse-NotFound/ModLoader/blob/master/docs/INSTALL.zh-CN.md)
 
-在 `mods/loader-manifest.txt` 把本模组的启用位改成 `0`，或删除 `mods/Sandevistan`。
+## 第一次怎么玩
 
-## 仓库说明
+1. 读入角色，在能正常行动时按 **`\`**。
+2. 打开 **哔哔小马 → 设置 → 模组 → 斯安维斯坦** 调整手感。当前版本已移除旧 **F9** 独立面板。
+3. 想加音乐，把自己准备的 MP3 命名为 `sandy_theme.mp3`，放入 `mods/Sandevistan/release/`，重启后在模组设置中开启音乐。
 
-源码在本仓库的 `mods/Sandevistan/` 下（本仓库是真源；游戏机上的副本是单向镜像）。构建工具链与分发脚本不纳入版本库；`dist/` 为本地产物。
+游戏内已保存的设置优先于配置模板。旧模板中的 F9、加载标识和部分已迁出功能注释是历史说明；疾跑切枪、投射物击落由 [MoreSkillsAndWeapons](https://github.com/Eclipse-NotFound/MoreSkillsAndWeapons) 提供。
 
-## 相关模组
+## 更新、停用与适用范围
 
-[ModLoader](https://github.com/Eclipse-NotFound/ModLoader) ·
-[MoreSkillsAndWeapons](https://github.com/Eclipse-NotFound/MoreSkillsAndWeapons) ·
-[TDFC](https://github.com/Eclipse-NotFound/TDFC) ·
-[RealisticVision](https://github.com/Eclipse-NotFound/RealisticVision) ·
-[RandomRooms](https://github.com/Eclipse-NotFound/RandomRooms) ·
-[RConnect](https://github.com/Eclipse-NotFound/RConnect)
+更新前保存退出，备份 `mods/Sandevistan`，再合并新版文件、运行扫描器并重启；保留自己的配置。临时停用时，可把该模组文件夹移到 `mods` 之外备份，再扫描并重启。
 
-> 粉丝模组项目，与游戏原作者无关。
+本指引对应公开的 v1.145。高帧率宿主已有适配，但这个模组包不会给原版游戏增加高帧率启动器；其他游戏版本、联机和全部模组组合未全面验证。
+
+## 遇到问题
+
+先检查：文件夹是否放对、是否运行过扫描器、是否完全退出并重启。通用问题见[安装与排错指南](https://github.com/Eclipse-NotFound/ModLoader/blob/master/docs/INSTALL.zh-CN.md#troubleshooting)。
+
+仍有问题，请到[问题反馈](https://github.com/Eclipse-NotFound/Sandevistan/issues)说明：游戏版本、本模组版本、其他已装模组、操作步骤、预期结果与实际结果；能附截图或报错原文更好。不要上传个人存档，除非排查时确有需要。
+
+<details>
+<summary>开发资料（普通安装无需阅读）</summary>
+
+本页按可下载的发布包编写，仓库源码可能更靠前。实现见 [mods/Sandevistan](mods/Sandevistan/)；历史设计、验证和版本记录保留在项目目录中。
+
+</details>
+
+[查看全部模组及玩法介绍](https://github.com/Eclipse-NotFound/ModLoader/blob/master/README.zh-CN.md#choose-mods) · [首次安装指南](https://github.com/Eclipse-NotFound/ModLoader/blob/master/docs/INSTALL.zh-CN.md)
+
+这是玩家制作的非官方模组项目，需要自行拥有游戏。
